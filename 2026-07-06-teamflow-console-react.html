@@ -10,6 +10,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   :root{
     --bg:#f6f5f0; --card:#ffffff; --ink:#1b1e21; --ink2:#43494f; --muted:#71797f;
@@ -337,39 +338,109 @@ const AV_COLORS=['#0e7a6f','#39638f','#1a7a48','#b06e12','#c43a53','#0e7a8f','#a
 const ROLE_TAG={'Administrator':'teal','Management':'blue','Manager':'green','Team Member':'amber','Teacher':'gray'};
 const MAINT_HEAD="Vikram Rao";
 
-let STAFF=[
-  {n:"Priya Nair",   s:"Priya",  role:"Administrator", dept:"Administration", boss:null,           av:"P"},
-  {n:"Rajesh Menon", s:"Rajesh", role:"Management",     dept:"Administration", boss:"Priya Nair",   av:"R"},
-  {n:"Anita Desai",  s:"Anita",  role:"Manager",        dept:"Academics",      boss:"Rajesh Menon", av:"A"},
-  {n:"Vikram Rao",   s:"Vikram", role:"Team Member",    dept:"Maintenance",    boss:"Anita Desai",  av:"V"},
-  {n:"Meena Rao",    s:"Meena",  role:"Teacher",        dept:"Academics",      boss:"Anita Desai",  av:"M"},
-  {n:"Kavya Nair",   s:"Kavya",  role:"Teacher",        dept:"Academics",      boss:"Anita Desai",  av:"K"},
-  {n:"Ravi Kumar",   s:"Ravi",   role:"Teacher",        dept:"Administration", boss:"Anita Desai",  av:"R"},
-  {n:"Hari Charan",  s:"Hari",   role:"Teacher",        dept:"Maintenance",    boss:"Vikram Rao",   av:"H"},
-  {n:"Suresh Kumar", s:"Suresh", role:"Teacher",        dept:"Maintenance",    boss:"Vikram Rao",   av:"S"},
-  {n:"Latha M.",     s:"Latha",  role:"Teacher",        dept:"Housekeeping",   boss:"Vikram Rao",   av:"L"},
-  {n:"Arjun Menon",  s:"Arjun",  role:"Teacher",        dept:"Operations",     boss:"Rajesh Menon", av:"A"},
-  {n:"Deepa Iyer",   s:"Deepa",  role:"Teacher",        dept:"Operations",     boss:"Rajesh Menon", av:"D"}
-];
-let tasks=[
-  {t:"Check classroom networking points & panels", who:"Hari",  type:"repair",   bucket:"it",            prio:"high", date:"2026-07-02", status:"open", note:"", extReq:{newDate:"2026-07-08", reason:"Replacement network switch arrives Monday"}},
-  {t:"Re-check fire extinguishers in Block B",     who:"Hari",  type:"maint",    bucket:"maintenance",   prio:"med",  date:"2026-07-06", status:"inprogress", note:"Blocks A & B done, C pending", selfAssigned:true, instructedBy:"Anita (Manager)", recur:"monthly", recurOn:6},
-  {t:"Complete the academic work review",          who:"Meena", type:"work",     bucket:"academic",      prio:"med",  date:"2026-07-06", time:"15:00", status:"open", note:""},
-  {t:"Prepare term-2 exam timetable",              who:"Kavya", coWho:["Meena"], type:"work", bucket:"academic", prio:"high", date:"2026-07-07", status:"partial", note:"Draft ready, awaiting approval"},
-  {t:"Order science-lab supplies for term 2",      who:"Ravi",  type:"purchase", bucket:"accounts",      prio:"med",  date:"2026-07-10", status:"open", note:""},
-  {t:"Service the water purifiers",                who:"Suresh",type:"maint",    bucket:"maintenance",   prio:"low",  date:"2026-07-04", status:"open", note:""},
-  {t:"Deep-clean the assembly hall",               who:"Latha", type:"maint",    bucket:"maintenance",   prio:"med",  date:"2026-07-07", status:"open", note:""},
-  {t:"Arrange bus for the science-fair trip",      who:"Deepa", type:"work",     bucket:"transport",     prio:"med",  date:"2026-07-08", status:"open", note:""},
-  {t:"Update visitor-gate register process",       who:"Arjun", type:"work",     bucket:"administration",prio:"low",  date:"2026-07-11", status:"open", note:""},
-  {t:"Shortlist candidates for PE teacher role",   who:"Deepa", type:"work",     bucket:"hr",            prio:"med",  date:"2026-07-12", status:"open", note:""},
-  {t:"Reconcile last month's petty cash",          who:"Ravi",  type:"work",     bucket:"accounts",      prio:"med",  date:"2026-07-03", status:"done", doneOn:"2026-07-02", note:"Filed with accounts"},
-  {t:"Repair the library AC unit",                 who:"Suresh",type:"repair",   bucket:"maintenance",   prio:"med",  date:"2026-06-29", status:"done", doneOn:"2026-07-01", note:"Spare part arrived late"}
-];
-let requests=[
-  {kind:"issue",  t:"Ceiling fan in Class 7B making loud noise", from:"Meena", date:"2026-07-06", note:"Started yesterday, students distracted"},
-  {kind:"request",t:"2 boxes of whiteboard markers + dusters",   from:"Kavya", date:"2026-07-05", note:"For the term-2 classrooms"},
-  {kind:"issue",  t:"Leaking tap in the staff washroom",         from:"Latha", date:"2026-07-05", note:""}
-];
+let STAFF=[];
+let tasks=[];
+let requests=[];
+
+/* ============ supabase ============ */
+const sb=window.supabase.createClient(
+  "https://fumggrcamegejihenkhb.supabase.co",
+  "sb_publishable_bEqR06srB99BHHdvLQy14g_-pLZPWwJ"
+);
+const LABEL_TO_BUCKET=Object.fromEntries(Object.entries(BUCKETS).map(([k,v])=>[v,k]));
+
+function rowsToStaff(rows){
+  const byId=Object.fromEntries(rows.map(r=>[r.id,r]));
+  return rows.map(r=>({n:r.name,s:r.short_name,role:r.role,dept:r.department,
+    boss:r.boss_id?byId[r.boss_id].name:null,av:r.initials,id:r.id}));
+}
+function rowToTask(row,assignRows,logRows){
+  const mine=assignRows.filter(a=>a.task_id===row.id);
+  const primary=mine.find(a=>a.is_primary)||mine[0];
+  const co=mine.filter(a=>a!==primary);
+  const doneBy=mine.filter(a=>a.done_at).map(a=>a.staff_short);
+  const t={id:row.id,t:row.title,who:primary?primary.staff_short:null,
+    coWho:co.length?co.map(a=>a.staff_short):undefined,
+    type:row.type,bucket:LABEL_TO_BUCKET[row.department]||'administration',prio:row.priority,
+    date:row.due_date,time:row.due_time?row.due_time.slice(0,5):undefined,status:row.status,
+    note:row.note||"",doneOn:row.done_on||undefined,
+    doneBy:doneBy.length?doneBy:undefined,
+    selfAssigned:row.self_assigned||undefined,instructedBy:row.instructed_by||undefined,
+    origin:row.origin||undefined,files:row.files&&row.files.length?row.files:undefined,
+    recur:row.recur||undefined,recurOn:row.recur_on!=null?row.recur_on:undefined};
+  if(row.ext_new_date)t.extReq={newDate:row.ext_new_date,reason:row.ext_reason||""};
+  if(row.reopened_by)t.reopened={by:byId2Name(row.reopened_by),comment:row.reopened_comment||""};
+  const logs=logRows.filter(l=>l.task_id===row.id);
+  if(logs.length)t.log=logs.map(l=>({by:l.author_name||"Earlier",when:fmtDate(l.created_at.slice(0,10)),text:l.body}));
+  return t;
+}
+let byId2Name=()=>"";
+function rowToRequest(row){
+  return {id:row.id,kind:row.kind,t:row.title,from:row.from_short,date:row.created_at.slice(0,10),
+    note:row.note||"",files:row.files&&row.files.length?row.files:undefined};
+}
+async function loadAll(){
+  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows}]=await Promise.all([
+    sb.from('staff').select('*'),
+    sb.from('tasks').select('*'),
+    sb.from('task_assignees').select('*'),
+    sb.from('task_log').select('*').order('created_at'),
+    sb.from('requests').select('*').order('created_at')
+  ]);
+  STAFF.length=0;STAFF.push(...rowsToStaff(staffRows||[]));
+  const byId=Object.fromEntries(STAFF.map(p=>[p.id,p]));
+  byId2Name=id=>byId[id]?byId[id].n:"";
+  (assignRows||[]).forEach(a=>a.staff_short=byId[a.staff_id]?byId[a.staff_id].s:a.staff_id);
+  (reqRows||[]).forEach(r=>r.from_short=byId[r.from_staff_id]?byId[r.from_staff_id].s:r.from_staff_id);
+  tasks.length=0;tasks.push(...(taskRows||[]).map(r=>rowToTask(r,assignRows||[],logRows||[]))
+    .sort((a,b)=>(a.date||'')<(b.date||'')?-1:1));
+  requests.length=0;requests.push(...(reqRows||[]).map(rowToRequest));
+}
+function taskRow(t){
+  return {title:t.t,type:t.type||'work',department:BUCKETS[t.bucket]||t.bucket,priority:t.prio||'med',
+    status:t.status,due_date:t.date||null,due_time:t.time||null,note:t.note||'',
+    recur:t.recur||null,recur_on:t.recurOn!=null?t.recurOn:null,
+    self_assigned:!!t.selfAssigned,instructed_by:t.instructedBy||null,origin:t.origin||null,
+    files:t.files||[],done_on:t.doneOn||null,
+    ext_new_date:(t.extReq&&t.extReq.newDate)||null,ext_reason:(t.extReq&&t.extReq.reason)||null,
+    reopened_by:(t.reopened&&byName(t.reopened.by))?byName(t.reopened.by).id:null,
+    reopened_comment:(t.reopened&&t.reopened.comment)||null};
+}
+async function saveTask(t){
+  const row=taskRow(t);
+  if(t.id){await sb.from('tasks').update(row).eq('id',t.id);}
+  else{const {data}=await sb.from('tasks').insert(row).select().single();t.id=data.id;}
+  await syncAssignees(t);
+}
+async function syncAssignees(t){
+  if(!t.id)return;
+  await sb.from('task_assignees').delete().eq('task_id',t.id);
+  const rows=assignees(t).filter(Boolean).map(s=>{const p=byShort(s);
+    return p&&p.id?{task_id:t.id,staff_id:p.id,is_primary:s===t.who,
+      done_at:(t.doneBy||[]).includes(s)?new Date().toISOString():null}:null;}).filter(Boolean);
+  if(rows.length)await sb.from('task_assignees').insert(rows);
+}
+async function logTask(t,authorName,text){
+  if(!t.id)return;
+  const author=byName(authorName);
+  await sb.from('task_log').insert({task_id:t.id,author_id:author?author.id:null,body:text});
+}
+async function deleteTaskRow(t){if(t.id)await sb.from('tasks').delete().eq('id',t.id);}
+async function saveRequest(r){
+  const from=byShort(r.from);
+  const {data}=await sb.from('requests').insert({kind:r.kind,title:r.t,
+    from_staff_id:from?from.id:null,note:r.note||'',files:r.files||[]}).select().single();
+  r.id=data.id;
+}
+async function deleteRequestRow(r){if(r.id)await sb.from('requests').delete().eq('id',r.id);}
+async function saveStaffRow(p){
+  const boss=p.boss?byName(p.boss):null;
+  const {data}=await sb.from('staff').insert({name:p.n,short_name:p.s,initials:p.av,role:p.role,
+    department:p.dept,boss_id:boss?boss.id:null}).select().single();
+  p.id=data.id;
+}
+async function deleteStaffRow(p){if(p.id)await sb.from('staff').delete().eq('id',p.id);}
+
 const ROLE_VIEWER={admin:"Priya Nair",mgmt:"Rajesh Menon",srm:"Anita Desai",jrm:"Vikram Rao"};
 const BOSS_LABEL={"Priya Nair":"Priya (Admin)","Rajesh Menon":"Rajesh (Management)","Anita Desai":"Anita (Manager)","Vikram Rao":"Vikram (Team Member)"};
 const SCOPE_WORD={admin:"all teams",mgmt:"org-wide",srm:"your teams",jrm:"your team"};
@@ -485,6 +556,11 @@ function completeTask(t){
   tasks.push({t:t.t,who:t.who,coWho:t.coWho?t.coWho.slice():undefined,type:t.type,bucket:t.bucket,
     prio:t.prio,date:nd,time:t.time||null,status:'open',note:'',recur:t.recur,recurOn:t.recurOn,selfAssigned:t.selfAssigned,instructedBy:t.instructedBy});
   return nd;}
+/* persist a completeTask() result: the task itself, plus the freshly-pushed next occurrence if recurring */
+function persistComplete(t,nd){
+  saveTask(t).catch(console.error);
+  if(nd)saveTask(tasks[tasks.length-1]).catch(console.error);
+}
 function suggestFixer(text){const t=(text||'').toLowerCase();
   if(/fan|light|electric|wiring|socket|projector|power/.test(t))return{s:'Hari',why:'handles electrical work'};
   if(/tap|leak|water|pipe|plumb|toilet|drain/.test(t))return{s:'Suresh',why:'handles plumbing work'};
@@ -564,8 +640,10 @@ function App(){
   const [modal,setModal]=useState(false);
   const [empModal,setEmpModal]=useState(false);
   const searchRef=useRef();
+  const [loaded,setLoaded]=useState(false);
+  useEffect(()=>{loadAll().then(()=>setLoaded(true)).catch(e=>{console.error(e);setLoaded(true);say('Could not load data from Supabase — check your connection');});},[]);
 
-  const viewer=byName(ROLE_VIEWER[role]);
+  const viewer=byName(ROLE_VIEWER[role])||{n:'',s:'',role:'',dept:'',boss:null,av:''};
   const scope=[viewer].concat(descendants(viewer.n));
   const shorts=scope.map(p=>p.s);
   const bossChain=(()=>{let c=[],cur=viewer.boss;while(cur){c.push(cur);const b=byName(cur);cur=b?b.boss:null;}return c;})();
@@ -600,30 +678,40 @@ function App(){
   const quickDone=i=>{const t=tasks[i];
     if(t.status==='done'){setDrawerIdx(i);say('To reopen, set a new due date in the task panel');return;}
     const nd=completeTask(t);
+    persistComplete(t,nd);
     R();say(nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd)
       :t.coWho&&t.coWho.length?'Marked done for all assignees':'Task marked done');};
   const remindPerson=s=>{const p=byShort(s);say('Reminder sent to '+(p?p.n.split(' ')[0]:s)+' on WhatsApp');};
   const approveReq=i=>{const r=requests[i];if(!r||r.kind!=='request')return;
     if(!canApprove(r.from)){say('Only the department boss can approve this');return;}
     const s=suggestWho('purchase',scope);const d=new Date(TODAY);d.setDate(d.getDate()+4);
-    tasks.unshift({t:r.t,who:s?s.s:r.from,type:'purchase',bucket:'accounts',prio:'med',date:iso(d),status:'open',
-      note:'From '+(byShort(r.from)||{}).n+(r.note?' — “'+r.note+'”':''),origin:'request'});
+    const nt={t:r.t,who:s?s.s:r.from,type:'purchase',bucket:'accounts',prio:'med',date:iso(d),status:'open',
+      note:'From '+(byShort(r.from)||{}).n+(r.note?' — “'+r.note+'”':''),origin:'request'};
+    tasks.unshift(nt);
     requests.splice(i,1);R();
+    saveTask(nt).catch(console.error);deleteRequestRow(r).catch(console.error);
     say('Request approved · '+(s?byShort(s.s).n:'')+' (procurement, Accounts department) will procure');};
   const declineReq=i=>{const r=requests[i];if(!r)return;requests.splice(i,1);R();
+    deleteRequestRow(r).catch(console.error);
     say((r.kind==='issue'?'Issue':'Request')+' declined — '+(byShort(r.from)||{n:r.from}).n.split(' ')[0]+' will be notified');};
   const assignIssue=(i,who)=>{const r=requests[i];if(!r||!who)return;
     const d=new Date(TODAY);d.setDate(d.getDate()+1);
-    tasks.unshift({t:r.t,who,type:'repair',bucket:'maintenance',prio:'high',date:iso(d),status:'open',
-      note:'Reported by '+(byShort(r.from)||{}).n+(r.note?' — “'+r.note+'”':''),origin:'issue',files:r.files});
-    requests.splice(i,1);R();say('Issue assigned to '+byShort(who).n+' · notified on WhatsApp');};
+    const nt={t:r.t,who,type:'repair',bucket:'maintenance',prio:'high',date:iso(d),status:'open',
+      note:'Reported by '+(byShort(r.from)||{}).n+(r.note?' — “'+r.note+'”':''),origin:'issue',files:r.files};
+    tasks.unshift(nt);
+    requests.splice(i,1);R();
+    saveTask(nt).catch(console.error);deleteRequestRow(r).catch(console.error);
+    say('Issue assigned to '+byShort(who).n+' · notified on WhatsApp');};
   const approveExt=i=>{const t=tasks[i];if(!t||!t.extReq)return;
     if(!canApprove(t.who)){say('Only the department boss can approve this');return;}
     t.date=t.extReq.newDate;delete t.extReq;R();
+    saveTask(t).catch(console.error);
     say('Extension approved — new due date '+fmtDate(t.date)+' · assignee notified');};
   const rejectExt=i=>{const t=tasks[i];if(!t||!t.extReq)return;
     if(!canApprove(t.who)){say('Only the department boss can decide this');return;}
-    delete t.extReq;R();say('Extension rejected — original due date stands');};
+    delete t.extReq;R();
+    saveTask(t).catch(console.error);
+    say('Extension rejected — original due date stands');};
 
   function exportCSV(kind){
     if(kind==='tasks'){
@@ -674,6 +762,8 @@ function App(){
   const ctx={role,view,setView,say,R,scope,shorts,viewer,mine,canApprove,canAssignIssue,bossChain,
     quickDone,remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,
     setDrawerIdx,setModal,setEmpModal,exportCSV,printReport,qReqs,qExts,attentionList};
+
+  if(!loaded)return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--muted)',fontSize:14}}>Loading TeamFlow…</div>;
 
   return <div className="app">
     <aside className="sidebar">
@@ -998,7 +1088,7 @@ function Drawer({ctx,idx}){
     <div className="dr-body">
       <div className="dr-sec">Status</div>
       <div className="segs">{Object.keys(ST).map(s=>
-        <button key={s} className={t.status===s?'on':''} onClick={()=>{if(s==='done'){const nd=completeTask(t);ctx.say(nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'Status → Done');}else{t.status=s;delete t.doneOn;ctx.say('Status → '+ST[s].l);}ctx.R();}}>{ST[s].l}</button>)}</div>
+        <button key={s} className={t.status===s?'on':''} onClick={()=>{if(s==='done'){const nd=completeTask(t);persistComplete(t,nd);ctx.say(nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'Status → Done');}else{t.status=s;delete t.doneOn;saveTask(t).catch(console.error);ctx.say('Status → '+ST[s].l);}ctx.R();}}>{ST[s].l}</button>)}</div>
       {t.coWho&&t.coWho.length?<>
         <div className="dr-sec">Completion — each member confirms</div>
         {assignees(t).map(a=>{const q=byShort(a);const dn=(t.doneBy||[]).includes(a);
@@ -1007,8 +1097,8 @@ function Drawer({ctx,idx}){
             <div className="v" style={{flex:1}}>{q?q.n:a}</div>
             <button className={'btn '+(dn?'primary':'ghost')} style={{padding:'6px 12px',minHeight:0}}
               onClick={()=>{t.doneBy=dn?(t.doneBy||[]).filter(x=>x!==a):[...(t.doneBy||[]),a];
-                if(assignees(t).every(x=>(t.doneBy||[]).includes(x))){const nd=completeTask(t);ctx.say(nd?'All done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'All members done — task completed');}
-                else if(t.status==='done'){t.status='open';delete t.doneOn;}
+                if(assignees(t).every(x=>(t.doneBy||[]).includes(x))){const nd=completeTask(t);persistComplete(t,nd);ctx.say(nd?'All done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'All members done — task completed');}
+                else{if(t.status==='done'){t.status='open';delete t.doneOn;}saveTask(t).catch(console.error);}
                 ctx.R();}}>{dn?'✓ Done':'Pending'}</button>
           </div>;})}
       </>:null}
@@ -1024,6 +1114,7 @@ function Drawer({ctx,idx}){
           t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
           t.log.push({by:ctx.viewer.n,when:fmtDate(iso(TODAY)),text:'Reopened — '+(reNote.trim()||'not up to the mark')});
           if(reNote.trim())t.note=reNote.trim();
+          saveTask(t).catch(console.error);logTask(t,ctx.viewer.n,'Reopened — '+(reNote.trim()||'not up to the mark')).catch(console.error);
           ctx.R();ctx.say('Task reopened — new due '+fmtDate(t.date)+' · assignee notified');}}>
           <I n="redo"/>Reopen task</button>
       </>:null}
@@ -1032,7 +1123,7 @@ function Drawer({ctx,idx}){
         <div className="v">{assignees(t).map(a=>{const q=byShort(a);return <React.Fragment key={a}><span className="avex">{q?q.av:'?'}</span>{q?q.n:a}</React.Fragment>;})}
         {t.coWho&&t.coWho.length?<span className="tag teal">joint</span>:<span className="roletag">{p?p.dept:''}</span>}</div></div>
       {reassign?<div className="kv"><div className="k">Move to</div><div className="v" style={{flex:1}}>
-        <select className="fsel" style={{width:'100%'}} defaultValue="" onChange={e=>{if(!e.target.value)return;t.who=e.target.value;t.coWho=undefined;ctx.R();ctx.say('Reassigned to '+byShort(e.target.value).n);setReassign(false);}}>
+        <select className="fsel" style={{width:'100%'}} defaultValue="" onChange={e=>{if(!e.target.value)return;t.who=e.target.value;t.coWho=undefined;saveTask(t).catch(console.error);ctx.R();ctx.say('Reassigned to '+byShort(e.target.value).n);setReassign(false);}}>
           <option value="">Choose a person…</option>
           {ctx.scope.filter(x=>x.role==='Teacher').map(x=><option key={x.s} value={x.s}>{x.n} · {x.dept}</option>)}
         </select></div></div>:null}
@@ -1051,7 +1142,9 @@ function Drawer({ctx,idx}){
         const txt=note.trim(); if(!txt){ctx.say('Write something first');return;}
         t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
         t.log.push({by:ctx.viewer.n,when:fmtDate(iso(TODAY)),text:txt});
-        t.note=txt;setNote('');ctx.R();ctx.say('Added to the job log');}}><I n="note"/>Add to log</button>
+        t.note=txt;setNote('');
+        saveTask(t).catch(console.error);logTask(t,ctx.viewer.n,txt).catch(console.error);
+        ctx.R();ctx.say('Added to the job log');}}><I n="note"/>Add to log</button>
       <div className="dr-sec">Add proof of work — photos & files</div>
       {t.files&&t.files.length?<div className="filelist" style={{marginTop:0,marginBottom:8}}>{t.files.map((x,ix)=>x.url?<img key={ix} className="thumb" src={x.url} title={x.name}/>:<span key={ix} className="filechip">{x.name}</span>)}</div>:null}
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
@@ -1070,7 +1163,7 @@ function Drawer({ctx,idx}){
     <div className="dr-actions">
       <button className="btn ghost" style={{flex:1}} onClick={()=>ctx.remindPerson(t.who)}><I n="bell"/>Remind</button>
       <button className="btn ghost" style={{flex:1}} onClick={()=>setReassign(!reassign)}><I n="redo"/>Reassign</button>
-      {t.status!=='done'?<button className="btn primary" style={{flex:1}} onClick={()=>{const nd=completeTask(t);ctx.R();ctx.setDrawerIdx(-1);ctx.say(nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'Task marked done');}}><I n="check"/>Done</button>:null}
+      {t.status!=='done'?<button className="btn primary" style={{flex:1}} onClick={()=>{const nd=completeTask(t);persistComplete(t,nd);ctx.R();ctx.setDrawerIdx(-1);ctx.say(nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'Task marked done');}}><I n="check"/>Done</button>:null}
     </div>
   </div>;
 }
@@ -1155,7 +1248,9 @@ function PeopleView({ctx}){
     if(Object.values(ROLE_VIEWER).includes(p.n)){ctx.say(p.n.split(' ')[0]+" backs a demo role view and can't be removed");return;}
     if(STAFF.some(x=>x.boss===p.n)){ctx.say('Move '+p.n.split(' ')[0]+"'s direct reports to another manager first");return;}
     if(!window.confirm('Remove '+p.n+' from TeamFlow?'))return;
-    STAFF.splice(STAFF.indexOf(p),1);ctx.R();ctx.say(p.n+' removed');};
+    STAFF.splice(STAFF.indexOf(p),1);ctx.R();
+    deleteStaffRow(p).catch(console.error);
+    ctx.say(p.n+' removed');};
   return <div className="view">
     <div className="filters">
       <input className="fsel" style={{width:230}} placeholder="Search name or department…" value={q} onChange={e=>setQ(e.target.value)}/>
@@ -1187,8 +1282,11 @@ function EmpModal({ctx,close}){
     if(byName(n)){ctx.say('That name is already in the team');return;}
     const parts=n.split(' ');let sh=parts[0],i=2;
     while(byShort(sh))sh=parts[0]+(parts[1]?parts[1][0]:'')+(byShort(parts[0]+(parts[1]?parts[1][0]:''))?i++:'');
-    STAFF.push({n,s:sh,role:f.role,dept:f.dept,boss:f.boss||null,av:parts.map(x=>x[0]).join('').slice(0,2).toUpperCase()});
-    close();ctx.R();ctx.say(n+' added · WhatsApp invite sent');};
+    const np={n,s:sh,role:f.role,dept:f.dept,boss:f.boss||null,av:parts.map(x=>x[0]).join('').slice(0,2).toUpperCase()};
+    STAFF.push(np);
+    close();ctx.R();
+    saveStaffRow(np).catch(console.error);
+    ctx.say(n+' added · WhatsApp invite sent');};
   return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
     <div className="modal" style={{width:480}}>
       <div className="qc-head"><h3>Add employee</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
@@ -1344,9 +1442,11 @@ function QuickCapture({ctx,close}){
     const clean=txt.trim();
     if(kind!=='task'){
       if(!clean){ctx.say(kind==='issue'?'Describe the issue first':'Say what you need first');return;}
-      requests.unshift({kind:kind==='issue'?'issue':'request',t:clean.charAt(0).toUpperCase()+clean.slice(1),
-        from:ctx.viewer.s,date:iso(TODAY),note:note.trim(),files:kind==='issue'&&files.length?files.slice():undefined});
+      const nr={kind:kind==='issue'?'issue':'request',t:clean.charAt(0).toUpperCase()+clean.slice(1),
+        from:ctx.viewer.s,date:iso(TODAY),note:note.trim(),files:kind==='issue'&&files.length?files.slice():undefined};
+      requests.unshift(nr);
       close();ctx.R();
+      saveRequest(nr).catch(console.error);
       ctx.say(kind==='issue'?'Issue sent to Vikram (maintenance head)':'Request sent to your department boss for approval');
       return;
     }
@@ -1354,10 +1454,12 @@ function QuickCapture({ctx,close}){
     let list=whos;
     if(mode==='self')list=[ctx.viewer.s];
     if(!list.length){ctx.say('Pick at least one person');return;}
-    tasks.unshift({t:cleanTask(clean),who:list[0],coWho:list.length>1?list.slice(1):undefined,
+    const nt={t:cleanTask(clean),who:list[0],coWho:list.length>1?list.slice(1):undefined,
       type,bucket,prio,recur,recurOn:recur?recurOn:null,date:when||iso(TODAY),time:dueTime||null,status:'open',note:note.trim(),
-      selfAssigned:mode==='self',instructedBy:boss||null});
+      selfAssigned:mode==='self',instructedBy:boss||null};
+    tasks.unshift(nt);
     close();ctx.R();
+    saveTask(nt).catch(console.error);
     const names=list.map(a=>(byShort(a)||{n:a}).n).join(' + ');
     ctx.say((mode==='self'?'Added to your list':'Assigned '+(list.length>1?'jointly to ':'to ')+names+' · sent on WhatsApp')+(recur?' · '+recurLabel(recur,recurOn):'')+(boss?' · as per '+boss:''));
   }

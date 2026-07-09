@@ -10,6 +10,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   :root{
     --bg:#f6f5f0; --card:#ffffff; --ink:#1b1e21; --ink2:#43494f; --muted:#71797f;
@@ -211,29 +212,28 @@ const TYPES={work:{l:"Work",e:"🛠"},purchase:{l:"Purchase",e:"🛒"},repair:{l
 const RECURS={daily:"Daily",weekly:"Weekly",monthly:"Monthly",yearly:"Yearly"};
 const BUCKETS={academic:"Academic",maintenance:"Maintenance",construction:"Construction",hr:"HR",accounts:"Accounts",administration:"Administration",transport:"Transport",it:"IT & Systems"};
 const BUCKET_COLORS={academic:'#39638f',maintenance:'#b06e12',construction:'#8a6a52',hr:'#a34d78',accounts:'#1a7a48',administration:'#5d6672',transport:'#0e7a8f',it:'#5b5ea6'};
-const MEMBERS=[
-  {n:"Hari",   i:"H", dept:"Maintenance",    role:"Repairs & electrical", types:["repair","maint"], buckets:["maintenance","construction","it"]},
-  {n:"Suresh", i:"S", dept:"Maintenance",    role:"Plumbing & carpentry", types:["repair","maint"], buckets:["maintenance","construction"]},
-  {n:"Latha",  i:"L", dept:"Housekeeping",   role:"Housekeeping",         types:["maint"],          buckets:[]},
-  {n:"Ravi",   i:"R", dept:"Administration", role:"Procurement",          types:["purchase"],       buckets:["accounts","administration"]},
-  {n:"Anita",  i:"A", dept:"Administration", role:"Office admin",         types:[],                 buckets:["administration","hr"]},
-  {n:"Meena",  i:"M", dept:"Academics",      role:"Senior teacher",       types:["work"],           buckets:["academic"]},
-  {n:"Kavya",  i:"K", dept:"Academics",      role:"Teacher",              types:["work"],           buckets:["academic"]},
-  {n:"Arjun",  i:"A", dept:"Operations",     role:"General duties",       types:[],                 buckets:[]},
-  {n:"Deepa",  i:"D", dept:"Operations",     role:"Coordinator",          types:[],                 buckets:["transport"]},
-  {n:"Vikram", i:"V", dept:"Security",       role:"Maintenance head",     types:[],                 buckets:[]}
-];
-const ALL_STAFF=MEMBERS.map(m=>m.n);
-let tasks=[
-  {t:"Check all classroom networking points & panels", who:"Hari", init:"H", due:"Overdue · 2 Jul", date:"2026-07-02", bucket:"it", type:"repair", done:false,
-   extReq:{newDate:"2026-07-08", label:"Wed · 8 Jul", reason:"Replacement network switch arrives mid-week", from:"Hari Charan"}},
-  {t:"Complete the academic work review", who:"Meena", init:"M", due:"Due today · 3:00 PM", date:"2026-07-06", bucket:"academic", type:"work", done:false},
-  {t:"Order science-lab supplies for term 2", who:"Ravi", init:"R", due:"Due Fri", date:"2026-07-10", bucket:"accounts", type:"purchase", done:false},
-  {t:"Re-check fire extinguishers in Block B", who:"Hari", init:"H", due:"Due today", date:"2026-07-06", bucket:"maintenance", type:"maint", done:false, selfAssigned:true, instructedBy:"Anita (Manager)", recur:"monthly", recurOn:6},
-];
-let pendingReqs=[{t:"2 boxes of whiteboard markers + dusters", note:"For the term-2 classrooms", from:"Kavya", av:"K"}];
-let pendingIssues=[{t:"Ceiling fan in Class 7B making a loud noise", from:"Meena", av:"M"}];
-let notices=[{t:"PTM rescheduled to Saturday", b:"Parent-teacher meeting moves to Sat 10 AM.", d:"Yesterday"}];
+/* cosmetic-only: the assignment-suggestion heuristic and job-title display text.
+   Not persisted anywhere — the DB only tracks org role/department, not this level of detail. */
+const SKILLS={Hari:{types:["repair","maint"],buckets:["maintenance","construction","it"]},
+  Suresh:{types:["repair","maint"],buckets:["maintenance","construction"]},
+  Latha:{types:["maint"],buckets:[]},
+  Ravi:{types:["purchase"],buckets:["accounts","administration"]},
+  Anita:{types:[],buckets:["administration","hr"]},
+  Meena:{types:["work"],buckets:["academic"]},
+  Kavya:{types:["work"],buckets:["academic"]},
+  Arjun:{types:[],buckets:[]},
+  Deepa:{types:[],buckets:["transport"]},
+  Vikram:{types:[],buckets:[]}};
+const JOB_TITLE={Hari:"Repairs & electrical",Suresh:"Plumbing & carpentry",Latha:"Housekeeping",
+  Ravi:"Procurement",Anita:"Office admin",Meena:"Senior teacher",Kavya:"Teacher",
+  Arjun:"General duties",Deepa:"Coordinator",Vikram:"Maintenance head"};
+
+let MEMBERS=[];
+const ALL_STAFF=[];
+let tasks=[];
+let pendingReqs=[];
+let pendingIssues=[];
+let notices=[];
 const attnDemo=[
   {nm:"Hari Charan", rs:"1 task overdue 4 days + late twice this week", c:"var(--red)", ini:"H"},
   {nm:"Meena R.", rs:"5 open tasks — likely to slip 1 by Friday", c:"var(--amber)", ini:"M"},
@@ -267,6 +267,110 @@ const FIRST=n=>String(n).split(' ')[0];
 const BOSS_ROLE={Meena:'srm',Kavya:'srm',Ravi:'srm',Vikram:'srm',Hari:'jrm',Suresh:'jrm',Latha:'jrm',Arjun:'mgmt',Deepa:'mgmt',Anita:'mgmt',Rajesh:'admin'};
 const canApproveFrom=(role,from)=>role==='admin'||role==='mgmt'||BOSS_ROLE[FIRST(from)]===role;
 const canAssignIssues=role=>role==='admin'||role==='mgmt'||role==='jrm'; /* jrm = Vikram, maintenance head */
+
+/* ============ supabase ============ */
+const sb=window.supabase.createClient(
+  "https://fumggrcamegejihenkhb.supabase.co",
+  "sb_publishable_bEqR06srB99BHHdvLQy14g_-pLZPWwJ"
+);
+const LABEL_TO_BUCKET=Object.fromEntries(Object.entries(BUCKETS).map(([k,v])=>[v,k]));
+/* every staff row, incl. Priya/Rajesh/Anita-the-manager — for resolving requesters/approvers.
+   MEMBERS (Teachers + the maintenance Team Member) is just the assignable operational subset. */
+let ALL_PEOPLE=[];
+const findPerson=n=>ALL_PEOPLE.find(p=>p.n.toLowerCase()===String(n).toLowerCase()||p.s.toLowerCase()===String(n).toLowerCase());
+
+function extLabel(dateStr){
+  const d=new Date(dateStr+'T00:00:00');
+  return d.toLocaleDateString('en',{weekday:'short'})+' · '+fmtD(dateStr);
+}
+function rowToMobileTask(row,assignRows,byId,logRows){
+  const mine=assignRows.filter(a=>a.task_id===row.id);
+  const primary=mine.find(a=>a.is_primary)||mine[0];
+  const co=mine.filter(a=>a!==primary);
+  const doneBy=mine.filter(a=>a.done_at).map(a=>a.staff_short);
+  const t={id:row.id,t:row.title,who:primary?primary.staff_short:null,
+    init:primary&&byId[primary.staff_id]?byId[primary.staff_id].initials:'',
+    coWho:co.length?co.map(a=>a.staff_short):undefined,
+    due:'Due '+dueLabel(row.due_date,row.due_time?row.due_time.slice(0,5):''),
+    date:row.due_date,bucket:LABEL_TO_BUCKET[row.department]||'administration',type:row.type,
+    done:row.status==='done',
+    progress:(row.status==='inprogress'||row.status==='partial')?row.status:undefined,
+    note:row.note||undefined,doneOn:row.done_on||undefined,
+    doneWhen:row.status==='done'?fmtD(row.done_on||row.due_date):undefined,
+    doneBy:doneBy.length?doneBy:undefined,
+    selfAssigned:row.self_assigned||undefined,instructedBy:row.instructed_by||undefined,
+    origin:row.origin||undefined,
+    files:row.files&&row.files.length?row.files:undefined,
+    recur:row.recur||undefined,recurOn:row.recur_on!=null?row.recur_on:undefined};
+  if(row.ext_new_date)t.extReq={newDate:row.ext_new_date,label:extLabel(row.ext_new_date),reason:row.ext_reason||''};
+  if(row.reopened_by)t.reopened={by:(byId[row.reopened_by]||{name:''}).name,comment:row.reopened_comment||''};
+  const logs=logRows.filter(l=>l.task_id===row.id);
+  if(logs.length)t.log=logs.map(l=>({by:l.author_name||'Earlier',when:fmtD(l.created_at.slice(0,10)),text:l.body}));
+  return t;
+}
+async function loadAll(){
+  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},{data:noticeRows}]=await Promise.all([
+    sb.from('staff').select('*'),
+    sb.from('tasks').select('*'),
+    sb.from('task_assignees').select('*'),
+    sb.from('task_log').select('*').order('created_at'),
+    sb.from('requests').select('*').order('created_at'),
+    sb.from('notices').select('*').order('created_at',{ascending:false})
+  ]);
+  const byId=Object.fromEntries((staffRows||[]).map(r=>[r.id,{name:r.name,short:r.short_name,initials:r.initials}]));
+  ALL_PEOPLE.length=0;ALL_PEOPLE.push(...(staffRows||[]).map(r=>({n:r.name,s:r.short_name,id:r.id})));
+  MEMBERS.length=0;MEMBERS.push(...(staffRows||[]).filter(r=>r.role==='Teacher'||r.role==='Team Member').map(r=>({
+    n:r.short_name,i:r.initials,dept:r.department,role:JOB_TITLE[r.short_name]||r.role,
+    types:(SKILLS[r.short_name]||{}).types||[],buckets:(SKILLS[r.short_name]||{}).buckets||[],id:r.id})));
+  ALL_STAFF.length=0;ALL_STAFF.push(...MEMBERS.map(m=>m.n));
+  (assignRows||[]).forEach(a=>{const p=byId[a.staff_id];a.staff_short=p?p.short:a.staff_id;});
+  (reqRows||[]).forEach(r=>{const p=byId[r.from_staff_id];r.from_short=p?p.short:r.from_staff_id;r.from_init=p?p.initials:'?';});
+  tasks.length=0;tasks.push(...(taskRows||[]).map(r=>rowToMobileTask(r,assignRows||[],byId,logRows||[]))
+    .sort((a,b)=>(a.date||'')<(b.date||'')?-1:1));
+  pendingReqs.length=0;pendingReqs.push(...(reqRows||[]).filter(r=>r.kind==='request').map(r=>
+    ({id:r.id,t:r.title,note:r.note||'',from:r.from_short,av:r.from_init})));
+  pendingIssues.length=0;pendingIssues.push(...(reqRows||[]).filter(r=>r.kind==='issue').map(r=>
+    ({id:r.id,t:r.title,from:r.from_short,av:r.from_init,files:r.files&&r.files.length?r.files:undefined})));
+  notices.length=0;notices.push(...(noticeRows||[]).map(r=>({id:r.id,t:r.title,b:r.body||'',d:fmtD(r.created_at.slice(0,10))})));
+}
+function mobileTaskRow(t){
+  return {title:t.t,type:t.type||'work',department:BUCKETS[t.bucket]||t.bucket,
+    status:t.done?'done':(t.progress||'open'),
+    due_date:t.date||null,due_time:null,note:t.note||'',
+    recur:t.recur||null,recur_on:t.recurOn!=null?t.recurOn:null,
+    self_assigned:!!t.selfAssigned,instructed_by:t.instructedBy||null,origin:t.origin||null,
+    files:t.files||[],done_on:t.doneOn||null,
+    ext_new_date:(t.extReq&&t.extReq.newDate)||null,ext_reason:(t.extReq&&t.extReq.reason)||null,
+    reopened_by:(t.reopened&&findPerson(t.reopened.by))?findPerson(t.reopened.by).id:null,
+    reopened_comment:(t.reopened&&t.reopened.comment)||null};
+}
+async function saveTask(t){
+  const row=mobileTaskRow(t);
+  if(t.id){await sb.from('tasks').update(row).eq('id',t.id);}
+  else{const {data}=await sb.from('tasks').insert(row).select().single();t.id=data.id;}
+  await syncAssignees(t);
+}
+async function syncAssignees(t){
+  if(!t.id)return;
+  await sb.from('task_assignees').delete().eq('task_id',t.id);
+  const rows=assigneesM(t).filter(Boolean).map(n=>{const m=findMember(n);
+    return m&&m.id?{task_id:t.id,staff_id:m.id,is_primary:n===t.who,
+      done_at:(t.doneBy||[]).includes(n)?new Date().toISOString():null}:null;}).filter(Boolean);
+  if(rows.length)await sb.from('task_assignees').insert(rows);
+}
+async function logTask(t,authorName,text){
+  if(!t.id)return;
+  const p=findPerson(authorName);
+  await sb.from('task_log').insert({task_id:t.id,author_id:p?p.id:null,body:text});
+}
+async function saveRequestRow(q,kind){
+  const p=findPerson(q.from)||{};
+  const {data}=await sb.from('requests').insert({kind,title:q.t,
+    from_staff_id:p.id||null,note:q.note||'',files:q.files||[]}).select().single();
+  q.id=data.id;
+}
+async function deleteRequestRow(q){if(q.id)await sb.from('requests').delete().eq('id',q.id);}
+async function postNotice(n){await sb.from('notices').insert({title:n.t,body:n.b});}
 
 /* ============ helpers ============ */
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -305,6 +409,11 @@ function spawnNextRecur(t){
     due:'Due '+fmtD(nd),date:nd,bucket:t.bucket,type:t.type,done:false,recur:t.recur,recurOn:t.recurOn,
     selfAssigned:t.selfAssigned,instructedBy:t.instructedBy});
   return nd;}
+/* persist a spawnNextRecur() result: the task itself, plus the freshly-pushed next occurrence if recurring */
+function persistComplete(t,nd){
+  saveTask(t).catch(console.error);
+  if(nd)saveTask(tasks[tasks.length-1]).catch(console.error);
+}
 function suggestAssignee(type,bucket){
   const load=workload();const OVER=3;
   let pool=MEMBERS.filter(m=>m.types.includes(type));let basis='type';
@@ -436,6 +545,8 @@ function App(){
   const [toast,setToastS]=useState(null);
   const tRef=useRef();
   const say=useCallback(m=>{setToastS(m);clearTimeout(tRef.current);tRef.current=setTimeout(()=>setToastS(null),2400);},[]);
+  const [loaded,setLoaded]=useState(false);
+  useEffect(()=>{loadAll().then(()=>setLoaded(true)).catch(e=>{console.error(e);setLoaded(true);say('Could not load data from Supabase — check your connection');});},[]);
   const r=ROLES[role];
   const scope=r.team;
   const mine=tasks.map((t,i)=>({t,i})).filter(o=>assigneesM(o.t).some(a=>scope.includes(a)));
@@ -457,20 +568,32 @@ function App(){
     remind:i=>say('Reminder sent to '+assigneesM(tasks[i]).join(' & ')+' on WhatsApp 🔔'),
     approveReq:qi=>{const q=pendingReqs.splice(qi,1)[0];if(!q)return;
       const s=suggestAssignee('purchase','accounts');
-      tasks.unshift({t:"Buy: "+q.t,who:s.n,init:s.i,due:"This week",date:whenToDate("this week"),
-        bucket:"accounts",type:"purchase",done:false,origin:"request",reportedBy:q.from,note:q.note||undefined});
-      R();say('Approved · '+s.n+' (procurement · accounts) will buy 📦');},
-    declineReq:qi=>{const q=pendingReqs.splice(qi,1)[0];if(q){R();say('Request declined — '+q.from.split(' ')[0]+' will be notified');}},
+      const nt={t:"Buy: "+q.t,who:s.n,init:s.i,due:"This week",date:whenToDate("this week"),
+        bucket:"accounts",type:"purchase",done:false,origin:"request",
+        note:'From '+q.from+(q.note?' — “'+q.note+'”':'')};
+      tasks.unshift(nt);
+      R();
+      saveTask(nt).catch(console.error);deleteRequestRow(q).catch(console.error);
+      say('Approved · '+s.n+' (procurement · accounts) will buy 📦');},
+    declineReq:qi=>{const q=pendingReqs.splice(qi,1)[0];if(q){R();deleteRequestRow(q).catch(console.error);say('Request declined — '+q.from.split(' ')[0]+' will be notified');}},
     assignIssue:(qi,who)=>{const q=pendingIssues.splice(qi,1)[0];if(!q)return;const m=findMember(who);
-      tasks.unshift({t:q.t,who:m.n,init:m.i,due:"Tomorrow · 9:00 AM",date:whenToDate("tomorrow"),
-        bucket:"maintenance",type:"repair",done:false,origin:"issue",reportedBy:q.from,files:q.files});
-      R();say('Assigned to '+who+' 🔧 · notified on WhatsApp');},
+      const nt={t:q.t,who:m.n,init:m.i,due:"Tomorrow · 9:00 AM",date:whenToDate("tomorrow"),
+        bucket:"maintenance",type:"repair",done:false,origin:"issue",note:'Reported by '+q.from,files:q.files};
+      tasks.unshift(nt);
+      R();
+      saveTask(nt).catch(console.error);deleteRequestRow(q).catch(console.error);
+      say('Assigned to '+who+' 🔧 · notified on WhatsApp');},
     approveExt:i=>{const t=tasks[i];if(!t||!t.extReq)return;
       t.date=t.extReq.newDate;t.due='Due '+fmtD(t.extReq.newDate);delete t.extReq;R();
+      saveTask(t).catch(console.error);
       say('Extension approved ⏳ · assignee notified');},
-    rejectExt:i=>{const t=tasks[i];if(!t||!t.extReq)return;delete t.extReq;R();say('Extension rejected — original due date stands');},
+    rejectExt:i=>{const t=tasks[i];if(!t||!t.extReq)return;delete t.extReq;R();
+      saveTask(t).catch(console.error);
+      say('Extension rejected — original due date stands');},
     needExt,
   };
+
+  if(!loaded)return <div className="phone"><div className="notch"/><div className="screen" style={{display:'flex',alignItems:'center',justifyContent:'center',color:'var(--muted)',fontSize:13}}>Loading TeamFlow…</div></div>;
 
   return <>
   <div className="phone"><div className="notch"/><div className="screen">
@@ -716,7 +839,9 @@ function Insights({ctx}){
 /* ============ notices ============ */
 function Notices({ctx}){
   const [t,setT]=useState('');const [b,setB]=useState('');
-  const post=()=>{notices.unshift({t:t.trim()||'Untitled notice',b:b.trim(),d:'Just now'});setT('');setB('');ctx.R();ctx.say('Posted · broadcast on WhatsApp 📣');};
+  const post=()=>{const nn={t:t.trim()||'Untitled notice',b:b.trim(),d:'Just now'};notices.unshift(nn);setT('');setB('');ctx.R();
+    postNotice(nn).catch(console.error);
+    ctx.say('Posted · broadcast on WhatsApp 📣');};
   return <div>
     {ctx.r.canPost?<>
       <div className="sec">Post a notice</div>
@@ -859,10 +984,12 @@ function TaskSheet({ctx,close}){
     const self=assign==='self';
     const list=self?[ctx.r.self]:cur.whos;
     const m=findMember(list[0])||{i:list[0][0]};
-    tasks.unshift({t:cur.task,who:list[0],init:m.i,coWho:(!self&&list.length>1)?list.slice(1):undefined,
+    const nt={t:cur.task,who:list[0],init:m.i,coWho:(!self&&list.length>1)?list.slice(1):undefined,
       due:'Due '+dueLabel(cur.dateIso,cur.timeHM).replace(/^Today/,'today').replace(/^Tomorrow/,'tomorrow'),date:cur.dateIso,bucket:cur.bucket,type,done:false,recur:cur.recur||undefined,recurOn:cur.recur?cur.recurOn:undefined,
-      selfAssigned:self,instructedBy:instruct||null});
+      selfAssigned:self,instructedBy:instruct||null};
+    tasks.unshift(nt);
     close();ctx.R();
+    saveTask(nt).catch(console.error);
     const tail=(cur.recur?' · '+recurLabel(cur.recur,cur.recurOn).toLowerCase():'')+(instruct?' · as per '+instruct:'');
     ctx.say(self?'Added to your list'+tail:'Assigned '+(list.length>1?'jointly to ':'to ')+list.join(' + ')+tail+' · sent on WhatsApp');
   }
@@ -979,8 +1106,11 @@ function IssueSheet({ctx,close}){
   const pickF=e=>{const nf=[...e.target.files].map(x=>({name:x.name,url:(x.type||'').startsWith('image/')?URL.createObjectURL(x):null}));setFiles(files.concat(nf));};
   const send=()=>{
     if(!txt.trim()){ctx.say('Describe the issue first');return;}
-    pendingIssues.unshift({t:txt.trim().charAt(0).toUpperCase()+txt.trim().slice(1),from:ctx.r.name,av:ctx.r.av,files:files.length?files.slice():undefined});
-    close();ctx.R();ctx.say('Sent to Vikram (maintenance head) 🔧');};
+    const nq={t:txt.trim().charAt(0).toUpperCase()+txt.trim().slice(1),from:ctx.r.name,av:ctx.r.av,files:files.length?files.slice():undefined};
+    pendingIssues.unshift(nq);
+    close();ctx.R();
+    saveRequestRow(nq,'issue').catch(console.error);
+    ctx.say('Sent to Vikram (maintenance head) 🔧');};
   return <>
     <h3>Report a maintenance issue</h3>
     <div className="sub">Say what's broken — it goes to the maintenance head, who assigns the right person.</div>
@@ -999,8 +1129,11 @@ function RequestSheet({ctx,close}){
   const [txt,setTxt]=useState('');const [note,setNote]=useState('');
   const send=()=>{
     if(!txt.trim()){ctx.say('Say what you need first');return;}
-    pendingReqs.unshift({t:txt.trim(),note:note.trim(),from:ctx.r.name,av:ctx.r.av});
-    close();ctx.R();ctx.say('Request sent to '+(bossesFor(ctx.role).slice(-1)[0]||'your manager')+' for approval 📦');};
+    const nq={t:txt.trim(),note:note.trim(),from:ctx.r.name,av:ctx.r.av};
+    pendingReqs.unshift(nq);
+    close();ctx.R();
+    saveRequestRow(nq,'request').catch(console.error);
+    ctx.say('Request sent to '+(bossesFor(ctx.role).slice(-1)[0]||'your manager')+' for approval 📦');};
   return <>
     <h3>Request supplies</h3>
     <div className="sub">What do you need? Your manager approves it in one tap.</div>
@@ -1023,6 +1156,7 @@ function UpdateSheet({ctx,idx,close}){
       t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
       t.log.push({by:ctx.r.name,when:fmtD(iso(TODAY)),text:note.trim()});
       t.note=note.trim();
+      logTask(t,ctx.r.name,note.trim()).catch(console.error);
     }
     if(files.length)t.files=(t.files||[]).concat(files);
     if(st==='done'){
@@ -1030,15 +1164,17 @@ function UpdateSheet({ctx,idx,close}){
       if(t.coWho&&t.coWho.length&&assigneesM(t).includes(self)){
         t.doneBy=[...new Set([...(t.doneBy||[]),self])];
         const pending=assigneesM(t).filter(a=>!t.doneBy.includes(a));
-        if(!pending.length){t.done=true;t.doneWhen='just now';delete t.extReq;const nd=spawnNextRecur(t);close();ctx.R();ctx.say(nd?'Everyone finished ✓ · next '+RECURS[t.recur].toLowerCase()+' on '+fmtD(nd):'Everyone finished — task completed ✓');return;}
-        t.done=false;close();ctx.R();ctx.say('Your part done ✓ — pending with '+pending.join(', '));return;
+        if(!pending.length){t.done=true;t.doneWhen='just now';delete t.extReq;const nd=spawnNextRecur(t);persistComplete(t,nd);close();ctx.R();ctx.say(nd?'Everyone finished ✓ · next '+RECURS[t.recur].toLowerCase()+' on '+fmtD(nd):'Everyone finished — task completed ✓');return;}
+        t.done=false;saveTask(t).catch(console.error);close();ctx.R();ctx.say('Your part done ✓ — pending with '+pending.join(', '));return;
       }
       if(t.coWho&&t.coWho.length)t.doneBy=assigneesM(t).slice();
       t.done=true;t.doneWhen='just now';delete t.extReq;
       const nd=spawnNextRecur(t);
+      persistComplete(t,nd);
       close();ctx.R();
       ctx.say(nd?'Done ✓ · next '+RECURS[t.recur].toLowerCase()+' on '+fmtD(nd):'Task marked done ✓');return;
     } else t.done=false;
+    saveTask(t).catch(console.error);
     close();ctx.R();
     ctx.say(st==='partial'?'Marked partial ◑':'Progress updated 🔧');};
   return <>
@@ -1075,6 +1211,7 @@ function ExtSheet({ctx,idx,close}){
   const send=()=>{
     if(!pickd){ctx.say('Pick a new date first');return;}
     t.extReq={newDate:pickd.iso,label:pickd.label,reason:reason.trim(),from:ctx.r.name};
+    saveTask(t).catch(console.error);
     close();ctx.R();ctx.say('Extension request sent to '+(bossesFor(ctx.role).slice(-1)[0]||'your manager')+' ⏳');};
   return <>
     <h3>Request time extension</h3>
@@ -1105,6 +1242,7 @@ function ReopenSheet({ctx,idx,close}){
     t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
     t.log.push({by:ctx.r.name,when:fmtD(iso(TODAY)),text:'Reopened — '+(cmt.trim()||'not up to the mark')});
     if(cmt.trim())t.note=cmt.trim();
+    saveTask(t).catch(console.error);logTask(t,ctx.r.name,'Reopened — '+(cmt.trim()||'not up to the mark')).catch(console.error);
     close();ctx.R();ctx.say('Task reopened ↻ · '+t.who+' notified with your comment');};
   return <>
     <h3>Reopen task</h3>
@@ -1126,6 +1264,7 @@ function ReassignSheet({ctx,idx,close}){
   const load=workload();
   const list=MEMBERS.filter(m=>!q||m.n.toLowerCase().includes(q.toLowerCase())||m.dept.toLowerCase().includes(q.toLowerCase())||m.role.toLowerCase().includes(q.toLowerCase()));
   const go=n=>{const m=findMember(n);t.who=n;t.init=m?m.i:n[0];t.coWho=undefined;
+    saveTask(t).catch(console.error);
     close();ctx.R();ctx.say('Reassigned to '+n+' · notified on WhatsApp');};
   return <>
     <h3>Reassign task</h3>
