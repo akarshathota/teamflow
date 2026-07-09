@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TeamFlow Mobile — React</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+  :root{
+    --bg:#f6f5f0; --card:#ffffff; --ink:#1b1e21; --ink2:#43494f; --muted:#71797f;
+    --line:#e7e5dc; --accent:#0e7a6f; --accent-ink:#0a5c54; --accent-soft:#e2f1ee; --accent-border:#bcdcd6;
+    --red:#c43a53; --red-soft:#f9e9ed; --amber:#9a6a10; --amber-soft:#f6efdb;
+    --green:#1a7a48; --green-soft:#e4f2e9; --blue:#39638f; --blue-soft:#e8eef5;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:'IBM Plex Sans',-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);
+    background:#e9e7df;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 14px;
+    -webkit-font-smoothing:antialiased}
+  h3,.brandfont{font-family:'Bricolage Grotesque','IBM Plex Sans',sans-serif}
+  button{font-family:inherit}
+  svg.i{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;display:block;flex:0 0 auto}
+  .caption{font-size:12px;color:#6d6a5f;margin-top:16px;text-align:center;max-width:390px;line-height:1.5}
+  .caption b{color:#45423a}
+
+  .phone{width:392px;max-width:96vw;height:806px;background:#23262a;border-radius:46px;padding:12px;box-shadow:0 30px 80px rgba(27,30,33,.35);position:relative;flex:0 0 auto}
+  .notch{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:128px;height:28px;background:#23262a;border-radius:0 0 18px 18px;z-index:40}
+  .screen{background:var(--bg);width:100%;height:100%;border-radius:36px;overflow:hidden;position:relative;display:flex;flex-direction:column}
+
+  .top{padding:44px 18px 14px;background:var(--card);border-bottom:1px solid var(--line);z-index:5}
+  .top .row{display:flex;align-items:center;justify-content:space-between}
+  .hello{font-size:13px;color:var(--muted);line-height:1.45}
+  .hello b{color:var(--ink);font-weight:700}
+  .av{width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+  .rolebar{display:flex;align-items:center;gap:8px;margin-top:12px;background:#f1f0e9;border-radius:9px;padding:8px 10px}
+  .rolebar .demo{font-size:10px;font-weight:700;letter-spacing:.5px;color:var(--accent-ink);background:var(--accent-soft);padding:3px 7px;border-radius:6px;white-space:nowrap}
+  .rolesel{flex:1;border:none;background:none;font-family:inherit;font-size:13.5px;font-weight:700;color:var(--ink);outline:none;cursor:pointer}
+  .summary{margin-top:12px;background:var(--accent-soft);border:1px solid var(--accent-border);
+    border-radius:11px 11px 11px 3px;padding:11px 13px;font-size:13px;line-height:1.5;color:#134f48}
+  .summary b{color:#0c3b35}
+
+  .content{flex:1;overflow-y:auto;padding:15px 15px 100px}
+  .content::-webkit-scrollbar{display:none}
+  .sec{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.9px;color:var(--muted);margin:10px 2px 10px}
+
+  .task{background:var(--card);border-radius:13px;padding:14px;margin-bottom:11px;box-shadow:0 2px 8px rgba(27,30,33,.05);border:1px solid var(--line);position:relative;overflow:hidden}
+  .task.done .tt{text-decoration:line-through;color:var(--muted)}
+  .stripe{position:absolute;left:0;top:0;bottom:0;width:4px}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:5px}
+  .pill.over{background:var(--red-soft);color:var(--red)}
+  .pill.today{background:var(--amber-soft);color:var(--amber)}
+  .pill.done{background:var(--green-soft);color:var(--green)}
+  .pill.open{background:#efeee7;color:#5d6367}
+  .tt{font-size:15px;font-weight:600;margin:8px 0 6px;line-height:1.35}
+  .meta{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+  .who{width:24px;height:24px;border-radius:50%;background:#e6e4da;color:var(--ink2);display:inline-flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;flex:0 0 auto}
+  .tag2{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px}
+  .tag2.green{background:var(--green-soft);color:var(--green)}
+  .tag2.amber{background:var(--amber-soft);color:var(--amber)}
+  .tag2.blue{background:var(--blue-soft);color:var(--blue)}
+  .tag2.gray{background:#efeee7;color:#5d6367}
+  .notepv{font-size:12.5px;color:var(--ink2);background:#f7f6f1;border-radius:7px;padding:7px 10px;margin-top:7px;line-height:1.4;font-style:italic}
+  .attrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+  .thumb{width:46px;height:46px;border-radius:7px;object-fit:cover;border:1px solid var(--line)}
+  .filechip{font-size:11.5px;font-weight:600;color:var(--ink2);background:#efeee7;padding:6px 10px;border-radius:6px;display:inline-flex;align-items:center;gap:4px}
+  .cardbtns{display:flex;gap:8px;margin-top:12px}
+  .btn{flex:1;border:none;border-radius:9px;padding:12px;font-size:13.5px;font-weight:700;cursor:pointer;min-height:44px;display:flex;align-items:center;justify-content:center;gap:6px}
+  .btn:active{transform:scale(.97)}
+  .btn.primary{background:var(--green);color:#fff}
+  .btn.ghost{background:#efeee7;color:var(--ink2);flex:0 0 50px}
+  .btn.accent{background:var(--accent);color:#fff}
+
+  .insight{background:#20312e;color:#eef5f3;border-radius:14px;padding:16px;margin-bottom:14px}
+  .insight .lab{font-size:10.5px;letter-spacing:1px;text-transform:uppercase;opacity:.75;display:flex;align-items:center;gap:6px}
+  .insight p{margin:8px 0 0;font-size:14px;line-height:1.55}
+  .attn{background:var(--card);border-radius:12px;padding:12px 13px;margin-bottom:10px;border:1px solid var(--line);display:flex;align-items:center;gap:12px}
+  .ring{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:13px;flex:0 0 auto}
+  .attn .nm{font-size:14px;font-weight:600}
+  .attn .rs{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.35}
+  .free{display:inline-block;font-size:10px;font-weight:700;color:var(--green);background:var(--green-soft);padding:2px 7px;border-radius:6px;margin-left:6px}
+
+  .att-sum{display:flex;gap:9px;margin-bottom:14px}
+  .att-sum .box{flex:1;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:12px;text-align:center}
+  .att-sum .n{font-size:21px;font-weight:700;font-family:'Bricolage Grotesque',sans-serif}
+  .att-sum .l{font-size:11px;color:var(--muted);margin-top:2px}
+  .prow{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin-bottom:8px;display:flex;align-items:center;gap:11px}
+  .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+
+  .nav{position:absolute;bottom:0;left:0;right:0;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);
+    border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:8px 6px 20px;z-index:30}
+  .nav button{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:4px;
+    font-size:10.5px;color:var(--muted);cursor:pointer;flex:1;font-weight:600;padding:2px 0;min-height:50px}
+  .nav button.on{color:var(--accent-ink)}
+  .nav .ic{width:50px;height:29px;display:flex;align-items:center;justify-content:center;border-radius:9px}
+  .nav button.on .ic{background:var(--accent-soft)}
+  .fab{position:absolute;bottom:78px;right:16px;width:60px;height:60px;border-radius:18px 18px 18px 5px;
+    background:var(--accent);color:#fff;border:none;box-shadow:0 12px 26px rgba(14,122,111,.4);cursor:pointer;z-index:35;
+    display:flex;align-items:center;justify-content:center}
+  .fab:active{transform:scale(.93)}
+
+  .sheet-wrap{position:absolute;inset:0;background:rgba(20,25,28,.5);backdrop-filter:blur(2px);z-index:50;display:flex;align-items:flex-end}
+  .sheet{background:var(--card);width:100%;border-radius:22px 22px 0 0;padding:20px 18px 28px;animation:up .25s ease;max-height:88%;overflow-y:auto}
+  @keyframes up{from{transform:translateY(60%)}to{transform:none}}
+  .grab{width:44px;height:5px;border-radius:5px;background:#dcd9cd;margin:-6px auto 14px}
+  .sheet h3{margin:2px 0 4px;font-size:18px}
+  .sheet .sub{color:var(--muted);font-size:13px;margin-bottom:14px;line-height:1.4}
+  .x{position:absolute;right:16px;background:none;border:none;color:var(--muted);cursor:pointer;padding:4px}
+  .sheet .xrow{display:flex;justify-content:flex-end;margin:-6px -6px 0 0}
+
+  .actbtn{width:100%;display:flex;align-items:center;gap:13px;background:var(--card);border:1.5px solid var(--line);
+    border-radius:12px;padding:14px;margin-bottom:10px;cursor:pointer;text-align:left}
+  .actbtn:active{transform:scale(.98)}
+  .actbtn b{font-size:14.5px;display:block;color:var(--ink)}
+  .actbtn small{font-size:12px;color:var(--muted)}
+  .actic{width:44px;height:44px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+
+  .modetabs{display:flex;gap:6px;background:#efeee7;border-radius:9px;padding:4px;margin-bottom:14px}
+  .mtab{flex:1;border:none;background:none;font-size:13.5px;font-weight:700;color:var(--muted);padding:9px;border-radius:7px;cursor:pointer}
+  .mtab.on{background:var(--card);color:var(--ink);box-shadow:0 1px 4px rgba(27,30,33,.12)}
+  .typein{width:100%;border:1.5px solid var(--line);border-radius:9px;padding:12px;font-size:14.5px;
+    font-family:inherit;outline:none;resize:none;color:var(--ink);line-height:1.45}
+  .typein:focus{border-color:var(--accent)}
+  .understand{width:100%;margin-top:10px;background:var(--accent);color:#fff;border:none;border-radius:9px;
+    padding:13px;font-size:14.5px;font-weight:700;cursor:pointer}
+  .mic{width:98px;height:98px;border-radius:50%;margin:6px auto 14px;background:var(--accent-soft);color:var(--accent-ink);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative}
+  .mic svg{width:40px;height:40px;stroke-width:1.7}
+  .mic.rec{background:var(--red-soft);color:var(--red)}
+  .mic.rec::after{content:"";position:absolute;inset:-8px;border-radius:50%;border:3px solid var(--red);animation:pulse 1s infinite}
+  @keyframes pulse{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.25);opacity:0}}
+  .heard{background:#f4f3ec;border-radius:9px;padding:12px 14px;font-size:14px;line-height:1.5;color:var(--ink2);min-height:20px}
+  .heard .ph{color:var(--muted)}
+  .typechips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+  .tchip{border:1.5px solid var(--line);background:var(--card);border-radius:7px;padding:7px 12px;
+    font-size:12.5px;font-weight:600;color:var(--ink2);cursor:pointer}
+  .tchip.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
+  .field{display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .field .k{font-size:12px;color:var(--muted);width:76px;flex:0 0 auto;padding-top:3px}
+  .field .v{font-size:14px;font-weight:600;flex:1}
+  .chipbtn{display:inline-flex;align-items:center;gap:5px;background:var(--card);border:1.5px dashed #b6d3cd;border-radius:7px;padding:4px 10px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink)}
+  .aibadge{font-size:11px;color:var(--accent-ink);font-weight:700;background:var(--accent-soft);padding:3px 9px;border-radius:6px}
+  .reason{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.35}
+  .reason b{color:var(--accent-ink)}
+  .picker{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .pickchip{border:1.5px solid var(--line);background:var(--card);border-radius:7px;padding:7px 11px;
+    font-size:12.5px;font-weight:600;color:var(--ink2);cursor:pointer;text-align:left}
+  .pickchip.cur{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
+  .pickchip .emprole{display:block;font-size:11px;color:var(--muted);font-weight:500;margin-top:2px}
+  .empsearch{width:100%;border:1.5px solid var(--line);border-radius:8px;padding:9px 11px;font-family:inherit;font-size:13.5px;color:var(--ink);outline:none;margin-bottom:8px}
+  .empsearch:focus{border-color:var(--accent)}
+  .empcol{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;width:100%}
+  .send{width:100%;margin-top:16px;background:var(--green);color:#fff;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer}
+  .send:active{transform:scale(.98)}
+  .optst{width:100%;display:flex;justify-content:space-between;align-items:center;background:#f1f0e9;border:none;border-radius:9px;padding:12px 14px;font-size:13.5px;font-weight:700;color:var(--ink2);cursor:pointer;margin-top:12px}
+  .uploadbtn{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--accent-ink);
+    background:var(--accent-soft);padding:11px 6px;border-radius:9px;cursor:pointer;flex:1;justify-content:center}
+  .attachrow{display:flex;gap:8px;margin-top:12px}
+  .filelist{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .selsel{width:100%;border:1.5px solid var(--line);border-radius:8px;padding:9px;font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);background:var(--card);outline:none}
+
+  .calwrap{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px}
+  .calhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .calhead button{border:none;background:#f1f0e9;width:30px;height:30px;border-radius:7px;cursor:pointer;color:var(--ink2);display:flex;align-items:center;justify-content:center}
+  .calmon{font-weight:700;font-size:15px;font-family:'Bricolage Grotesque',sans-serif}
+  .calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .caldow{text-align:center;font-size:10px;font-weight:700;color:var(--muted);padding:2px 0}
+  .calcell{min-height:50px;background:#f7f6f1;border-radius:6px;padding:3px}
+  .calcell.empty2{background:transparent}
+  .calcell.today{background:var(--accent-soft);outline:1.5px solid var(--accent)}
+  .caldate{font-size:10.5px;font-weight:700;color:var(--ink2);margin-bottom:2px}
+  .calev{font-size:8.5px;color:#fff;border-radius:4px;padding:2px 4px;margin-bottom:2px;line-height:1.35;cursor:pointer;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+  .calev:active{opacity:.75}
+  .calmore{font-size:8.5px;color:var(--muted);font-weight:700}
+  .callegend{display:flex;flex-wrap:wrap;gap:5px 11px;margin-top:10px}
+  .callegend span{font-size:10px;color:var(--muted);font-weight:600;display:inline-flex;align-items:center;gap:5px}
+  .ldot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+  .syncrow{margin-top:12px;border-top:1px solid var(--line);padding-top:11px}
+  .synctitle{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:8px}
+  .syncbtns{display:flex;gap:8px}
+  .syncb{flex:1;border:1.5px solid var(--line);background:var(--card);border-radius:8px;padding:10px 6px;font-size:12px;font-weight:700;color:var(--ink2);cursor:pointer}
+
+  .empty{text-align:center;color:var(--muted);font-size:13.5px;padding:28px 10px}
+  .toast{position:absolute;bottom:150px;left:50%;transform:translateX(-50%);background:#22262a;color:#fff;
+    padding:12px 17px;border-radius:10px;font-size:13px;font-weight:600;z-index:60;max-width:92%;width:max-content;text-align:center;line-height:1.45;animation:up .2s ease}
+  #err-overlay{position:fixed;inset:auto 12px 12px 12px;background:#fff3f3;border:2px solid #c43a53;border-radius:10px;padding:14px;font:12px/1.5 monospace;color:#7a1f30;z-index:999;display:none;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="err-overlay"></div>
+<script>
+window.onerror=function(msg,src,line){
+  var el=document.getElementById('err-overlay');
+  el.style.display='block';
+  el.textContent='Runtime error — please report this to Claude:\n'+msg+' (line '+line+')\n\n(tap to dismiss)';
+  el.onclick=function(){el.style.display='none';};
+};
+</script>
+
+<script type="text/babel" data-presets="react">
+const {useState,useEffect,useRef,useCallback} = React;
+
+/* ============ data ============ */
+const TODAY=new Date(2026,6,6);
+const TYPES={work:{l:"Work",e:"🛠"},purchase:{l:"Purchase",e:"🛒"},repair:{l:"Repair",e:"🔧"},maint:{l:"Maintenance",e:"🧰"},other:{l:"Other",e:"📋"}};
+const RECURS={daily:"Daily",weekly:"Weekly",monthly:"Monthly",yearly:"Yearly"};
+const BUCKETS={academic:"Academic",maintenance:"Maintenance",construction:"Construction",hr:"HR",accounts:"Accounts",administration:"Administration",transport:"Transport",it:"IT & Systems"};
+const BUCKET_COLORS={academic:'#39638f',maintenance:'#b06e12',construction:'#8a6a52',hr:'#a34d78',accounts:'#1a7a48',administration:'#5d6672',transport:'#0e7a8f',it:'#5b5ea6'};
+const MEMBERS=[
+  {n:"Hari",   i:"H", dept:"Maintenance",    role:"Repairs & electrical", types:["repair","maint"], buckets:["maintenance","construction","it"]},
+  {n:"Suresh", i:"S", dept:"Maintenance",    role:"Plumbing & carpentry", types:["repair","maint"], buckets:["maintenance","construction"]},
+  {n:"Latha",  i:"L", dept:"Housekeeping",   role:"Housekeeping",         types:["maint"],          buckets:[]},
+  {n:"Ravi",   i:"R", dept:"Administration", role:"Procurement",          types:["purchase"],       buckets:["accounts","administration"]},
+  {n:"Anita",  i:"A", dept:"Administration", role:"Office admin",         types:[],                 buckets:["administration","hr"]},
+  {n:"Meena",  i:"M", dept:"Academics",      role:"Senior teacher",       types:["work"],           buckets:["academic"]},
+  {n:"Kavya",  i:"K", dept:"Academics",      role:"Teacher",              types:["work"],           buckets:["academic"]},
+  {n:"Arjun",  i:"A", dept:"Operations",     role:"General duties",       types:[],                 buckets:[]},
+  {n:"Deepa",  i:"D", dept:"Operations",     role:"Coordinator",          types:[],                 buckets:["transport"]},
+  {n:"Vikram", i:"V", dept:"Security",       role:"Maintenance head",     types:[],                 buckets:[]}
+];
+const ALL_STAFF=MEMBERS.map(m=>m.n);
+let tasks=[
+  {t:"Check all classroom networking points & panels", who:"Hari", init:"H", due:"Overdue · 2 Jul", date:"2026-07-02", bucket:"it", type:"repair", done:false,
+   extReq:{newDate:"2026-07-08", label:"Wed · 8 Jul", reason:"Replacement network switch arrives mid-week", from:"Hari Charan"}},
+  {t:"Complete the academic work review", who:"Meena", init:"M", due:"Due today · 3:00 PM", date:"2026-07-06", bucket:"academic", type:"work", done:false},
+  {t:"Order science-lab supplies for term 2", who:"Ravi", init:"R", due:"Due Fri", date:"2026-07-10", bucket:"accounts", type:"purchase", done:false},
+  {t:"Re-check fire extinguishers in Block B", who:"Hari", init:"H", due:"Due today", date:"2026-07-06", bucket:"maintenance", type:"maint", done:false, selfAssigned:true, instructedBy:"Anita (Manager)", recur:"monthly", recurOn:6},
+];
+let pendingReqs=[{t:"2 boxes of whiteboard markers + dusters", note:"For the term-2 classrooms", from:"Kavya", av:"K"}];
+let pendingIssues=[{t:"Ceiling fan in Class 7B making a loud noise", from:"Meena", av:"M"}];
+let notices=[{t:"PTM rescheduled to Saturday", b:"Parent-teacher meeting moves to Sat 10 AM.", d:"Yesterday"}];
+const attnDemo=[
+  {nm:"Hari Charan", rs:"1 task overdue 4 days + late twice this week", c:"var(--red)", ini:"H"},
+  {nm:"Meena R.", rs:"5 open tasks — likely to slip 1 by Friday", c:"var(--amber)", ini:"M"},
+  {nm:"Class 6 section", rs:"No teacher marked for 2nd period tomorrow", c:"var(--blue)", ini:"6"},
+];
+const peopleDemo=[
+  {n:"Hari Charan", s:"In · 8:58", c:"var(--green)"},{n:"Meena Rao", s:"Late · 9:24", c:"var(--amber)"},
+  {n:"Ravi Kumar", s:"In · 8:41", c:"var(--green)"},{n:"Anita Desai", s:"Absent — no leave", c:"var(--red)"},
+  {n:"Arjun Menon", s:"In · 8:50", c:"var(--green)"},
+];
+const ROLES={
+  admin:{name:"Priya Nair",org:"Greenwood School · Admin",av:"P",team:ALL_STAFF,self:"Priya",rank:0,
+    tabs:["home","alltasks","calendar","insights","notices","more"],admin:true,billing:true,canPost:true,
+    brief:"Across all 4 teams: 2 tasks at risk today and 1 person is overloaded. You have full visibility and control."},
+  mgmt:{name:"Rajesh Menon",org:"Greenwood School · Management",av:"R",team:ALL_STAFF,self:"Rajesh",rank:1,
+    tabs:["home","alltasks","calendar","insights","notices","more"],admin:true,billing:false,canPost:true,
+    brief:"Org-wide view: 2 tasks at risk and 1 overloaded person. You can manage people and see every report."},
+  srm:{name:"Anita Desai",org:"Manager · Academic + Admin",av:"A",team:["Meena","Kavya","Ravi","Anita","Hari","Suresh"],self:"Anita",rank:2,
+    tabs:["home","alltasks","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
+    brief:"Your teams (Academic, Admin): 1 task likely to slip by Friday and Hari is behind."},
+  jrm:{name:"Vikram Rao",org:"Team Member · Maintenance head",av:"V",team:["Hari","Suresh","Latha"],self:"Vikram",rank:3,
+    tabs:["home","alltasks","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
+    brief:"Your team: Hari has 1 task overdue 4 days. Assign or remind to keep things on track."},
+  worker:{name:"Hari Charan",org:"Teacher",av:"H",team:["Hari"],self:"Hari",rank:4,
+    tabs:["alltasks","calendar","notices"],admin:false,billing:false,canPost:false,brief:""}
+};
+const CHAIN=[{rank:0,label:"Priya (Admin)"},{rank:1,label:"Rajesh (Management)"},{rank:2,label:"Anita (Manager)"},{rank:3,label:"Vikram (Team Member)"}];
+const bossesFor=role=>CHAIN.filter(c=>c.rank<ROLES[role].rank).map(c=>c.label);
+/* same approval model as the console: admin/mgmt approve anything, otherwise only the person's direct boss */
+const FIRST=n=>String(n).split(' ')[0];
+const BOSS_ROLE={Meena:'srm',Kavya:'srm',Ravi:'srm',Vikram:'srm',Hari:'jrm',Suresh:'jrm',Latha:'jrm',Arjun:'mgmt',Deepa:'mgmt',Anita:'mgmt',Rajesh:'admin'};
+const canApproveFrom=(role,from)=>role==='admin'||role==='mgmt'||BOSS_ROLE[FIRST(from)]===role;
+const canAssignIssues=role=>role==='admin'||role==='mgmt'||role==='jrm'; /* jrm = Vikram, maintenance head */
+
+/* ============ helpers ============ */
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const sameDay=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
+const findMember=n=>MEMBERS.find(m=>m.n.toLowerCase()===String(n).toLowerCase());
+const assigneesM=t=>[t.who].concat(t.coWho||[]);
+const hasWhoM=(t,n)=>assigneesM(t).includes(n);
+const bucketColor=b=>BUCKET_COLORS[b]||'#5d6672';
+const gist=t=>{const w=t.split(' ');return w.length<=3?t:w.slice(0,3).join(' ')+'…';};
+const fmtD=d=>new Date(d+'T00:00:00').toLocaleDateString('en',{day:'numeric',month:'short'});
+const fmtTime=t=>{if(!t)return '';const p=t.split(':'),h=+p[0],ap=h>=12?'PM':'AM';return (h%12||12)+':'+p[1]+' '+ap;};
+const labelToTime=l=>{const m=(l||'').match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);if(!m)return '';let h=+m[1]%12;if(m[3].toUpperCase()==='PM')h+=12;return String(h).padStart(2,'0')+':'+m[2];};
+const dueLabel=(d,t)=>{if(!d)return '—';const tm=new Date(TODAY);tm.setDate(tm.getDate()+1);
+  const day=d===iso(TODAY)?'Today':d===iso(tm)?'Tomorrow':fmtD(d);
+  return day+(t?' · '+fmtTime(t):'');};
+function guessTime(t){t=t.toLowerCase();
+  const m=t.match(/\b(?:by|at|before)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/);
+  if(m){let h=+m[1]%12;if(m[3]==='pm')h+=12;return String(h).padStart(2,'0')+':'+(m[2]||'00');}
+  if(/\bnoon\b/.test(t))return '12:00';
+  if(/\bend of (the )?day\b|\beod\b/.test(t))return '17:00';
+  return null;}
+function workload(){const l={};MEMBERS.forEach(m=>l[m.n]=tasks.filter(t=>!t.done&&hasWhoM(t,m.n)).length);return l;}
+/* for recurring tasks: schedule the next occurrence after completion, returns its date */
+function spawnNextRecur(t){
+  if(!t.recur)return null;
+  const base=t.date&&t.date>iso(TODAY)?t.date:iso(TODAY);
+  const d=new Date(base+'T00:00:00');
+  let nd;
+  if(t.recur==='daily'){d.setDate(d.getDate()+1);nd=iso(d);}
+  else if(t.recur==='weekly'){if(t.recurOn!=null){d.setDate(d.getDate()+1);nd=nextAnchor('weekly',t.recurOn,iso(d));}else{d.setDate(d.getDate()+7);nd=iso(d);}}
+  else if(t.recur==='monthly'){const y=d.getFullYear(),m=d.getMonth()+1,day=t.recurOn!=null?t.recurOn:d.getDate();
+    nd=iso(new Date(y,m,Math.min(day,new Date(y,m+1,0).getDate())));}
+  else{const y=d.getFullYear()+1,mm=t.recurOn?t.recurOn.m:d.getMonth(),dd=t.recurOn?t.recurOn.d:d.getDate();
+    nd=iso(new Date(y,mm,Math.min(dd,new Date(y,mm+1,0).getDate())));}
+  tasks.push({t:t.t,who:t.who,init:t.init,coWho:t.coWho?t.coWho.slice():undefined,
+    due:'Due '+fmtD(nd),date:nd,bucket:t.bucket,type:t.type,done:false,recur:t.recur,recurOn:t.recurOn,
+    selfAssigned:t.selfAssigned,instructedBy:t.instructedBy});
+  return nd;}
+function suggestAssignee(type,bucket){
+  const load=workload();const OVER=3;
+  let pool=MEMBERS.filter(m=>m.types.includes(type));let basis='type';
+  if(!pool.length){pool=MEMBERS.filter(m=>m.buckets.includes(bucket));basis='bucket';}
+  if(!pool.length){pool=MEMBERS.slice();basis='any';}
+  pool=pool.slice().sort((a,b)=>load[a.n]-load[b.n]);
+  let pick=pool[0];
+  let reason=basis==='type'?`Handles ${TYPES[type].l.toLowerCase()} tasks · ${load[pick.n]} open now`
+    :basis==='bucket'?`Owns the ${BUCKETS[bucket]||bucket} department · ${load[pick.n]} open now`
+    :`Lightest workload · ${load[pick.n]} open now`;
+  if(load[pick.n]>=OVER)reason+=' · team is busy';
+  return {n:pick.n,i:pick.i,reason};
+}
+function suggestFixer(text){const t=(text||'').toLowerCase();
+  if(/fan|light|electric|wiring|socket|projector|power/.test(t))return{n:'Hari',why:'electrical work'};
+  if(/tap|leak|water|pipe|plumb|toilet|drain/.test(t))return{n:'Suresh',why:'plumbing work'};
+  if(/clean|dust|sweep|garbage|dirty/.test(t))return{n:'Latha',why:'housekeeping'};
+  const s=suggestAssignee('repair','maintenance');return{n:s.n,why:'lightest workload'};}
+function guessType(t){t=t.toLowerCase();
+  if(/\b(order|buy|purchase|procure|stock|supplies)\b/.test(t))return 'purchase';
+  if(/\b(repair|fix|broken|replace|not working|fault)\b/.test(t))return 'repair';
+  if(/\b(clean|service|maintain|maintenance|inspect|paint)\b/.test(t))return 'maint';
+  return 'work';}
+function guessBucket(t){t=t.toLowerCase();
+  if(/\b(exam|class|academic|timetable|teacher|lesson|syllabus|library)\b/.test(t))return 'academic';
+  if(/\b(projector|wifi|network|computer|smart ?board|cctv|printer|software|panel|wiring)\b/.test(t))return 'it';
+  if(/\b(bus|driver|vehicle|transport|route)\b/.test(t))return 'transport';
+  if(/\b(leave|recruit|salary|payroll|appraisal|hiring)\b/.test(t))return 'hr';
+  if(/\b(invoice|payment|purchase|order|buy|cash|fees?|budget|supplies|stock)\b/.test(t))return 'accounts';
+  if(/\b(build|construction|civil|wall|cement)\b/.test(t))return 'construction';
+  if(/\b(repair|fix|broken|leak|clean|service|maintain)\b/.test(t))return 'maintenance';
+  return 'administration';}
+function suggestDue(type,text){const t=(text||'').toLowerCase();
+  if(/\b(urgent|asap|immediately|now|today)\b/.test(t))return{when:"Today · 5:00 PM",reason:"Sounds urgent"};
+  if(type==="repair")return{when:"Tomorrow · 9:00 AM",reason:"Repairs are usually next-day"};
+  if(type==="purchase")return{when:"This week",reason:"Purchases typically allow a few days"};
+  if(type==="maint")return{when:"Next week",reason:"Maintenance can be scheduled ahead"};
+  return{when:"Tomorrow · 9:00 AM",reason:"Default next-day"};}
+const DATE_OPTS=["Today · 5:00 PM","Tomorrow · 9:00 AM","This week","Friday · 5:00 PM","Next week"];
+function whenToDate(when){const w=(when||'').toLowerCase();const d=new Date(TODAY);
+  if(w.includes('today')){}
+  else if(w.includes('tomorrow'))d.setDate(d.getDate()+1);
+  else if(w.includes('friday')||w.includes('this week')){const df=(5-d.getDay()+7)%7||7;d.setDate(d.getDate()+df);}
+  else if(w.includes('next week'))d.setDate(d.getDate()+7);
+  else d.setDate(d.getDate()+1);
+  return iso(d);}
+function guessRecur(t){t=t.toLowerCase();
+  if(/\b(every ?day|daily)\b/.test(t))return 'daily';
+  if(/\b(every week|weekly)\b/.test(t))return 'weekly';
+  if(/\b(every month|monthly)\b/.test(t))return 'monthly';
+  if(/\b(every year|yearly|annually)\b/.test(t))return 'yearly';
+  return null;}
+const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const ord=n=>{const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);};
+const recurLabel=(recur,on)=>{if(!recur)return '';
+  if(recur==='weekly'&&on!=null)return 'Weekly · '+DOW[on];
+  if(recur==='monthly'&&on!=null)return 'Monthly · '+ord(on);
+  if(recur==='yearly'&&on)return 'Yearly · '+on.d+' '+MONTHS[on.m];
+  return RECURS[recur];};
+const defaultRecurOn=(recur,dateStr)=>{const d=new Date((dateStr||iso(TODAY))+'T00:00:00');
+  return recur==='weekly'?d.getDay():recur==='monthly'?d.getDate():recur==='yearly'?{d:d.getDate(),m:d.getMonth()}:null;};
+function nextAnchor(recur,on,fromStr){const d=new Date((fromStr||iso(TODAY))+'T00:00:00');
+  if(recur==='weekly'&&on!=null){d.setDate(d.getDate()+((on-d.getDay()+7)%7));return iso(d);}
+  if(recur==='monthly'&&on!=null){let y=d.getFullYear(),m=d.getMonth();if(d.getDate()>on)m++;
+    const dim=new Date(y,m+1,0).getDate();return iso(new Date(y,m,Math.min(on,dim)));}
+  if(recur==='yearly'&&on){let y=d.getFullYear();
+    let t=new Date(y,on.m,Math.min(on.d,new Date(y,on.m+1,0).getDate()));
+    if(t<d)t=new Date(y+1,on.m,Math.min(on.d,new Date(y+1,on.m+1,0).getDate()));
+    return iso(t);}
+  return iso(d);}
+function parseText(txt){
+  const low=txt.toLowerCase();
+  const whos=MEMBERS.filter(m=>new RegExp('\\b'+m.n.toLowerCase()+'\\b').test(low)).map(m=>m.n);
+  let when=null;
+  if(low.includes('today'))when='Today · 5:00 PM';
+  else if(low.includes('tomorrow'))when='Tomorrow · 9:00 AM';
+  else if(low.includes('friday'))when='Friday · 5:00 PM';
+  else if(low.includes('this week'))when='This week';
+  else if(low.includes('next week'))when='Next week';
+  let recur=guessRecur(low),recurOn=null;
+  const wm=low.match(/\bevery\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)s?\b/);
+  if(wm){recur='weekly';recurOn={sunday:0,monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6}[wm[1]];}
+  const tm=guessTime(low);
+  if(tm){const lbl=fmtTime(tm);when=when?when.split(' · ')[0]+' · '+lbl:'Today · '+lbl;}
+  const END=/\s*\b(?:by|before|at)?\s*(?:today|tomorrow|this week|next week|friday|every ?day|daily|every week|weekly|every month|monthly|every year|yearly|annually|every\s+(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday)s?|noon|\d{1,2}(?::\d{2})?\s*(?:am|pm))\b\.?\s*$/i;
+  let task=txt.replace(/^(please\s+)?(tell|ask|remind|get)\s+\w+(\s+and\s+\w+)*\s+(to\s+)?/i,'').replace(/^\w+\s+should\s+/i,'');
+  task=task.replace(END,'').replace(END,'').replace(/[,.]\s*$/,'').trim()||txt;
+  task=task.charAt(0).toUpperCase()+task.slice(1);
+  return {raw:txt,task,whos,when,recur,recurOn};
+}
+const SAMPLES=[
+  "The projector in the science lab is broken and needs fixing",
+  "We are running low on chalk and markers, order more for all classrooms",
+  "Ask Hari and Suresh to get the term-2 exam hall ready by friday",
+  "Ask Latha to deep-clean the staff room every week",
+];
+
+/* ============ icons ============ */
+const PATHS={
+  home:<g><path d="M4 11l8-7 8 7v8.5a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 19.5z"/><path d="M9.5 21v-6h5v6"/></g>,
+  checkc:<g><circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.4 2.4 4.6-5"/></g>,
+  cal:<g><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></g>,
+  chart:<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>,
+  horn:<g><path d="M4 10v4a1 1 0 001 1h2l5 4V5L7 9H5a1 1 0 00-1 1z"/><path d="M16 9a4.5 4.5 0 010 6M18.5 6.5a8 8 0 010 11"/></g>,
+  dots:<g><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></g>,
+  plus:<path d="M12 5v14M5 12h14"/>,
+  mic:<g><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3"/></g>,
+  x:<path d="M6 6l12 12M18 6L6 18"/>,
+  bell:<path d="M18 16H6c1.2-1.4 1.8-2.4 1.8-5a4.2 4.2 0 018.4 0c0 2.6.6 3.6 1.8 5zM10 19a2 2 0 004 0"/>,
+  redo:<path d="M4 16v-5a5 5 0 015-5h10M15.5 2.5L19 6l-3.5 3.5"/>,
+  check:<path d="M5 12.5l4.5 4.5L19 7.5"/>,
+  tool:<path d="M20.3 7.1a4.6 4.6 0 01-6 5.3l-6.4 6.4a2.1 2.1 0 11-3-3l6.4-6.4a4.6 4.6 0 015.3-6l-2.9 2.9 3.7 3.7z"/>,
+  box:<g><path d="M3.5 8L12 3.5 20.5 8v8L12 20.5 3.5 16z"/><path d="M3.5 8L12 12.5 20.5 8M12 12.5v8"/></g>,
+  clock:<g><circle cx="12" cy="12" r="9"/><path d="M12 7v5.2l3.4 2"/></g>,
+  chevl:<path d="M14.5 6l-6 6 6 6"/>,
+  chevr:<path d="M9.5 6l6 6-6 6"/>,
+  spark:<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>,
+};
+const I=({n,s,c})=><svg className="i" viewBox="0 0 24 24" style={{width:s,height:s,color:c}}>{PATHS[n]}</svg>;
+
+/* ============ app ============ */
+function App(){
+  const [,setTick]=useState(0);
+  const R=useCallback(()=>setTick(t=>t+1),[]);
+  const [role,setRole]=useState('admin');
+  const [page,setPage]=useState('home');
+  const [sheet,setSheet]=useState(null); // {kind, idx?}
+  const [toast,setToastS]=useState(null);
+  const tRef=useRef();
+  const say=useCallback(m=>{setToastS(m);clearTimeout(tRef.current);tRef.current=setTimeout(()=>setToastS(null),2400);},[]);
+  const r=ROLES[role];
+  const scope=r.team;
+  const mine=tasks.map((t,i)=>({t,i})).filter(o=>assigneesM(o.t).some(a=>scope.includes(a)));
+  const openN=mine.filter(o=>!o.t.done).length;
+  const overN=mine.filter(o=>!o.t.done&&o.t.date&&o.t.date<iso(TODAY)).length;
+  const todayN=mine.filter(o=>!o.t.done&&o.t.date===iso(TODAY)).length;
+  const waitN=role==='worker'?0
+    :(canAssignIssues(role)?pendingIssues.length:0)
+    +pendingReqs.filter(q=>canApproveFrom(role,q.from)).length
+    +tasks.filter(t=>t.extReq&&canApproveFrom(role,t.who)).length;
+
+  const switchRole=v=>{setRole(v);const rr=ROLES[v];if(!rr.tabs.includes(page))setPage(rr.tabs[0]);setSheet(null);};
+  const ctx={role,r,scope,mine,say,R,setSheet,setPage,page};
+
+  const needExt=t=>{if(t.done||!t.date)return false;const lim=new Date(TODAY);lim.setDate(lim.getDate()+2);return t.date<=iso(lim);};
+
+  /* actions shared */
+  const acts={
+    remind:i=>say('Reminder sent to '+assigneesM(tasks[i]).join(' & ')+' on WhatsApp 🔔'),
+    approveReq:qi=>{const q=pendingReqs.splice(qi,1)[0];if(!q)return;
+      const s=suggestAssignee('purchase','accounts');
+      tasks.unshift({t:"Buy: "+q.t,who:s.n,init:s.i,due:"This week",date:whenToDate("this week"),
+        bucket:"accounts",type:"purchase",done:false,origin:"request",reportedBy:q.from,note:q.note||undefined});
+      R();say('Approved · '+s.n+' (procurement · accounts) will buy 📦');},
+    declineReq:qi=>{const q=pendingReqs.splice(qi,1)[0];if(q){R();say('Request declined — '+q.from.split(' ')[0]+' will be notified');}},
+    assignIssue:(qi,who)=>{const q=pendingIssues.splice(qi,1)[0];if(!q)return;const m=findMember(who);
+      tasks.unshift({t:q.t,who:m.n,init:m.i,due:"Tomorrow · 9:00 AM",date:whenToDate("tomorrow"),
+        bucket:"maintenance",type:"repair",done:false,origin:"issue",reportedBy:q.from,files:q.files});
+      R();say('Assigned to '+who+' 🔧 · notified on WhatsApp');},
+    approveExt:i=>{const t=tasks[i];if(!t||!t.extReq)return;
+      t.date=t.extReq.newDate;t.due='Due '+fmtD(t.extReq.newDate);delete t.extReq;R();
+      say('Extension approved ⏳ · assignee notified');},
+    rejectExt:i=>{const t=tasks[i];if(!t||!t.extReq)return;delete t.extReq;R();say('Extension rejected — original due date stands');},
+    needExt,
+  };
+
+  return <>
+  <div className="phone"><div className="notch"/><div className="screen">
+    <div className="top">
+      <div className="row">
+        <div className="hello">Good morning,<br/><b>{r.name}</b> · <span>{r.org}</span></div>
+        <div className="av">{r.av}</div>
+      </div>
+      <div className="rolebar">
+        <span className="demo">DEMO · VIEW AS</span>
+        <select className="rolesel" value={role} onChange={e=>switchRole(e.target.value)}>
+          <option value="admin">Administrator</option><option value="mgmt">Management</option>
+          <option value="srm">Manager</option><option value="jrm">Team Member</option>
+          <option value="worker">Teacher</option>
+        </select>
+      </div>
+      <div className="summary">
+        <b>{role==='worker'?`You have ${openN} task${openN!=1?'s':''}`:`${openN} open · ${r.org.split('·')[0].trim()}`}</b> · {overN} overdue · {todayN} due today
+        {waitN?<span> · <b>{waitN} waiting on you</b></span>:null}
+      </div>
+    </div>
+    <div className="content">
+      {page==='home'&&<Home ctx={ctx} acts={acts}/>}
+      {page==='alltasks'&&<AllTasks ctx={ctx} acts={acts}/>}
+      {page==='calendar'&&<div><div className="sec">My calendar · due dates</div><Cal ctx={ctx} personal/></div>}
+      {page==='insights'&&<Insights ctx={ctx}/>}
+      {page==='notices'&&<Notices ctx={ctx}/>}
+      {page==='more'&&<More ctx={ctx}/>}
+      {page==='attendance'&&<Attendance/>}
+    </div>
+    <button className="fab" onClick={()=>setSheet({kind:'actions'})} aria-label="Add"><I n="plus" s={26}/></button>
+    <div className="nav">
+      {[['home','home','Home'],['alltasks','checkc','Tasks'],['calendar','cal','Calendar'],['insights','chart','Insights'],['notices','horn','Notices'],['more','dots','More']]
+        .filter(([p])=>r.tabs.includes(p))
+        .map(([p,ic,l])=><button key={p} className={page===p?'on':''} onClick={()=>setPage(p)}>
+          <span className="ic"><I n={ic}/></span>{l}</button>)}
+    </div>
+    {sheet?<Sheets ctx={ctx} acts={acts} sheet={sheet}/>:null}
+    {toast?<div className="toast">{toast}</div>:null}
+  </div></div>
+  <div className="caption"><b>TeamFlow mobile · React build.</b> Tap <b>+</b> to add a task, report an issue, or request supplies. Switch roles up top — the Teacher view is what most staff see.</div>
+  </>;
+}
+
+/* ============ task card ============ */
+function TaskCard({o,ctx,acts}){
+  const t=o.t,i=o.i;
+  const st=t.done?'done':(t.date&&t.date<iso(TODAY)?'over':(t.date===iso(TODAY)?'today':'open'));
+  const pl={over:'Overdue',today:'Due today',open:'Open',done:'Done'};
+  const sc={over:'var(--red)',today:'var(--amber)',open:'#b9b5a6',done:'var(--green)'};
+  return <div className={'task'+(t.done?' done':'')}>
+    <div className="stripe" style={{background:sc[st]}}/>
+    <span className={'pill '+st}>{t.done?'✓ ':''}{pl[st]}</span>
+    <div className="tt">{t.t}</div>
+    <div className="meta"><span className="who">{t.init}</span> {t.who}{t.coWho&&t.coWho.length?' + '+t.coWho.join(' + '):''} · {BUCKETS[t.bucket]||t.bucket}
+      <span className="tag2 gray">{TYPES[t.type||'work'].e} {TYPES[t.type||'work'].l}</span>
+      {t.recur?<span className="tag2 blue">↻ {recurLabel(t.recur,t.recurOn)}</span>:null}</div>
+    {t.selfAssigned?<div className="meta" style={{marginTop:5}}><span className="tag2 green">🙋 Self-assigned</span>{t.instructedBy?<span className="tag2 amber">📣 As per {t.instructedBy}</span>:null}</div>:null}
+    {t.origin?<div className="meta" style={{marginTop:5}}><span className={'tag2 '+(t.origin==='issue'?'amber':'blue')}>{t.origin==='issue'?'🔧 Reported issue':'📦 Supply request'}{t.reportedBy?' · by '+t.reportedBy:''}</span></div>:null}
+    {t.extReq?<div className="meta" style={{marginTop:5}}><span className="tag2 amber">⏳ Extension requested → {t.extReq.label||t.extReq.newDate}</span></div>:null}
+    {!t.done&&t.coWho&&t.coWho.length&&(t.doneBy||[]).length?<div className="meta" style={{marginTop:5}}>
+      <span className="tag2 green">✓ Done: {(t.doneBy||[]).join(', ')}</span>
+      <span className="tag2 amber">⏳ Pending: {assigneesM(t).filter(a=>!(t.doneBy||[]).includes(a)).join(', ')}</span></div>:null}
+    {t.reopened?<div className="meta" style={{marginTop:5}}><span className="tag2 amber">↻ Reopened by {t.reopened.by.split(' ')[0]}{t.reopened.comment?' — “'+t.reopened.comment+'”':''}</span></div>:null}
+    {t.progress==='inprogress'&&!t.done?<div className="meta" style={{marginTop:5}}><span className="tag2 blue">🔧 In progress</span></div>:null}
+    {t.progress==='partial'&&!t.done?<div className="meta" style={{marginTop:5}}><span className="tag2 amber">◑ Partially done</span></div>:null}
+    {t.note?<div className="notepv">“{t.note}”</div>:null}
+    {t.files&&t.files.length?<div className="attrow">{t.files.map((f,ix)=>f.url?<img key={ix} className="thumb" src={f.url}/>:<span key={ix} className="filechip">📄 {f.name}</span>)}</div>:null}
+    <div className="meta" style={{marginTop:5}}>{t.done?'Closed'+(t.doneWhen?' · '+t.doneWhen:''):t.due}</div>
+    {!t.done?<div className="cardbtns">
+      <button className="btn primary" onClick={()=>ctx.setSheet({kind:'update',idx:i})}>Update / Done</button>
+      {ctx.role!=='worker'?<>
+        <button className="btn ghost" title="Send reminder" onClick={()=>acts.remind(i)}><I n="bell" s={18}/></button>
+        <button className="btn ghost" title="Reassign" onClick={()=>ctx.setSheet({kind:'reassign',idx:i})}><I n="redo" s={18}/></button>
+      </>:acts.needExt(t)&&!t.extReq?<button className="btn ghost" title="Request extension" onClick={()=>ctx.setSheet({kind:'ext',idx:i})} style={{fontSize:18}}>⏳</button>:null}
+    </div>:t.done&&ctx.role!=='worker'?<div className="cardbtns">
+      <button className="btn ghost" style={{flex:1}} onClick={()=>ctx.setSheet({kind:'reopen',idx:i})}><I n="redo" s={16}/>&nbsp;Reopen — not up to the mark</button>
+    </div>:null}
+  </div>;
+}
+
+/* ============ home ============ */
+function Home({ctx,acts}){
+  const exts=tasks.map((t,i)=>({t,i})).filter(o=>o.t.extReq&&canApproveFrom(ctx.role,o.t.who));
+  const reqs=pendingReqs.map((q,qi)=>({q,qi})).filter(o=>canApproveFrom(ctx.role,o.q.from));
+  return <div>
+    {ctx.role!=='worker'?<>
+      {exts.length?<><div className="sec">Time extension requests</div>
+        {exts.map(o=><div className="task" key={'x'+o.i}>
+          <span className="pill today">⏳ Extension request</span>
+          <div className="tt">{o.t.t}</div>
+          <div className="meta"><span className="who">{o.t.init}</span> {o.t.who} · due {o.t.due||o.t.date} → <b>{o.t.extReq.label||o.t.extReq.newDate}</b></div>
+          {o.t.extReq.reason?<div className="notepv">“{o.t.extReq.reason}”</div>:null}
+          <div className="cardbtns">
+            <button className="btn primary" onClick={()=>acts.approveExt(o.i)}>Approve ⏳</button>
+            <button className="btn ghost" onClick={()=>acts.rejectExt(o.i)}><I n="x" s={16}/></button>
+          </div></div>)}</>:null}
+      {pendingIssues.length&&canAssignIssues(ctx.role)?<><div className="sec">Maintenance issues — assign</div>
+        {pendingIssues.map((q,qi)=>{const sug=suggestFixer(q.t);
+          return <div className="task" key={'i'+qi}>
+            <span className="pill today">🔧 Maintenance issue</span>
+            <div className="tt">{q.t}</div>
+            <div className="meta"><span className="who">{q.av}</span> Reported by {q.from}</div>
+            {q.files&&q.files.length?<div className="attrow">{q.files.map((f,ix)=>f.url?<img key={ix} className="thumb" src={f.url}/>:<span key={ix} className="filechip">📄 {f.name}</span>)}</div>:null}
+            <div className="meta" style={{marginTop:7,color:'var(--accent-ink)',fontWeight:600}}>✨ Suggested: {sug.n} — {sug.why}</div>
+            <div className="picker" style={{marginTop:8}}>
+              {['Hari','Suresh','Latha'].map(n=>{const m=findMember(n);
+                return <button key={n} className={'pickchip'+(n===sug.n?' cur':'')} onClick={()=>acts.assignIssue(qi,n)}>{n} · {m?m.role:''}</button>;})}
+            </div></div>;})}</>:null}
+      {reqs.length?<><div className="sec">Waiting for your approval</div>
+        {reqs.map(o=><div className="task" key={'q'+o.qi}>
+          <span className="pill today">📦 Supply request</span>
+          <div className="tt">{o.q.t}</div>
+          <div className="meta"><span className="who">{o.q.av}</span> From {o.q.from}{o.q.note?' · “'+o.q.note+'”':''}</div>
+          <div className="cardbtns">
+            <button className="btn primary" onClick={()=>acts.approveReq(o.qi)}>Approve → procurement ✓</button>
+            <button className="btn ghost" onClick={()=>acts.declineReq(o.qi)}><I n="x" s={16}/></button>
+          </div></div>)}</>:null}
+    </>:<WorkerPending ctx={ctx}/>}
+    <div className="sec">Today</div>
+    {ctx.mine.length?ctx.mine.map(o=><TaskCard key={o.i} o={o} ctx={ctx} acts={acts}/>):<div className="empty">No tasks yet.</div>}
+  </div>;
+}
+function WorkerPending({ctx}){
+  const r=ctx.r;
+  const myR=pendingReqs.filter(q=>q.from===r.name||q.from===r.self);
+  const myI=pendingIssues.filter(q=>q.from===r.name||q.from===r.self);
+  if(!myR.length&&!myI.length)return null;
+  return <><div className="sec">Your requests</div>
+    {myI.map((q,ix)=><div className="task" key={'wi'+ix}>
+      <span className="pill today">🔧 Sent to maintenance head</span>
+      <div className="tt">{q.t}</div>
+      <div className="meta">Vikram will assign it to the right person</div>
+      {q.files&&q.files.length?<div className="attrow">{q.files.map((f,fx)=>f.url?<img key={fx} className="thumb" src={f.url}/>:<span key={fx} className="filechip">📄 {f.name}</span>)}</div>:null}
+    </div>)}
+    {myR.map((q,ix)=><div className="task" key={'wr'+ix}>
+      <span className="pill today">⏳ Waiting approval</span>
+      <div className="tt">📦 {q.t}</div>
+      <div className="meta">Sent to {bossesFor('worker').slice(-1)[0]}{q.note?' · “'+q.note+'”':''}</div>
+    </div>)}
+  </>;
+}
+
+/* ============ tasks tab ============ */
+function AllTasks({ctx,acts}){
+  const [f,setF]=useState('all');
+  const counts={all:ctx.mine.length};
+  Object.keys(TYPES).forEach(k=>counts[k]=ctx.mine.filter(o=>(o.t.type||'work')===k).length);
+  const list=ctx.mine.filter(o=>f==='all'||(o.t.type||'work')===f);
+  return <div>
+    {ctx.role==='worker'?<WorkerPending ctx={ctx}/>:null}
+    <div className="sec">All tasks</div>
+    <div className="typechips" style={{overflowX:'auto',flexWrap:'nowrap'}}>
+      {[['all','All','']].concat(Object.entries(TYPES).map(([k,v])=>[k,v.l,v.e])).map(([k,l,e])=>
+        <button key={k} className={'tchip'+(k===f?' on':'')} style={{whiteSpace:'nowrap'}} onClick={()=>setF(k)}>{e?e+' ':''}{l}{counts[k]?' · '+counts[k]:''}</button>)}
+    </div>
+    {list.length?list.map(o=><TaskCard key={o.i} o={o} ctx={ctx} acts={acts}/>)
+      :<div className="empty">No {f==='all'?'':TYPES[f].l.toLowerCase()+' '}tasks yet.</div>}
+  </div>;
+}
+
+/* ============ calendar ============ */
+function Cal({ctx,personal,allowFilter}){
+  const [base,setBase]=useState(new Date(2026,6,1));
+  const [fw,setFw]=useState('all');
+  const scope=personal?[ctx.r.self]:ctx.scope;
+  const y=base.getFullYear(),m=base.getMonth();
+  const firstDow=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate();
+  const vis=tasks.map((t,i)=>({t,i})).filter(o=>o.t.date&&assigneesM(o.t).some(a=>scope.includes(a))&&(!allowFilter||fw==='all'||hasWhoM(o.t,fw)));
+  const byDay={};vis.forEach(o=>{const d=new Date(o.t.date+'T00:00:00');if(d.getFullYear()===y&&d.getMonth()===m)(byDay[d.getDate()]=byDay[d.getDate()]||[]).push(o);});
+  const bks=[...new Set(vis.map(o=>o.t.bucket).filter(Boolean))];
+  const cells=[];
+  for(let i=0;i<firstDow;i++)cells.push(<div key={'e'+i} className="calcell empty2"/>);
+  for(let d=1;d<=days;d++){
+    const isT=sameDay(new Date(y,m,d),TODAY);const evs=byDay[d]||[];
+    cells.push(<div key={d} className={'calcell'+(isT?' today':'')}>
+      <div className="caldate">{d}</div>
+      {evs.slice(0,3).map(o=>{const dd=new Date(o.t.date+'T00:00:00');const od=!o.t.done&&dd<TODAY&&!sameDay(dd,TODAY);
+        return <div key={o.i} className="calev" style={{background:bucketColor(o.t.bucket),opacity:o.t.done?.55:1,textDecoration:o.t.done?'line-through':undefined,boxShadow:od?'0 0 0 1.5px var(--red)':undefined}}
+          onClick={()=>ctx.setSheet({kind:'event',idx:o.i})}>{o.t.done?'✓ ':''}{gist(o.t.t)}</div>;})}
+      {evs.length>3?<div className="calmore">+{evs.length-3} more</div>:null}
+    </div>);
+  }
+  function ics(){
+    const openVis=vis.filter(o=>!o.t.done);
+    let s='BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//TeamFlow//EN\r\n';
+    openVis.forEach((o,ix)=>{s+='BEGIN:VEVENT\r\nUID:tf-'+ix+'-'+Date.now()+'@teamflow\r\nDTSTART;VALUE=DATE:'+o.t.date.replace(/-/g,'')+'\r\nSUMMARY:'+o.t.t+' ('+o.t.who+')\r\nEND:VEVENT\r\n';});
+    s+='END:VCALENDAR';
+    const blob=new Blob([s],{type:'text/calendar'});const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=iso(new Date())+'-teamflow-calendar.ics';document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    ctx.say(openVis.length+' due dates exported (.ics)');
+  }
+  return <div className="calwrap">
+    <div className="calhead">
+      <button onClick={()=>setBase(new Date(y,m-1,1))}><I n="chevl" s={16}/></button>
+      <div className="calmon">{base.toLocaleString('en',{month:'long',year:'numeric'})}</div>
+      <button onClick={()=>setBase(new Date(y,m+1,1))}><I n="chevr" s={16}/></button>
+    </div>
+    {allowFilter?<select className="selsel" style={{marginBottom:10}} value={fw} onChange={e=>setFw(e.target.value)}>
+      <option value="all">All employees</option>
+      {scope.map(n=><option key={n} value={n}>{n}</option>)}</select>:null}
+    <div className="calgrid">
+      {['S','M','T','W','T2','F','S2'].map(d=><div key={d} className="caldow">{d[0]}</div>)}
+      {cells}
+    </div>
+    {bks.length?<div className="callegend">
+      {bks.map(b=><span key={b}><span className="ldot" style={{background:bucketColor(b)}}/>{BUCKETS[b]||b}</span>)}
+      <span><span className="ldot" style={{background:'#fff',boxShadow:'0 0 0 1.5px var(--red)'}}/>overdue</span>
+    </div>:null}
+    <div className="syncrow">
+      <div className="synctitle">📲 Sync my calendar — stay updated automatically</div>
+      <div className="syncbtns">
+        <button className="syncb" onClick={()=>ctx.say('Connecting Google Calendar — your due dates will stay in sync.')}>Google</button>
+        <button className="syncb" onClick={()=>ctx.say('Connecting Outlook — your due dates will stay in sync.')}>Outlook</button>
+        <button className="syncb" onClick={ics}>Phone (.ics)</button>
+      </div>
+    </div>
+  </div>;
+}
+
+/* ============ insights ============ */
+function Insights({ctx}){
+  return <div>
+    <div className="insight">
+      <div className="lab"><I n="spark" s={13}/> Daily briefing</div>
+      <p>{ctx.r.brief}</p>
+    </div>
+    <div className="sec">Due dates · your span</div>
+    <Cal ctx={ctx} allowFilter/>
+    <div className="sec">Who needs attention <span className="free">FREE</span></div>
+    {attnDemo.map(a=><div className="attn" key={a.nm}>
+      <div className="ring" style={{background:a.c}}>{a.ini}</div>
+      <div><div className="nm">{a.nm}</div><div className="rs">{a.rs}</div></div></div>)}
+    <div className="sec" style={{marginTop:16}}>Ask anything</div>
+    <div className="task" style={{display:'flex',alignItems:'center',gap:10}}>
+      <I n="mic" c="var(--accent-ink)"/>
+      <div style={{fontSize:13,color:'var(--muted)'}}>"Who is behind this week?" · "Show overdue in academic" — in your language.</div>
+    </div>
+  </div>;
+}
+
+/* ============ notices ============ */
+function Notices({ctx}){
+  const [t,setT]=useState('');const [b,setB]=useState('');
+  const post=()=>{notices.unshift({t:t.trim()||'Untitled notice',b:b.trim(),d:'Just now'});setT('');setB('');ctx.R();ctx.say('Posted · broadcast on WhatsApp 📣');};
+  return <div>
+    {ctx.r.canPost?<>
+      <div className="sec">Post a notice</div>
+      <div className="task" style={{padding:16}}>
+        <div style={{fontSize:12,color:'var(--muted)',marginBottom:8}}>{TODAY.toLocaleDateString('en',{day:'numeric',month:'short',year:'numeric'})} · Greenwood School</div>
+        <input value={t} onChange={e=>setT(e.target.value)} placeholder="Title — e.g. Holiday on Friday"
+          style={{width:'100%',border:'none',borderBottom:'1.5px solid var(--line)',fontSize:16,fontWeight:600,padding:'6px 0',outline:'none',fontFamily:'inherit',color:'var(--ink)',background:'none'}}/>
+        <textarea value={b} onChange={e=>setB(e.target.value)} placeholder="Write the message…" rows={3}
+          style={{width:'100%',border:'none',fontSize:14,padding:'10px 0 0',outline:'none',resize:'none',fontFamily:'inherit',color:'var(--ink)',background:'none'}}/>
+        <span className="aibadge">✨ Auto-translate to 9 languages</span>
+        <button className="send" style={{marginTop:12}} onClick={post}>Post &amp; broadcast on WhatsApp 📣</button>
+      </div></>:<div className="sec">Notices for you</div>}
+    <div className="sec" style={{marginTop:16}}>Recent</div>
+    {notices.map((n,ix)=><div className="task" key={ix}>
+      <div className="tt" style={{marginTop:0}}>{n.t}</div>
+      <div className="meta" style={{marginBottom:4}}>{n.d} · sent to 15 staff</div>
+      <div style={{fontSize:13.5,color:'var(--ink2)',lineHeight:1.45}}>{n.b}</div></div>)}
+  </div>;
+}
+
+/* ============ more + attendance ============ */
+function More({ctx}){
+  const Row=({e,t,s,onClick,extra})=><div className="task" onClick={onClick} style={onClick?{cursor:'pointer'}:null}>
+    {e} <b style={{marginLeft:6}}>{t}</b>{extra}<div className="meta" style={{marginTop:6}}>{s}</div></div>;
+  return <div>
+    {ctx.r.admin?<><div className="sec">Administration</div>
+      <Row e="🔑" t="Users & roles" s="Add people · set Admin / Manager / Teacher"/>
+      {ctx.r.billing?<Row e="💳" t="Billing & plan" s="Subscription · invoices · seats"/>:null}
+    </>:null}
+    <div className="sec">More</div>
+    <Row e="📅" t="Calendar" s="Duty roster, exams & task due-dates in one view"/>
+    <Row e="👥" t="People & departments" s="academic · maintenance · accounts · hr · +4 more"/>
+    <Row e="🏫" t="School tools" s="Substitute cover · period timetable · parent broadcast"/>
+    <Row e="⚙️" t="Settings & language" s="9 languages · notifications"/>
+    <div className="sec" style={{marginTop:16}}>Coming later</div>
+    <Row e="🕑" t="Attendance & leave" s="Tap to preview · staff present / late / absent, geofenced check-in"
+      extra={<span className="pill open" style={{marginLeft:6}}>Phase 2</span>} onClick={()=>ctx.setPage('attendance')}/>
+  </div>;
+}
+function Attendance(){
+  return <div>
+    <div className="sec">Today · staff</div>
+    <div className="att-sum">
+      <div className="box"><div className="n" style={{color:'var(--green)'}}>12</div><div className="l">Present</div></div>
+      <div className="box"><div className="n" style={{color:'var(--amber)'}}>2</div><div className="l">Late</div></div>
+      <div className="box"><div className="n" style={{color:'var(--red)'}}>1</div><div className="l">Absent</div></div>
+    </div>
+    {peopleDemo.map(p=><div className="prow" key={p.n}>
+      <span className="dot" style={{background:p.c}}/>
+      <div style={{flex:1}}><div style={{fontSize:14.5,fontWeight:600}}>{p.n}</div>
+      <div style={{fontSize:12.5,color:'var(--muted)'}}>{p.s}</div></div></div>)}
+  </div>;
+}
+
+/* ============ sheets ============ */
+function Sheets({ctx,acts,sheet}){
+  const close=()=>ctx.setSheet(null);
+  return <div className="sheet-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
+    <div className="sheet">
+      <div className="grab"/>
+      <div className="xrow"><button className="x" style={{position:'static'}} onClick={close}><I n="x"/></button></div>
+      {sheet.kind==='actions'&&<Actions ctx={ctx} close={close}/>}
+      {sheet.kind==='task'&&<TaskSheet ctx={ctx} close={close}/>}
+      {sheet.kind==='issue'&&<IssueSheet ctx={ctx} close={close}/>}
+      {sheet.kind==='request'&&<RequestSheet ctx={ctx} close={close}/>}
+      {sheet.kind==='update'&&<UpdateSheet ctx={ctx} idx={sheet.idx} close={close}/>}
+      {sheet.kind==='ext'&&<ExtSheet ctx={ctx} idx={sheet.idx} close={close}/>}
+      {sheet.kind==='reopen'&&<ReopenSheet ctx={ctx} idx={sheet.idx} close={close}/>}
+      {sheet.kind==='reassign'&&<ReassignSheet ctx={ctx} idx={sheet.idx} close={close}/>}
+      {sheet.kind==='event'&&<EventSheet ctx={ctx} idx={sheet.idx} close={close}/>}
+    </div>
+  </div>;
+}
+function Actions({ctx}){
+  return <>
+    <h3>What do you want to do?</h3>
+    <div className="sub">Pick one — each takes under 30 seconds.</div>
+    <button className="actbtn" onClick={()=>ctx.setSheet({kind:'task'})}>
+      <span className="actic" style={{background:'var(--accent-soft)',color:'var(--accent-ink)'}}><I n="plus"/></span>
+      <span><b>New task</b><small>Type it or speak it</small></span></button>
+    <button className="actbtn" onClick={()=>ctx.setSheet({kind:'issue'})}>
+      <span className="actic" style={{background:'var(--amber-soft)',color:'var(--amber)'}}><I n="tool"/></span>
+      <span><b>Report a maintenance issue</b><small>Broken? Leaking? Snap a photo &amp; send</small></span></button>
+    <button className="actbtn" onClick={()=>ctx.setSheet({kind:'request'})}>
+      <span className="actic" style={{background:'var(--green-soft)',color:'var(--green)'}}><I n="box"/></span>
+      <span><b>Request supplies</b><small>Chalk, markers, lab material…</small></span></button>
+  </>;
+}
+
+function TaskSheet({ctx,close}){
+  const [mode,setMode]=useState('type');
+  const [txt,setTxt]=useState('');
+  const [heard,setHeard]=useState('');
+  const [rec,setRec]=useState(false);
+  const [cur,setCur]=useState(null);
+  const [type,setType]=useState('work');const typeByUser=useRef(false);
+  const [assign,setAssign]=useState(ctx.role==='worker'?'self':'others');
+  const [pick,setPick]=useState(null);
+  const [q,setQ]=useState('');const [dept,setDept]=useState('all');
+  const [instruct,setInstruct]=useState('');
+  const [showOpts,setShowOpts]=useState(false);
+  const canMulti=['admin','mgmt','srm'].includes(ctx.role);
+
+  function understood(p){
+    const gt=typeByUser.current?type:guessType(p.raw);
+    if(!typeByUser.current)setType(gt);
+    const bucket=guessBucket(p.raw);
+    let whos=p.whos.slice(),whoSugg=false,whoWhy='';
+    if(ctx.role==='worker'){whos=[ctx.r.self];whoWhy='assigned to yourself';}
+    else if(whos.length>1){whoWhy='joint task — named in your sentence';}
+    else if(whos.length===1){whoWhy='named in your sentence';}
+    else{const s=suggestAssignee(gt,bucket);whos=[s.n];whoSugg=true;whoWhy=s.reason;}
+    let when=p.when,whenSugg=false,whenWhy='';
+    if(!when){const s=suggestDue(gt,p.raw);when=s.when;whenSugg=true;whenWhy=s.reason;}
+    let dateIso=whenToDate(when);
+    const timeHM=guessTime(p.raw)||labelToTime(when)||'';
+    const recur=p.recur||null;
+    let recurOn=p.recurOn!=null?p.recurOn:(recur?defaultRecurOn(recur,dateIso):null);
+    if(recur==='weekly'&&p.recurOn!=null){dateIso=nextAnchor('weekly',p.recurOn,iso(TODAY));whenSugg=false;whenWhy='every '+DOW[p.recurOn]+' — first on '+fmtD(dateIso);}
+    setCur({raw:p.raw,task:p.task,whos,whoSugg,whoWhy,dateIso,timeHM,whenSugg,whenWhy,bucket,bucketSugg:true,recur,recurOn});
+  }
+  function record(){
+    setRec(true);setCur(null);
+    const s=SAMPLES[Math.floor(Math.random()*SAMPLES.length)];
+    let i=0;const tick=setInterval(()=>{i+=3;setHeard(s.slice(0,i));
+      if(i>=s.length){clearInterval(tick);setRec(false);setHeard(s);understood(parseText(s));}},40);
+  }
+  function toggleWho(n){
+    if(!cur)return;
+    let next;
+    if(!canMulti)next=[n];
+    else{next=cur.whos.slice();const ix=next.indexOf(n);
+      if(ix>-1){if(next.length>1)next.splice(ix,1);}else next.push(n);}
+    setCur({...cur,whos:next,whoSugg:false,
+      whoWhy:next.length>1?'joint task — it appears in each person’s list':'you picked '+next[0]});
+    if(!canMulti)setPick(null);
+  }
+  function doAssign(){
+    if(!cur)return;
+    const self=assign==='self';
+    const list=self?[ctx.r.self]:cur.whos;
+    const m=findMember(list[0])||{i:list[0][0]};
+    tasks.unshift({t:cur.task,who:list[0],init:m.i,coWho:(!self&&list.length>1)?list.slice(1):undefined,
+      due:'Due '+dueLabel(cur.dateIso,cur.timeHM).replace(/^Today/,'today').replace(/^Tomorrow/,'tomorrow'),date:cur.dateIso,bucket:cur.bucket,type,done:false,recur:cur.recur||undefined,recurOn:cur.recur?cur.recurOn:undefined,
+      selfAssigned:self,instructedBy:instruct||null});
+    close();ctx.R();
+    const tail=(cur.recur?' · '+recurLabel(cur.recur,cur.recurOn).toLowerCase():'')+(instruct?' · as per '+instruct:'');
+    ctx.say(self?'Added to your list'+tail:'Assigned '+(list.length>1?'jointly to ':'to ')+list.join(' + ')+tail+' · sent on WhatsApp');
+  }
+  const depts=['all',...new Set(MEMBERS.map(m=>m.dept))];
+  const load=workload();
+  const emp=MEMBERS.filter(m=>(dept==='all'||m.dept===dept)&&(!q||m.n.toLowerCase().includes(q.toLowerCase())||m.dept.toLowerCase().includes(q.toLowerCase())||m.role.toLowerCase().includes(q.toLowerCase())));
+  const bosses=bossesFor(ctx.role);
+  return <>
+    <h3>New task</h3>
+    <div className="sub">Type it or speak it — your choice.</div>
+    <div className="modetabs">
+      <button className={'mtab'+(mode==='type'?' on':'')} onClick={()=>setMode('type')}>⌨️ Type</button>
+      <button className={'mtab'+(mode==='speak'?' on':'')} onClick={()=>setMode('speak')}>🎤 Speak</button>
+    </div>
+    <div className="typechips">
+      {Object.entries(TYPES).map(([k,v])=><button key={k} className={'tchip'+(k===type?' on':'')}
+        onClick={()=>{typeByUser.current=true;setType(k);
+          if(cur&&cur.whoSugg){const s=suggestAssignee(k,cur.bucket);setCur({...cur,whos:[s.n],whoWhy:s.reason});}}}>{v.e} {v.l}</button>)}
+    </div>
+    {mode==='type'?<div>
+      <textarea className="typein" rows={3} autoFocus value={txt} onChange={e=>setTxt(e.target.value)}
+        placeholder="e.g. Ask Hari to repair the lab projector by tomorrow"/>
+      <button className="understand" onClick={()=>{if(!txt.trim()){ctx.say('Type a task first');return;}understood(parseText(txt.trim()));}}>✨ Understand task</button>
+    </div>:<div>
+      <div className={'mic'+(rec?' rec':'')} onClick={record}><I n="mic"/></div>
+      <div className="heard">{heard||<span className="ph">Tap the mic to speak…</span>}</div>
+    </div>}
+    {cur?<div style={{marginTop:14}}>
+      <span className="aibadge">✨ AI understood</span>
+      <div className="field"><div className="k">Task</div><div className="v">{cur.task}</div></div>
+      <div className="field"><div className="k">Assign to</div><div className="v">
+        {ctx.role!=='worker'?<div className="modetabs" style={{marginBottom:9}}>
+          <button className={'mtab'+(assign==='others'?' on':'')} onClick={()=>setAssign('others')}>👥 Others</button>
+          <button className={'mtab'+(assign==='self'?' on':'')} onClick={()=>setAssign('self')}>🙋 Myself</button>
+        </div>:null}
+        {assign==='self'?<span>You ({ctx.r.self})</span>:<>
+          <span className="chipbtn" onClick={()=>setPick(pick==='who'?null:'who')}>{cur.whos.join(' + ')}</span>
+          {cur.whoWhy?<div className="reason"><b>{cur.whoSugg?'✦ Suggested':'✓'}</b> — {cur.whoWhy}</div>:null}
+          {pick==='who'?<div style={{marginTop:9}}>
+            <div style={{display:'flex',gap:8,marginBottom:8}}>
+              <select className="selsel" style={{flex:'0 0 44%'}} value={dept} onChange={e=>setDept(e.target.value)}>
+                {depts.map(d=><option key={d} value={d}>{d==='all'?'All departments':d}</option>)}</select>
+              <input className="empsearch" style={{marginBottom:0}} placeholder="🔍 Name, dept or skill…" value={q} onChange={e=>setQ(e.target.value)}/>
+            </div>
+            {canMulti?<div className="reason" style={{marginBottom:6}}>Tap more than one to assign jointly</div>:null}
+            <div className="empcol">
+              {emp.length?emp.map(m=><button key={m.n} className={'pickchip'+(cur.whos.includes(m.n)?' cur':'')} onClick={()=>toggleWho(m.n)}>
+                {cur.whos.includes(m.n)?'✓ ':''}<b>{m.n}</b> · {load[m.n]} open<span className="emprole">{m.dept} · {m.role}</span></button>)
+                :<div className="empty" style={{padding:12}}>No one matches</div>}
+            </div>
+          </div>:null}
+        </>}
+      </div></div>
+      {bosses.length?<div className="field"><div className="k">On instruction of</div><div className="v">
+        <select className="selsel" value={instruct} onChange={e=>setInstruct(e.target.value)}>
+          <option value="">No one — own initiative</option>
+          {bosses.map(b=><option key={b} value={b}>{b}</option>)}
+        </select></div></div>:null}
+      <div className="field"><div className="k">When</div><div className="v">
+        <span className="chipbtn" onClick={()=>setPick(pick==='when'?null:'when')}>{dueLabel(cur.dateIso,cur.timeHM)}</span>
+        {cur.whenWhy?<div className="reason"><b>{cur.whenSugg?'✦ Suggested':'✓'}</b> — {cur.whenWhy}</div>:null}
+        {pick==='when'?<div className="picker">
+          {[0,1,7].map(n=>{const d=new Date(TODAY);d.setDate(d.getDate()+n);const v=iso(d);
+            return <button key={v} className={'pickchip'+(v===cur.dateIso?' cur':'')}
+              onClick={()=>setCur({...cur,dateIso:v,whenSugg:false,whenWhy:'you picked this date'})}>{n===0?'Today':fmtD(v)}</button>;})}
+          <input type="date" className="selsel" style={{flex:'1 1 54%'}} min={iso(TODAY)} value={cur.dateIso||''} aria-label="Pick any date"
+            onChange={e=>{const v=e.target.value;if(!v)return;setCur({...cur,dateIso:v,whenSugg:false,whenWhy:'you picked this date'});}}/>
+          <input type="time" className="selsel" style={{flex:'1 1 38%'}} value={cur.timeHM||''} aria-label="Due time (optional)"
+            onChange={e=>setCur({...cur,timeHM:e.target.value,whenSugg:false,whenWhy:'you picked this time'})}/>
+          <button className="pickchip" style={{flex:'1 1 100%',textAlign:'center'}} onClick={()=>setPick(null)}>✓ Set</button>
+        </div>:null}
+      </div></div>
+      <div className="field"><div className="k">Repeat</div><div className="v">
+        <span className="chipbtn" onClick={()=>setPick(pick==='recur'?null:'recur')}>{cur.recur?'↻ '+recurLabel(cur.recur,cur.recurOn):"Doesn't repeat"}</span>
+        {cur.recur?<div className="reason">Next occurrence is scheduled automatically each time it's completed</div>:null}
+        {pick==='recur'?<>
+          <div className="picker">
+            <button className={'pickchip'+(!cur.recur?' cur':'')} onClick={()=>{setCur({...cur,recur:null,recurOn:null});setPick(null);}}>Doesn't repeat</button>
+            {Object.keys(RECURS).map(k=><button key={k} className={'pickchip'+(k===cur.recur?' cur':'')}
+              onClick={()=>{setCur({...cur,recur:k,recurOn:defaultRecurOn(k,cur.dateIso)});if(k==='daily')setPick(null);}}>{RECURS[k]}</button>)}
+          </div>
+          {cur.recur==='weekly'?<><div className="reason" style={{marginTop:8}}>On which day of the week?</div>
+            <div className="picker">{[1,2,3,4,5,6,0].map(ix=><button key={ix} className={'pickchip'+(cur.recurOn===ix?' cur':'')}
+              onClick={()=>{const nd=nextAnchor('weekly',ix,iso(TODAY));setCur({...cur,recurOn:ix,dateIso:nd,whenSugg:false,whenWhy:'first occurrence — every '+DOW[ix]});setPick(null);}}>{DOW[ix]}</button>)}</div></>:null}
+          {cur.recur==='monthly'?<><div className="reason" style={{marginTop:8}}>On which date of the month?</div>
+            <select className="selsel" style={{marginTop:6}} value={cur.recurOn||1} onChange={e=>{const v=+e.target.value;
+              const nd=nextAnchor('monthly',v,iso(TODAY));setCur({...cur,recurOn:v,dateIso:nd,whenSugg:false,whenWhy:'first occurrence — the '+ord(v)+' of every month'});setPick(null);}}>
+              {Array.from({length:31},(_,i)=>i+1).map(n=><option key={n} value={n}>{ord(n)} of every month</option>)}</select></>:null}
+          {cur.recur==='yearly'?<><div className="reason" style={{marginTop:8}}>On which day and month?</div>
+            <div style={{display:'flex',gap:8,marginTop:6}}>
+              <select className="selsel" value={(cur.recurOn&&cur.recurOn.d)||1} onChange={e=>{const v={d:+e.target.value,m:(cur.recurOn&&cur.recurOn.m)||0};
+                const nd=nextAnchor('yearly',v,iso(TODAY));setCur({...cur,recurOn:v,dateIso:nd,whenSugg:false,whenWhy:'every year on '+v.d+' '+MONTHS[v.m]});}}>
+                {Array.from({length:31},(_,i)=>i+1).map(n=><option key={n} value={n}>{ord(n)}</option>)}</select>
+              <select className="selsel" value={(cur.recurOn&&cur.recurOn.m)||0} onChange={e=>{const v={d:(cur.recurOn&&cur.recurOn.d)||1,m:+e.target.value};
+                const nd=nextAnchor('yearly',v,iso(TODAY));setCur({...cur,recurOn:v,dateIso:nd,whenSugg:false,whenWhy:'every year on '+v.d+' '+MONTHS[v.m]});}}>
+                {MONTHS.map((mn,ix)=><option key={mn} value={ix}>{mn}</option>)}</select>
+            </div></>:null}
+        </>:null}
+      </div></div>
+      <button className="optst" onClick={()=>setShowOpts(!showOpts)}><span>⚙️ Options</span>
+        <span style={{fontWeight:600,color:'var(--muted)',fontSize:12.5}}>Department: {BUCKETS[cur.bucket]||cur.bucket}{cur.bucketSugg?' (auto)':''}</span></button>
+      {showOpts?<div className="field"><div className="k">Department</div><div className="v">
+        <div className="picker" style={{marginTop:0}}>{Object.keys(BUCKETS).map(b=><button key={b} className={'pickchip'+(b===cur.bucket?' cur':'')}
+          onClick={()=>setCur({...cur,bucket:b,bucketSugg:false})}>{BUCKETS[b]}</button>)}</div>
+      </div></div>:null}
+      <button className="send" onClick={doAssign}>Assign task ✓</button>
+    </div>:null}
+  </>;
+}
+
+function IssueSheet({ctx,close}){
+  const [txt,setTxt]=useState('');
+  const [files,setFiles]=useState([]);
+  const pickF=e=>{const nf=[...e.target.files].map(x=>({name:x.name,url:(x.type||'').startsWith('image/')?URL.createObjectURL(x):null}));setFiles(files.concat(nf));};
+  const send=()=>{
+    if(!txt.trim()){ctx.say('Describe the issue first');return;}
+    pendingIssues.unshift({t:txt.trim().charAt(0).toUpperCase()+txt.trim().slice(1),from:ctx.r.name,av:ctx.r.av,files:files.length?files.slice():undefined});
+    close();ctx.R();ctx.say('Sent to Vikram (maintenance head) 🔧');};
+  return <>
+    <h3>Report a maintenance issue</h3>
+    <div className="sub">Say what's broken — it goes to the maintenance head, who assigns the right person.</div>
+    <textarea className="typein" rows={3} autoFocus value={txt} onChange={e=>setTxt(e.target.value)}
+      placeholder="e.g. The ceiling fan in Class 7B is making a loud noise"/>
+    <div className="attachrow">
+      <label className="uploadbtn">📷 Camera<input type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={pickF}/></label>
+      <label className="uploadbtn">🖼 Photos<input type="file" accept="image/*" multiple style={{display:'none'}} onChange={pickF}/></label>
+      <label className="uploadbtn">📎 Files<input type="file" multiple style={{display:'none'}} onChange={pickF}/></label>
+    </div>
+    {files.length?<div className="filelist">{files.map((f,ix)=>f.url?<img key={ix} className="thumb" src={f.url}/>:<span key={ix} className="filechip">📄 {f.name}</span>)}</div>:null}
+    <button className="send" onClick={send}>Send to maintenance head ✓</button>
+  </>;
+}
+function RequestSheet({ctx,close}){
+  const [txt,setTxt]=useState('');const [note,setNote]=useState('');
+  const send=()=>{
+    if(!txt.trim()){ctx.say('Say what you need first');return;}
+    pendingReqs.unshift({t:txt.trim(),note:note.trim(),from:ctx.r.name,av:ctx.r.av});
+    close();ctx.R();ctx.say('Request sent to '+(bossesFor(ctx.role).slice(-1)[0]||'your manager')+' for approval 📦');};
+  return <>
+    <h3>Request supplies</h3>
+    <div className="sub">What do you need? Your manager approves it in one tap.</div>
+    <textarea className="typein" rows={2} autoFocus value={txt} onChange={e=>setTxt(e.target.value)} placeholder="e.g. 2 boxes of whiteboard markers"/>
+    <textarea className="typein" rows={2} style={{marginTop:9}} value={note} onChange={e=>setNote(e.target.value)} placeholder="Why / for which class? (optional)"/>
+    <button className="send" onClick={send}>Send request ✓</button>
+  </>;
+}
+function UpdateSheet({ctx,idx,close}){
+  const t=tasks[idx];
+  const [st,setSt]=useState('done');
+  const [note,setNote]=useState('');
+  const [files,setFiles]=useState([]);
+  if(!t)return null;
+  const logs=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
+  const pickF=e=>{const nf=[...e.target.files].map(x=>({name:x.name,url:(x.type||'').startsWith('image/')?URL.createObjectURL(x):null}));setFiles(files.concat(nf));};
+  const save=()=>{
+    t.progress=st;
+    if(note.trim()){
+      t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
+      t.log.push({by:ctx.r.name,when:fmtD(iso(TODAY)),text:note.trim()});
+      t.note=note.trim();
+    }
+    if(files.length)t.files=(t.files||[]).concat(files);
+    if(st==='done'){
+      const self=ctx.r.self;
+      if(t.coWho&&t.coWho.length&&assigneesM(t).includes(self)){
+        t.doneBy=[...new Set([...(t.doneBy||[]),self])];
+        const pending=assigneesM(t).filter(a=>!t.doneBy.includes(a));
+        if(!pending.length){t.done=true;t.doneWhen='just now';delete t.extReq;const nd=spawnNextRecur(t);close();ctx.R();ctx.say(nd?'Everyone finished ✓ · next '+RECURS[t.recur].toLowerCase()+' on '+fmtD(nd):'Everyone finished — task completed ✓');return;}
+        t.done=false;close();ctx.R();ctx.say('Your part done ✓ — pending with '+pending.join(', '));return;
+      }
+      if(t.coWho&&t.coWho.length)t.doneBy=assigneesM(t).slice();
+      t.done=true;t.doneWhen='just now';delete t.extReq;
+      const nd=spawnNextRecur(t);
+      close();ctx.R();
+      ctx.say(nd?'Done ✓ · next '+RECURS[t.recur].toLowerCase()+' on '+fmtD(nd):'Task marked done ✓');return;
+    } else t.done=false;
+    close();ctx.R();
+    ctx.say(st==='partial'?'Marked partial ◑':'Progress updated 🔧');};
+  return <>
+    <h3>Update task</h3>
+    <div className="sub">{t.t}</div>
+    <div className="modetabs">
+      {[['inprogress','🔧 In progress'],['partial','◑ Partial'],['done','✓ Done']].map(([k,l])=>
+        <button key={k} className={'mtab'+(st===k?' on':'')} onClick={()=>setSt(k)}>{l}</button>)}
+    </div>
+    {logs.length?<div style={{marginBottom:10}}>
+      <div className="sec" style={{margin:'0 0 6px'}}>Job log</div>
+      <div style={{maxHeight:140,overflowY:'auto'}}>
+        {logs.map((x,ix)=><div key={ix} className="notepv" style={{marginTop:6}}>“{x.text}”
+          <div style={{fontSize:11,color:'var(--muted)',fontStyle:'normal',marginTop:3}}>{x.by}{x.when?' · '+x.when:''}</div></div>)}
+      </div>
+    </div>:null}
+    <textarea className="typein" rows={3} value={note} onChange={e=>setNote(e.target.value)} placeholder="Add an update to the job log (optional) — what did you do?"/>
+    <div className="attachrow">
+      <label className="uploadbtn">📷 Camera<input type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={pickF}/></label>
+      <label className="uploadbtn">🖼 Photos<input type="file" accept="image/*" multiple style={{display:'none'}} onChange={pickF}/></label>
+      <label className="uploadbtn">📎 Files<input type="file" accept="image/*,application/pdf,.doc,.docx" multiple style={{display:'none'}} onChange={pickF}/></label>
+    </div>
+    {files.length?<div className="filelist">{files.map((f,ix)=>f.url?<img key={ix} className="thumb" src={f.url}/>:<span key={ix} className="filechip">📄 {f.name}</span>)}</div>:null}
+    <button className="send" onClick={save}>{st==='done'?'Mark done ✓':'Save update'}</button>
+  </>;
+}
+function ExtSheet({ctx,idx,close}){
+  const t=tasks[idx];
+  const [pickd,setPickd]=useState(null);
+  const [reason,setReason]=useState('');
+  if(!t)return null;
+  const opts=[1,2,3,7].map(n=>{const d=new Date(TODAY);d.setDate(d.getDate()+n);
+    return {iso:iso(d),label:d.toLocaleDateString('en',{weekday:'short'})+' · '+d.toLocaleDateString('en',{day:'numeric',month:'short'})+(n===1?' (tomorrow)':n===7?' (next week)':'')};});
+  const send=()=>{
+    if(!pickd){ctx.say('Pick a new date first');return;}
+    t.extReq={newDate:pickd.iso,label:pickd.label,reason:reason.trim(),from:ctx.r.name};
+    close();ctx.R();ctx.say('Extension request sent to '+(bossesFor(ctx.role).slice(-1)[0]||'your manager')+' ⏳');};
+  return <>
+    <h3>Request time extension</h3>
+    <div className="sub">{t.t}</div>
+    <div className="meta" style={{marginBottom:6}}>Current due: {t.due||t.date}</div>
+    <div className="sec" style={{margin:'10px 2px 8px'}}>New due date</div>
+    <div className="picker" style={{marginTop:0}}>
+      {opts.map(o=><button key={o.iso} className={'pickchip'+(pickd&&pickd.iso===o.iso?' cur':'')} onClick={()=>setPickd(o)}>{o.label}</button>)}
+      <input type="date" className="selsel" style={{flex:'1 1 100%'}} min={iso(TODAY)} value={pickd&&pickd.custom?pickd.iso:''} aria-label="Pick any date"
+        onChange={e=>{const v=e.target.value;if(!v)return;setPickd({iso:v,label:new Date(v+'T00:00:00').toLocaleDateString('en',{weekday:'short'})+' · '+fmtD(v),custom:true});}}/>
+    </div>
+    <textarea className="typein" rows={2} style={{marginTop:12}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Why do you need more time? (optional)"/>
+    <button className="send" onClick={send}>Send request ⏳</button>
+  </>;
+}
+function ReopenSheet({ctx,idx,close}){
+  const t=tasks[idx];
+  const [pickd,setPickd]=useState(null);
+  const [cmt,setCmt]=useState('');
+  if(!t)return null;
+  const opts=[1,2,3,7].map(n=>{const d=new Date(TODAY);d.setDate(d.getDate()+n);
+    return {iso:iso(d),label:d.toLocaleDateString('en',{weekday:'short'})+' · '+d.toLocaleDateString('en',{day:'numeric',month:'short'})};});
+  const go=()=>{
+    if(!pickd){ctx.say('Pick a new due date');return;}
+    t.done=false;t.progress=undefined;t.doneBy=[];t.doneWhen=undefined;
+    t.date=pickd.iso;t.due='Due '+fmtD(pickd.iso);
+    t.reopened={by:ctx.r.name,comment:cmt.trim()};
+    t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
+    t.log.push({by:ctx.r.name,when:fmtD(iso(TODAY)),text:'Reopened — '+(cmt.trim()||'not up to the mark')});
+    if(cmt.trim())t.note=cmt.trim();
+    close();ctx.R();ctx.say('Task reopened ↻ · '+t.who+' notified with your comment');};
+  return <>
+    <h3>Reopen task</h3>
+    <div className="sub">{t.t}</div>
+    <div className="sec" style={{margin:'6px 2px 8px'}}>New due date</div>
+    <div className="picker" style={{marginTop:0}}>
+      {opts.map(o=><button key={o.iso} className={'pickchip'+(pickd&&pickd.iso===o.iso?' cur':'')} onClick={()=>setPickd(o)}>{o.label}</button>)}
+      <input type="date" className="selsel" style={{flex:'1 1 100%'}} min={iso(TODAY)} value={pickd&&pickd.custom?pickd.iso:''} aria-label="Pick any date"
+        onChange={e=>{const v=e.target.value;if(!v)return;setPickd({iso:v,label:new Date(v+'T00:00:00').toLocaleDateString('en',{weekday:'short'})+' · '+fmtD(v),custom:true});}}/>
+    </div>
+    <textarea className="typein" rows={2} style={{marginTop:12}} value={cmt} onChange={e=>setCmt(e.target.value)} placeholder="What's not up to the mark? (sent to the assignee)"/>
+    <button className="send" onClick={go}>Reopen &amp; notify ↻</button>
+  </>;
+}
+function ReassignSheet({ctx,idx,close}){
+  const t=tasks[idx];
+  const [q,setQ]=useState('');
+  if(!t)return null;
+  const load=workload();
+  const list=MEMBERS.filter(m=>!q||m.n.toLowerCase().includes(q.toLowerCase())||m.dept.toLowerCase().includes(q.toLowerCase())||m.role.toLowerCase().includes(q.toLowerCase()));
+  const go=n=>{const m=findMember(n);t.who=n;t.init=m?m.i:n[0];t.coWho=undefined;
+    close();ctx.R();ctx.say('Reassigned to '+n+' · notified on WhatsApp');};
+  return <>
+    <h3>Reassign task</h3>
+    <div className="sub">{t.t}</div>
+    <input className="empsearch" placeholder="🔍 Name, department or skill…" value={q} onChange={e=>setQ(e.target.value)}/>
+    <div className="empcol" style={{maxHeight:290}}>
+      {list.length?list.map(m=><button key={m.n} className={'pickchip'+(hasWhoM(t,m.n)?' cur':'')} onClick={()=>go(m.n)}>
+        {hasWhoM(t,m.n)?'✓ ':''}<b>{m.n}</b> · {load[m.n]} open<span className="emprole">{m.dept} · {m.role}</span></button>)
+        :<div className="empty" style={{padding:12}}>No one matches</div>}
+    </div>
+  </>;
+}
+function EventSheet({ctx,idx,close}){
+  const t=tasks[idx];
+  if(!t)return null;
+  const m=findMember(t.who)||{};
+  const d=new Date(t.date+'T00:00:00');
+  const stat=t.done?'✓ Done':(d<TODAY&&!sameDay(d,TODAY)?'⚠ Overdue':(sameDay(d,TODAY)?'Due today':'Upcoming'));
+  return <>
+    <h3 style={{lineHeight:1.4}}>{t.t}</h3>
+    <div className="sub">{stat} · {t.due||t.date}</div>
+    <div className="field"><div className="k">Assigned to</div><div className="v">
+      <span className="who" style={{marginRight:6}}>{t.init||''}</span>{t.who}{t.coWho&&t.coWho.length?' + '+t.coWho.join(' + '):''}{m.dept?' · '+m.dept:''}{m.role?' ('+m.role+')':''}</div></div>
+    <div className="field"><div className="k">Department</div><div className="v">
+      <span className="ldot" style={{display:'inline-block',background:bucketColor(t.bucket),marginRight:6}}/>{BUCKETS[t.bucket]||t.bucket||'—'}</div></div>
+    <div className="field"><div className="k">Type</div><div className="v">{TYPES[t.type||'work'].e} {TYPES[t.type||'work'].l}</div></div>
+    {t.recur?<div className="field"><div className="k">Repeats</div><div className="v">↻ {recurLabel(t.recur,t.recurOn)} — next created on completion</div></div>:null}
+    {t.note?<div className="field"><div className="k">Note</div><div className="v" style={{fontWeight:500}}>“{t.note}”</div></div>:null}
+    {!t.done?<button className="send" onClick={()=>{ctx.setSheet({kind:'update',idx});}}>Update / Done ✓</button>:null}
+  </>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

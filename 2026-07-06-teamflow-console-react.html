@@ -1,0 +1,1489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TeamFlow Console — React</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+  :root{
+    --bg:#f6f5f0; --card:#ffffff; --ink:#1b1e21; --ink2:#43494f; --muted:#71797f;
+    --line:#e7e5dc; --line2:#d9d6cb;
+    --accent:#0e7a6f; --accent-ink:#0a5c54; --accent-soft:#e2f1ee; --accent-border:#bcdcd6;
+    --red:#c43a53; --red-soft:#f9e9ed;
+    --amber:#9a6a10; --amber-soft:#f6efdb;
+    --green:#1a7a48; --green-soft:#e4f2e9;
+    --blue:#39638f; --blue-soft:#e8eef5;
+    --sh-sm:0 1px 2px rgba(27,30,33,.06);
+    --sh-md:0 4px 14px rgba(27,30,33,.08);
+    --sh-lg:0 24px 60px rgba(27,30,33,.22);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0;font-family:'IBM Plex Sans',-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;font-size:14px}
+  h1,h2,h3,.brand{font-family:'Bricolage Grotesque','IBM Plex Sans',sans-serif}
+  button{font-family:inherit}
+  svg.i{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto;display:block}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+  .app{display:flex;min-height:100vh}
+  /* sidebar */
+  .sidebar{width:230px;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;
+    padding:18px 12px 16px;position:sticky;top:0;height:100vh;flex:0 0 auto;z-index:30}
+  .brand{display:flex;align-items:center;gap:10px;padding:4px 10px 18px;font-weight:700;font-size:19px;letter-spacing:-.2px}
+  .brand .logo{width:34px;height:34px;border-radius:9px 9px 9px 2px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;flex:0 0 auto}
+  .navitem{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:8px;cursor:pointer;border:none;background:none;width:100%;
+    font-size:13.5px;font-weight:600;color:var(--ink2);margin-bottom:2px;transition:background .15s,color .15s;position:relative;text-align:left}
+  .navitem:hover{background:#f3f2ec;color:var(--ink)}
+  .navitem.on{background:var(--accent-soft);color:var(--accent-ink)}
+  .navitem.on::before{content:"";position:absolute;left:-12px;top:8px;bottom:8px;width:3px;background:var(--accent)}
+  .navitem .kbd{margin-left:auto;font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-weight:600}
+  .side-foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--line)}
+  .side-lab{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:2px 6px 8px;font-weight:700}
+  .roleSel{width:100%;background:#f3f2ec;color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:10px;font-family:inherit;font-size:13px;font-weight:600;outline:none;cursor:pointer}
+  .companion{font-size:11px;color:var(--muted);margin-top:12px;line-height:1.5;padding:0 6px}
+
+  /* topbar */
+  .main{flex:1;min-width:0;display:flex;flex-direction:column}
+  .topbar{display:flex;align-items:center;gap:16px;padding:13px 26px;background:var(--card);
+    border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+  .topbar h1{font-size:19px;margin:0;font-weight:700;white-space:nowrap}
+  .tb-right{display:flex;align-items:center;gap:12px;margin-left:auto}
+  .searchwrap{position:relative}
+  .search{border:1.5px solid var(--line);border-radius:8px;padding:9px 12px 9px 36px;font-family:inherit;font-size:13.5px;width:250px;outline:none;background:var(--bg)}
+  .search:focus{border-color:var(--accent);background:var(--card)}
+  .searchwrap>svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);width:16px;height:16px}
+  .search-kbd{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:10.5px;color:var(--muted);border:1px solid var(--line2);border-radius:4px;padding:1px 6px;font-weight:700;background:var(--card);pointer-events:none}
+  .searchdrop{position:absolute;top:calc(100% + 8px);right:0;width:360px;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;box-shadow:var(--sh-lg);padding:6px;max-height:380px;overflow:auto;z-index:50}
+  .sd-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:7px;cursor:pointer}
+  .sd-item:hover{background:var(--accent-soft)}
+  .sd-item .t{font-size:13px;font-weight:600;line-height:1.3}
+  .sd-item .m{font-size:11.5px;color:var(--muted);margin-top:1px}
+  .sd-head{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);padding:8px 10px 4px}
+  .sd-empty{padding:16px 12px;color:var(--muted);font-size:13px;text-align:center}
+  .av{width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+
+  .btn{border:none;border-radius:8px;padding:9px 15px;font-size:13.5px;font-weight:700;cursor:pointer;
+    display:inline-flex;align-items:center;gap:7px;transition:filter .15s,background .15s,transform .1s}
+  .btn:active{transform:scale(.98)}
+  .btn.primary{background:var(--accent);color:#fff}
+  .btn.primary:hover{background:var(--accent-ink)}
+  .btn.soft{background:#efeee7;color:var(--ink2)}
+  .btn.soft:hover{background:#e6e4da}
+  .btn.ghost{background:none;color:var(--ink2);border:1.5px solid var(--line)}
+  .btn.ghost:hover{border-color:var(--line2);background:#faf9f5}
+  .btn svg.i{width:15px;height:15px}
+
+  /* strip */
+  .stripbar{padding:14px 26px 0}
+  .strip{display:flex;align-items:center;gap:11px;background:var(--accent-soft);
+    border:1px solid var(--accent-border);border-radius:10px 10px 10px 3px;padding:12px 16px;font-size:13.5px;color:#134f48;line-height:1.5}
+  .strip b{color:#0c3b35}
+  .strip .chips{margin-left:auto;display:flex;gap:7px;flex-wrap:wrap}
+  .chip-s{font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:6px;white-space:nowrap}
+  .chip-s.red{background:var(--red-soft);color:var(--red)}
+  .chip-s.amber{background:var(--amber-soft);color:var(--amber)}
+  .chip-s.green{background:var(--green-soft);color:var(--green)}
+  .chip-s.teal{background:#d5ebe7;color:var(--accent-ink)}
+
+  .view{padding:20px 26px 46px}
+  /* panels */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:14px;margin-bottom:18px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px 12px 12px 3px;padding:16px;box-shadow:var(--sh-sm);display:flex;flex-direction:column;gap:2px}
+  .kpi .top{display:flex;align-items:center;justify-content:space-between}
+  .kpi .ic{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;position:relative}
+  .kpi .n{font-size:27px;font-weight:700;letter-spacing:-.5px;margin-top:6px;font-family:'Bricolage Grotesque',sans-serif}
+  .kpi .l{font-size:12px;color:var(--muted);font-weight:600}
+  .kpi .bar{height:4px;border-radius:4px;margin-top:10px;background:#efeee7;overflow:hidden}
+  .kpi .bar i{display:block;height:100%;border-radius:4px}
+  .pulsedot{position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:50%;background:var(--red);border:2px solid var(--card);animation:blink 1.2s infinite}
+  @keyframes blink{50%{opacity:.35}}
+  .grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:16px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:var(--sh-sm);margin-bottom:16px}
+  .panel h3{margin:0 0 14px;font-size:14.5px;font-weight:700;display:flex;align-items:center;gap:8px}
+  .h-row{display:flex;align-items:center;justify-content:space-between;margin:0 0 14px}
+  .h-row h3{margin:0}
+  .scrollbox{max-height:300px;overflow-y:auto;padding-right:6px;scrollbar-width:thin}
+
+  .attn{display:flex;align-items:flex-start;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .attn:last-child{border-bottom:none;padding-bottom:2px}
+  .ring{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:13px;flex:0 0 auto}
+  .attn .nm{font-size:13.5px;font-weight:700}
+  .attn .rs{font-size:12.5px;color:var(--muted);margin-top:2px;line-height:1.45}
+  .attn .act{margin-left:auto;flex:0 0 auto;display:flex;gap:2px}
+  .linkbtn{background:none;border:none;color:var(--accent-ink);font-weight:700;font-size:12.5px;cursor:pointer;padding:6px 8px;border-radius:6px}
+  .linkbtn:hover{background:var(--accent-soft)}
+  .linkbtn.mut{color:var(--muted)}
+
+  .barrow{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .barrow .k{width:110px;font-size:12.5px;font-weight:600;color:var(--ink2);flex:0 0 auto}
+  .barrow .track{flex:1;background:#efeee7;border-radius:5px;height:12px;overflow:hidden}
+  .barrow .track i{display:block;height:100%;border-radius:5px;background:var(--accent)}
+  .barrow .v{width:42px;text-align:right;font-size:12.5px;font-weight:700;color:var(--ink2)}
+
+  /* tasks */
+  .group-h{display:flex;align-items:center;gap:9px;font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:18px 4px 10px}
+  .group-h .cnt{background:#eceade;color:var(--ink2);border-radius:10px;padding:1px 8px;font-size:11px}
+  .group-h.red{color:var(--red)} .group-h.red .cnt{background:var(--red-soft);color:var(--red)}
+  .group-h.amber{color:var(--amber)} .group-h.amber .cnt{background:var(--amber-soft);color:var(--amber)}
+  .trow{display:flex;align-items:center;gap:13px;background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:13px 16px;margin-bottom:8px;cursor:pointer;box-shadow:var(--sh-sm);transition:border-color .15s}
+  .trow:hover{border-color:var(--accent-border);box-shadow:var(--sh-md)}
+  .trow.done{opacity:.6}
+  .trow.done .tt{text-decoration:line-through;color:var(--muted)}
+  .donebtn{width:26px;height:26px;border-radius:50%;border:2px solid #c9c6b8;background:var(--card);cursor:pointer;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;color:transparent}
+  .donebtn:hover{border-color:var(--green);color:#c9c6b8}
+  .donebtn.on{background:var(--green);border-color:var(--green);color:#fff}
+  .donebtn svg{width:14px;height:14px;stroke-width:3}
+  .trow .body{flex:1;min-width:0}
+  .trow .tt{font-size:14px;font-weight:600;line-height:1.35}
+  .trow .meta{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted);margin-top:5px;flex-wrap:wrap}
+  .avex{width:22px;height:22px;border-radius:50%;background:#e6e4da;color:var(--ink2);display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex:0 0 auto}
+  .tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:5px;white-space:nowrap}
+  .tag.gray{background:#efeee7;color:#5d6367}
+  .tag.blue{background:var(--blue-soft);color:var(--blue)}
+  .tag.green{background:var(--green-soft);color:var(--green)}
+  .tag.amber{background:var(--amber-soft);color:var(--amber)}
+  .tag.red{background:var(--red-soft);color:var(--red)}
+  .tag.teal{background:var(--accent-soft);color:var(--accent-ink)}
+  .duecell{font-size:12.5px;font-weight:600;color:var(--ink2);display:flex;align-items:center;gap:6px;flex:0 0 auto;white-space:nowrap}
+  .duecell.over{color:var(--red);font-weight:700}
+  .duecell svg{width:14px;height:14px}
+  .prio{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+  .filters{display:flex;gap:9px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .fsel{border:1.5px solid var(--line);border-radius:8px;padding:8px 11px;font-family:inherit;font-size:13px;font-weight:600;outline:none;background:var(--card);cursor:pointer;color:var(--ink)}
+  .fsel:focus{border-color:var(--accent)}
+  .spacer{flex:1}
+  .empty{display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--muted);font-size:13.5px;padding:40px 16px;text-align:center}
+  .empty svg{width:38px;height:38px;stroke-width:1.4;color:#c2beae}
+  .empty b{color:var(--ink2)}
+
+  /* drawer */
+  .scrim{position:fixed;inset:0;background:rgba(27,30,33,.35);z-index:55}
+  .drawer{position:fixed;top:0;right:0;width:400px;max-width:96vw;height:100vh;background:var(--card);z-index:60;
+    box-shadow:var(--sh-lg);display:flex;flex-direction:column;animation:slidein .22s ease}
+  @keyframes slidein{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+  .dr-head{padding:18px 20px 14px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:12px}
+  .dr-head h3{margin:0;font-size:16px;font-weight:700;line-height:1.35;flex:1}
+  .dr-body{flex:1;overflow:auto;padding:16px 20px 24px}
+  .dr-sec{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:16px 0 8px}
+  .dr-sec:first-child{margin-top:0}
+  .kv{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13.5px}
+  .kv .k{width:96px;color:var(--muted);font-weight:600;font-size:12.5px;flex:0 0 auto}
+  .kv .v{font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .segs{display:flex;gap:6px;background:#efeee7;border-radius:8px;padding:4px}
+  .segs button{flex:1;border:none;background:none;font-weight:700;font-size:12.5px;color:var(--muted);padding:8px 4px;border-radius:6px;cursor:pointer}
+  .segs button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 4px rgba(27,30,33,.14)}
+  .dr-note{width:100%;border:1.5px solid var(--line);border-radius:8px;padding:10px;font-family:inherit;font-size:13.5px;outline:none;resize:vertical;min-height:64px;color:var(--ink)}
+  .dr-note:focus{border-color:var(--accent)}
+  .timeline{border-left:2px solid var(--line);margin-left:7px;padding-left:16px}
+  .tl{position:relative;padding-bottom:14px;font-size:12.5px;color:var(--ink2)}
+  .tl::before{content:"";position:absolute;left:-21.5px;top:4px;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid var(--card)}
+  .tl .when{color:var(--muted);font-size:11.5px;margin-top:1px}
+  .dr-actions{display:flex;gap:9px;padding:14px 20px;border-top:1px solid var(--line)}
+  .iconbtn{background:none;border:none;color:var(--muted);cursor:pointer;padding:6px;border-radius:6px;display:flex}
+  .iconbtn:hover{background:#f3f2ec;color:var(--ink)}
+  .roletag{font-size:11px;font-weight:700;padding:3px 8px;border-radius:5px;background:#efeee7;color:#5d6367;white-space:nowrap}
+
+  /* calendar */
+  .calhead{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .calhead .navb{border:none;background:#efeee7;width:32px;height:32px;border-radius:8px;cursor:pointer;color:var(--ink2);display:flex;align-items:center;justify-content:center}
+  .calmon{font-weight:700;font-size:16px;min-width:150px;font-family:'Bricolage Grotesque',sans-serif}
+  .calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .caldow{text-align:center;font-size:11px;font-weight:700;color:var(--muted);padding:4px 0}
+  .calcell{min-height:104px;background:#fbfaf7;border:1px solid var(--line);border-radius:8px;padding:6px;cursor:pointer}
+  .calcell:hover{border-color:var(--accent-border)}
+  .calcell.empty2{background:transparent;border:none;cursor:default}
+  .calcell.wkend{background:#f4f3ee}
+  .calcell.today{background:var(--accent-soft);border-color:var(--accent)}
+  .caldate{font-size:11.5px;font-weight:700;color:var(--ink2);margin-bottom:5px;display:flex;justify-content:space-between}
+  .caldate .tdy{font-size:9.5px;font-weight:800;color:var(--accent-ink)}
+  .calev{display:flex;align-items:flex-start;gap:5px;font-size:11px;font-weight:600;border-radius:5px;padding:3px 6px;margin-bottom:3px;line-height:1.3;color:#fff}
+  .calev .who2{width:15px;height:15px;border-radius:50%;background:rgba(255,255,255,.3);display:inline-flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:800;flex:0 0 auto;margin-top:1px}
+  .calev .txt{white-space:normal;word-break:break-word;min-width:0}
+  .calmore{font-size:10.5px;color:var(--muted);font-weight:700;padding-left:2px}
+  .callegend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:12px}
+  .callegend span{font-size:11px;color:var(--muted);font-weight:600;display:inline-flex;align-items:center;gap:6px}
+  .ldot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);font-weight:700;padding:10px 12px;border-bottom:1px solid var(--line)}
+  td{padding:11px 12px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:#fbfaf7}
+  .loadbar{width:74px;height:7px;border-radius:4px;background:#efeee7;overflow:hidden;display:inline-block;vertical-align:middle;margin-right:8px}
+  .loadbar i{display:block;height:100%;border-radius:4px}
+  .tree{font-size:13px}
+  .tnode{padding:7px 11px;border-radius:8px;margin:4px 0;background:#fbfaf7;border:1px solid var(--line);display:inline-flex;align-items:center;gap:9px}
+  .tchild{margin-left:24px;border-left:2px solid var(--line);padding-left:14px}
+  .leg{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;font-weight:600;color:var(--ink2)}
+  .leg:last-child{border-bottom:none}
+  .leg .dot2{width:11px;height:11px;border-radius:3px;flex:0 0 auto}
+  .leg b{margin-left:auto;color:var(--ink)}
+
+  /* modal */
+  .modal-wrap{position:fixed;inset:0;background:rgba(27,30,33,.45);z-index:70;display:flex;align-items:flex-start;justify-content:center;padding:8vh 16px 16px}
+  .modal{background:var(--card);width:560px;max-width:100%;border-radius:14px 14px 14px 4px;box-shadow:var(--sh-lg);max-height:86vh;overflow:auto;animation:pop .2s ease}
+  @keyframes pop{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  .qc-head{display:flex;align-items:center;gap:10px;padding:18px 20px 0}
+  .qc-head h3{margin:0;font-size:17px;font-weight:700;flex:1}
+  .selfseg{display:flex;gap:6px;background:#efeee7;border-radius:8px;padding:4px;margin:12px 20px 0}
+  .selfseg button{flex:1;border:none;background:none;font-weight:700;font-size:13px;color:var(--muted);padding:9px;border-radius:6px;cursor:pointer}
+  .selfseg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 4px rgba(27,30,33,.12)}
+  .qc-input-row{display:flex;gap:9px;padding:14px 20px 0;align-items:center}
+  .qc-input{flex:1;border:1.5px solid var(--line);border-radius:9px;padding:13px 14px;font-family:inherit;font-size:14.5px;outline:none;color:var(--ink)}
+  .qc-input:focus{border-color:var(--accent)}
+  .micbtn{width:46px;height:46px;border-radius:9px;border:none;background:var(--accent-soft);color:var(--accent-ink);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto;position:relative}
+  .micbtn.rec{background:var(--red-soft);color:var(--red)}
+  .micbtn.rec::after{content:"";position:absolute;inset:-5px;border-radius:12px;border:2px solid var(--red);animation:pulse 1s infinite}
+  @keyframes pulse{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.18);opacity:0}}
+  .qc-hint{padding:8px 22px 0;font-size:12px;color:var(--muted)}
+  .qc-hint b{color:var(--ink2)}
+  .qc-attach{display:flex;gap:8px;flex-wrap:wrap;padding:12px 20px 0}
+  .qc-attach label{flex:1;justify-content:center;cursor:pointer;min-width:110px}
+  .filelist{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;width:100%}
+  .thumb{width:46px;height:46px;border-radius:7px;object-fit:cover;border:1px solid var(--line)}
+  .filechip{font-size:11.5px;font-weight:600;color:var(--ink2);background:#efeee7;padding:6px 10px;border-radius:6px;display:inline-flex;align-items:center;gap:5px}
+  .qc-parsed{margin:14px 20px 0;border:1px solid var(--accent-border);background:#fbfdfc;border-radius:10px;padding:14px 16px}
+  .qc-parsed .aihead{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:800;color:var(--accent-ink);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px}
+  .fieldrow{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid #e8efec}
+  .fieldrow:last-child{border-bottom:none}
+  .fieldrow .k{font-size:12px;color:var(--muted);width:80px;flex:0 0 auto;font-weight:600;padding-top:5px}
+  .fieldrow .v{flex:1;font-size:14px;font-weight:600}
+  .editchip{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1.5px dashed #b6d3cd;border-radius:7px;padding:5px 11px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink)}
+  .editchip:hover{border-color:var(--accent)}
+  .whysm{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.4;width:100%}
+  .whysm b{color:var(--accent-ink)}
+  .pickrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .pk{border:1.5px solid var(--line);background:var(--card);border-radius:7px;padding:6px 11px;font-size:12.5px;font-weight:600;color:var(--ink2);cursor:pointer}
+  .pk:hover{border-color:var(--accent)}
+  .pk.cur{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
+  .qc-opts-t{width:calc(100% - 40px);margin:14px 20px 0;display:flex;justify-content:space-between;align-items:center;background:#f3f2ec;border:none;border-radius:8px;padding:11px 14px;font-size:13px;font-weight:700;color:var(--ink2);cursor:pointer}
+  .qc-opts{padding:4px 20px 0}
+  .qc-opts label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px}
+  .qc-opts select,.qc-opts textarea,.mf input,.mf select{width:100%;border:1.5px solid var(--line);border-radius:8px;padding:10px;font-family:inherit;font-size:13.5px;outline:none;color:var(--ink);background:var(--card)}
+  .qc-opts select:focus,.qc-opts textarea:focus,.mf input:focus,.mf select:focus{border-color:var(--accent)}
+  .qc-actions{display:flex;gap:10px;padding:18px 20px 20px}
+  .mf{padding:0 20px}
+  .mf label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px}
+  .mf .row2{display:flex;gap:10px}
+  .mf .row2>div{flex:1}
+
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:#22262a;color:#fff;
+    padding:12px 18px;border-radius:9px;font-size:13.5px;font-weight:600;z-index:90;display:flex;align-items:center;gap:9px;box-shadow:var(--sh-lg);animation:pop .2s ease}
+  .toast svg{width:16px;height:16px;color:#7fd8b8}
+
+  @media (max-width:1100px){
+    .sidebar{width:66px;padding:18px 10px}
+    .sidebar .brand span.bt,.navitem span.lb,.navitem .kbd,.side-lab,.companion{display:none}
+    .navitem{justify-content:center;padding:11px 0}
+    .roleSel{font-size:0;padding:10px 4px}
+    .grid2{grid-template-columns:1fr}
+    .search{width:170px}
+  }
+  @media (max-width:760px){
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    .topbar{flex-wrap:wrap;gap:10px;padding:12px 16px}
+    .stripbar,.view{padding-left:16px;padding-right:16px}
+    .strip{flex-wrap:wrap}
+    .strip .chips{margin-left:0}
+    .drawer{width:100vw}
+    .calcell{min-height:64px}
+    .calev .txt{display:none}
+  }
+  @media print{
+    body>*{display:none!important}
+    #print-report{display:block!important}
+    body{background:#fff}
+  }
+  #err-overlay{position:fixed;inset:auto 12px 12px 12px;background:#fff3f3;border:2px solid #c43a53;border-radius:10px;padding:14px;font:12px/1.5 monospace;color:#7a1f30;z-index:999;display:none;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="print-report" style="display:none;padding:30px;font-family:'IBM Plex Sans',sans-serif"></div>
+<div id="err-overlay"></div>
+
+<script>
+window.onerror=function(msg,src,line){
+  var el=document.getElementById('err-overlay');
+  el.style.display='block';
+  el.textContent='Runtime error — please report this to Claude:\n'+msg+' (line '+line+')\n\n(click to dismiss)';
+  el.onclick=function(){el.style.display='none';};
+};
+</script>
+
+<script type="text/babel" data-presets="react">
+const {useState,useEffect,useRef,useCallback} = React;
+
+/* ============ data ============ */
+const TODAY=new Date(2026,6,6); // 6 Jul 2026
+const TYPES={work:"Work",purchase:"Purchase",repair:"Repair",maint:"Maintenance",other:"Other"};
+const PRIOS={high:{l:"High",c:"var(--red)"},med:{l:"Medium",c:"var(--amber)"},low:{l:"Low",c:"#9aa2a8"}};
+const RECURS={daily:"Daily",weekly:"Weekly",monthly:"Monthly",yearly:"Yearly"};
+const BUCKETS={academic:"Academic",maintenance:"Maintenance",construction:"Construction",hr:"HR",accounts:"Accounts",administration:"Administration",transport:"Transport",it:"IT & Systems"};
+const BUCKET_COLORS={academic:'#39638f',maintenance:'#b06e12',construction:'#8a6a52',hr:'#a34d78',accounts:'#1a7a48',administration:'#5d6672',transport:'#0e7a8f',it:'#5b5ea6'};
+const DEPTS=['Academics','Maintenance','Construction','HR','Accounts','Administration','Transport','IT','Housekeeping','Operations'];
+const AV_COLORS=['#0e7a6f','#39638f','#1a7a48','#b06e12','#c43a53','#0e7a8f','#a34d78','#5b5ea6'];
+const ROLE_TAG={'Administrator':'teal','Management':'blue','Manager':'green','Team Member':'amber','Teacher':'gray'};
+const MAINT_HEAD="Vikram Rao";
+
+let STAFF=[
+  {n:"Priya Nair",   s:"Priya",  role:"Administrator", dept:"Administration", boss:null,           av:"P"},
+  {n:"Rajesh Menon", s:"Rajesh", role:"Management",     dept:"Administration", boss:"Priya Nair",   av:"R"},
+  {n:"Anita Desai",  s:"Anita",  role:"Manager",        dept:"Academics",      boss:"Rajesh Menon", av:"A"},
+  {n:"Vikram Rao",   s:"Vikram", role:"Team Member",    dept:"Maintenance",    boss:"Anita Desai",  av:"V"},
+  {n:"Meena Rao",    s:"Meena",  role:"Teacher",        dept:"Academics",      boss:"Anita Desai",  av:"M"},
+  {n:"Kavya Nair",   s:"Kavya",  role:"Teacher",        dept:"Academics",      boss:"Anita Desai",  av:"K"},
+  {n:"Ravi Kumar",   s:"Ravi",   role:"Teacher",        dept:"Administration", boss:"Anita Desai",  av:"R"},
+  {n:"Hari Charan",  s:"Hari",   role:"Teacher",        dept:"Maintenance",    boss:"Vikram Rao",   av:"H"},
+  {n:"Suresh Kumar", s:"Suresh", role:"Teacher",        dept:"Maintenance",    boss:"Vikram Rao",   av:"S"},
+  {n:"Latha M.",     s:"Latha",  role:"Teacher",        dept:"Housekeeping",   boss:"Vikram Rao",   av:"L"},
+  {n:"Arjun Menon",  s:"Arjun",  role:"Teacher",        dept:"Operations",     boss:"Rajesh Menon", av:"A"},
+  {n:"Deepa Iyer",   s:"Deepa",  role:"Teacher",        dept:"Operations",     boss:"Rajesh Menon", av:"D"}
+];
+let tasks=[
+  {t:"Check classroom networking points & panels", who:"Hari",  type:"repair",   bucket:"it",            prio:"high", date:"2026-07-02", status:"open", note:"", extReq:{newDate:"2026-07-08", reason:"Replacement network switch arrives Monday"}},
+  {t:"Re-check fire extinguishers in Block B",     who:"Hari",  type:"maint",    bucket:"maintenance",   prio:"med",  date:"2026-07-06", status:"inprogress", note:"Blocks A & B done, C pending", selfAssigned:true, instructedBy:"Anita (Manager)", recur:"monthly", recurOn:6},
+  {t:"Complete the academic work review",          who:"Meena", type:"work",     bucket:"academic",      prio:"med",  date:"2026-07-06", time:"15:00", status:"open", note:""},
+  {t:"Prepare term-2 exam timetable",              who:"Kavya", coWho:["Meena"], type:"work", bucket:"academic", prio:"high", date:"2026-07-07", status:"partial", note:"Draft ready, awaiting approval"},
+  {t:"Order science-lab supplies for term 2",      who:"Ravi",  type:"purchase", bucket:"accounts",      prio:"med",  date:"2026-07-10", status:"open", note:""},
+  {t:"Service the water purifiers",                who:"Suresh",type:"maint",    bucket:"maintenance",   prio:"low",  date:"2026-07-04", status:"open", note:""},
+  {t:"Deep-clean the assembly hall",               who:"Latha", type:"maint",    bucket:"maintenance",   prio:"med",  date:"2026-07-07", status:"open", note:""},
+  {t:"Arrange bus for the science-fair trip",      who:"Deepa", type:"work",     bucket:"transport",     prio:"med",  date:"2026-07-08", status:"open", note:""},
+  {t:"Update visitor-gate register process",       who:"Arjun", type:"work",     bucket:"administration",prio:"low",  date:"2026-07-11", status:"open", note:""},
+  {t:"Shortlist candidates for PE teacher role",   who:"Deepa", type:"work",     bucket:"hr",            prio:"med",  date:"2026-07-12", status:"open", note:""},
+  {t:"Reconcile last month's petty cash",          who:"Ravi",  type:"work",     bucket:"accounts",      prio:"med",  date:"2026-07-03", status:"done", doneOn:"2026-07-02", note:"Filed with accounts"},
+  {t:"Repair the library AC unit",                 who:"Suresh",type:"repair",   bucket:"maintenance",   prio:"med",  date:"2026-06-29", status:"done", doneOn:"2026-07-01", note:"Spare part arrived late"}
+];
+let requests=[
+  {kind:"issue",  t:"Ceiling fan in Class 7B making loud noise", from:"Meena", date:"2026-07-06", note:"Started yesterday, students distracted"},
+  {kind:"request",t:"2 boxes of whiteboard markers + dusters",   from:"Kavya", date:"2026-07-05", note:"For the term-2 classrooms"},
+  {kind:"issue",  t:"Leaking tap in the staff washroom",         from:"Latha", date:"2026-07-05", note:""}
+];
+const ROLE_VIEWER={admin:"Priya Nair",mgmt:"Rajesh Menon",srm:"Anita Desai",jrm:"Vikram Rao"};
+const BOSS_LABEL={"Priya Nair":"Priya (Admin)","Rajesh Menon":"Rajesh (Management)","Anita Desai":"Anita (Manager)","Vikram Rao":"Vikram (Team Member)"};
+const SCOPE_WORD={admin:"all teams",mgmt:"org-wide",srm:"your teams",jrm:"your team"};
+
+/* ============ helpers ============ */
+const byShort=s=>STAFF.find(x=>x.s===s);
+const byName=n=>STAFF.find(x=>x.n===n);
+const assignees=t=>[t.who].concat(t.coWho||[]);
+const hasWho=(t,s)=>assignees(t).includes(s);
+const inScope=(t,sh)=>assignees(t).some(a=>sh.includes(a));
+function descendants(name){let out=[],q=STAFF.filter(p=>p.boss===name);
+  while(q.length){const p=q.shift();out.push(p);q=q.concat(STAFF.filter(x=>x.boss===p.n));}return out;}
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const ST={open:{l:"Open",c:"gray"},inprogress:{l:"In progress",c:"blue"},partial:{l:"Partial",c:"amber"},done:{l:"Done",c:"green"}};
+const isOverdue=t=>t.status!=='done'&&t.date&&t.date<iso(TODAY);
+const isToday=t=>t.status!=='done'&&t.date===iso(TODAY);
+const overdueDays=t=>Math.round((new Date(iso(TODAY))-new Date(t.date))/864e5);
+const fmtDate=d=>{if(!d)return '—';const x=new Date(d+'T00:00:00');return x.toLocaleDateString('en',{day:'numeric',month:'short'});};
+const fmtTime=t=>{if(!t)return '';const p=t.split(':'),h=+p[0],ap=h>=12?'PM':'AM';return (h%12||12)+':'+p[1]+' '+ap;};
+function guessTime(t){t=t.toLowerCase();
+  const m=t.match(/\b(?:by|at|before)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/);
+  if(m){let h=+m[1]%12;if(m[3]==='pm')h+=12;return {time:String(h).padStart(2,'0')+':'+(m[2]||'00'),why:'you said a time'};}
+  if(/\bnoon\b/.test(t))return{time:'12:00',why:'you said noon'};
+  if(/\bmorning\b/.test(t))return{time:'09:00',why:'morning — 9 AM'};
+  if(/\bevening\b/.test(t))return{time:'17:00',why:'evening — 5 PM'};
+  if(/\bend of (the )?day\b|\beod\b/.test(t))return{time:'17:00',why:'end of day — 5 PM'};
+  return null;}
+const avColor=n=>{let h=0;for(const c of n)h=(h*31+c.charCodeAt(0))%997;return AV_COLORS[h%AV_COLORS.length];};
+const bucketColor=b=>BUCKET_COLORS[b]||'#5d6672';
+function workloadMap(){const m={};STAFF.forEach(p=>m[p.s]=tasks.filter(t=>hasWho(t,p.s)&&t.status!=='done').length);return m;}
+function suggestWho(type,scope){
+  const load=workloadMap();
+  const pool=scope.filter(p=>p.role==='Teacher');
+  const deptForType={repair:'Maintenance',maint:'Maintenance',purchase:'Administration',work:'Academics'};
+  let cand=pool.filter(p=>p.dept===deptForType[type]);let basis='dept';
+  if(!cand.length){cand=pool;basis='load';}
+  cand=cand.slice().sort((a,b)=>load[a.s]-load[b.s]);
+  const c=cand[0]; if(!c)return null;
+  const why=basis==='dept'?`${c.dept} handles ${TYPES[type].toLowerCase()} · lightest load (${load[c.s]} open)`:`lightest workload on the team (${load[c.s]} open)`;
+  return {s:c.s,why};
+}
+function suggestDue(type){const d=new Date(TODAY);
+  if(type==='repair'){d.setDate(d.getDate()+1);return{date:iso(d),why:'repairs are usually next-day'};}
+  if(type==='purchase'){d.setDate(d.getDate()+4);return{date:iso(d),why:'purchases typically allow a few days'};}
+  if(type==='maint'){d.setDate(d.getDate()+7);return{date:iso(d),why:'maintenance can be scheduled ahead'};}
+  d.setDate(d.getDate()+1);return{date:iso(d),why:'default next-day'};}
+function guessType(t){t=t.toLowerCase();
+  if(/\b(order|buy|purchase|procure|stock|supplies)\b/.test(t))return 'purchase';
+  if(/\b(repair|fix|broken|replace|not working|fault)\b/.test(t))return 'repair';
+  if(/\b(clean|service|maintain|maintenance|inspect|paint)\b/.test(t))return 'maint';
+  return 'work';}
+function guessBucket(t){t=t.toLowerCase();
+  if(/\b(exam|class|academic|timetable|teacher|lesson|syllabus|library)\b/.test(t))return 'academic';
+  if(/\b(projector|wifi|network|computer|smart ?board|cctv|printer|software)\b/.test(t))return 'it';
+  if(/\b(bus|driver|vehicle|transport|route)\b/.test(t))return 'transport';
+  if(/\b(leave|recruit|salary|payroll|appraisal|hiring)\b/.test(t))return 'hr';
+  if(/\b(invoice|payment|purchase|order|buy|cash|fees?|budget|supplies)\b/.test(t))return 'accounts';
+  if(/\b(build|construction|civil|wall|cement|paint)\b/.test(t))return 'construction';
+  if(/\b(repair|fix|broken|leak|clean|service|maintain)\b/.test(t))return 'maintenance';
+  return 'administration';}
+function guessDate(t){t=t.toLowerCase();const d=new Date(TODAY);
+  if(/\btoday|urgent|asap|immediately\b/.test(t))return{date:iso(d),why:/urgent|asap|immediately/.test(t)?'sounds urgent — set for today':'you said today'};
+  if(/\btomorrow\b/.test(t)){d.setDate(d.getDate()+1);return{date:iso(d),why:'you said tomorrow'};}
+  if(/\bfriday\b/.test(t)){const df=(5-d.getDay()+7)%7||7;d.setDate(d.getDate()+df);return{date:iso(d),why:'you said Friday'};}
+  if(/\bthis week\b/.test(t)){const df=(5-d.getDay()+7)%7||7;d.setDate(d.getDate()+df);return{date:iso(d),why:'end of this week'};}
+  if(/\bnext week\b/.test(t)){d.setDate(d.getDate()+7);return{date:iso(d),why:'you said next week'};}
+  return null;}
+const END_PHRASE=/\s*\b(?:by|before|at)?\s*(?:today|tomorrow|this week|next week|friday|every ?day|daily|every week|weekly|every month|monthly|every year|yearly|annually|every\s+(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday)s?|noon|\d{1,2}(?::\d{2})?\s*(?:am|pm))\b\.?\s*$/i;
+function cleanTask(text){
+  let t=text.replace(/^(please\s+)?(tell|ask|remind|get)\s+\w+(\s+and\s+\w+)*\s+(to\s+)?/i,'')
+            .replace(END_PHRASE,'').replace(END_PHRASE,'')
+            .replace(/[,.]\s*$/,'').trim();
+  return t?t.charAt(0).toUpperCase()+t.slice(1):text;}
+function guessRecur(t){t=t.toLowerCase();
+  if(/\b(every ?day|daily)\b/.test(t))return 'daily';
+  if(/\b(every week|weekly)\b/.test(t))return 'weekly';
+  if(/\b(every month|monthly)\b/.test(t))return 'monthly';
+  if(/\b(every year|yearly|annually)\b/.test(t))return 'yearly';
+  return null;}
+const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const ord=n=>{const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);};
+const recurLabel=(recur,on)=>{if(!recur)return '';
+  if(recur==='weekly'&&on!=null)return 'Weekly · '+DOW[on];
+  if(recur==='monthly'&&on!=null)return 'Monthly · '+ord(on);
+  if(recur==='yearly'&&on)return 'Yearly · '+on.d+' '+MONTHS[on.m];
+  return RECURS[recur];};
+const defaultRecurOn=(recur,dateStr)=>{const d=new Date((dateStr||iso(TODAY))+'T00:00:00');
+  return recur==='weekly'?d.getDay():recur==='monthly'?d.getDate():recur==='yearly'?{d:d.getDate(),m:d.getMonth()}:null;};
+/* first date on/after `fromStr` matching the anchor */
+function nextAnchor(recur,on,fromStr){const d=new Date((fromStr||iso(TODAY))+'T00:00:00');
+  if(recur==='weekly'&&on!=null){d.setDate(d.getDate()+((on-d.getDay()+7)%7));return iso(d);}
+  if(recur==='monthly'&&on!=null){let y=d.getFullYear(),m=d.getMonth();if(d.getDate()>on)m++;
+    const dim=new Date(y,m+1,0).getDate();return iso(new Date(y,m,Math.min(on,dim)));}
+  if(recur==='yearly'&&on){let y=d.getFullYear();
+    let t=new Date(y,on.m,Math.min(on.d,new Date(y,on.m+1,0).getDate()));
+    if(t<d)t=new Date(y+1,on.m,Math.min(on.d,new Date(y+1,on.m+1,0).getDate()));
+    return iso(t);}
+  return iso(d);}
+function nextRecurDate(dateStr,recur,on){const d=new Date(dateStr+'T00:00:00');
+  if(recur==='daily'){d.setDate(d.getDate()+1);return iso(d);}
+  if(recur==='weekly'){if(on!=null){d.setDate(d.getDate()+1);return nextAnchor('weekly',on,iso(d));}d.setDate(d.getDate()+7);return iso(d);}
+  if(recur==='monthly'){const y=d.getFullYear(),m=d.getMonth()+1,day=on!=null?on:d.getDate();
+    const dim=new Date(y,m+1,0).getDate();return iso(new Date(y,m,Math.min(day,dim)));}
+  const y=d.getFullYear()+1,mm=on?on.m:d.getMonth(),dd=on?on.d:d.getDate();
+  return iso(new Date(y,mm,Math.min(dd,new Date(y,mm+1,0).getDate())));}
+/* marks a task done; for recurring tasks, schedules the next occurrence and returns its date */
+function completeTask(t){
+  t.status='done';t.doneOn=iso(TODAY);t.doneBy=assignees(t).slice();delete t.extReq;
+  if(!t.recur)return null;
+  const base=t.date&&t.date>iso(TODAY)?t.date:iso(TODAY);
+  const nd=nextRecurDate(base,t.recur,t.recurOn);
+  tasks.push({t:t.t,who:t.who,coWho:t.coWho?t.coWho.slice():undefined,type:t.type,bucket:t.bucket,
+    prio:t.prio,date:nd,time:t.time||null,status:'open',note:'',recur:t.recur,recurOn:t.recurOn,selfAssigned:t.selfAssigned,instructedBy:t.instructedBy});
+  return nd;}
+function suggestFixer(text){const t=(text||'').toLowerCase();
+  if(/fan|light|electric|wiring|socket|projector|power/.test(t))return{s:'Hari',why:'handles electrical work'};
+  if(/tap|leak|water|pipe|plumb|toilet|drain/.test(t))return{s:'Suresh',why:'handles plumbing work'};
+  const load=workloadMap();
+  const pool=STAFF.filter(p=>p.dept==='Maintenance'&&p.role==='Teacher').sort((a,b)=>load[a.s]-load[b.s]);
+  return pool.length?{s:pool[0].s,why:'lightest workload'}:null;}
+function deliveryStats(list){
+  return [
+    {l:'Completed on time',v:list.filter(t=>t.status==='done'&&(!t.doneOn||t.doneOn<=t.date)).length,c:'#1a7a48'},
+    {l:'Completed late',v:list.filter(t=>t.status==='done'&&t.doneOn&&t.doneOn>t.date).length,c:'#b06e12'},
+    {l:'In progress · due',v:list.filter(t=>t.status!=='done'&&!isOverdue(t)).length,c:'#0e7a6f'},
+    {l:'Overdue',v:list.filter(isOverdue).length,c:'#c43a53'}];
+}
+function donutSVG(segs,size,stroke){
+  size=size||150;stroke=stroke||26;
+  const total=segs.reduce((a,x)=>a+x.v,0);
+  const r=(size-stroke)/2,C=2*Math.PI*r,cx=size/2,cy=size/2;
+  let off=0,parts='';
+  if(!total)parts=`<circle r="${r}" cx="${cx}" cy="${cy}" fill="none" stroke="#efeee7" stroke-width="${stroke}"/>`;
+  else segs.forEach(x=>{if(!x.v)return;const len=x.v/total*C;
+    parts+=`<circle r="${r}" cx="${cx}" cy="${cy}" fill="none" stroke="${x.c}" stroke-width="${stroke}" stroke-dasharray="${len-1.5} ${C-len+1.5}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cy})"/>`;off+=len;});
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${parts}
+    <text x="${cx}" y="${cy-1}" text-anchor="middle" font-size="27" font-weight="700" fill="#1b1e21" font-family="Bricolage Grotesque,sans-serif">${total}</text>
+    <text x="${cx}" y="${cy+17}" text-anchor="middle" font-size="10.5" font-weight="600" fill="#71797f">tasks</text></svg>`;
+}
+function csvDownload(name,rows){
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const blob=new Blob([rows.map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+
+/* ============ icons ============ */
+const PATHS={
+  logo:<path d="M4 12l5 5L20 6" strokeWidth="3"/>,
+  grid:<g><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></g>,
+  checkc:<g><circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.4 2.4 4.6-5"/></g>,
+  cal:<g><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></g>,
+  users:<g><circle cx="9" cy="8" r="3.4"/><path d="M3.5 19.5c.6-3.3 2.8-5 5.5-5s4.9 1.7 5.5 5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.3.2 3.7 1.7 4.1 4.4"/></g>,
+  chart:<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>,
+  search:<g><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></g>,
+  plus:<path d="M12 5v14M5 12h14"/>,
+  mic:<g><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3"/></g>,
+  x:<path d="M6 6l12 12M18 6L6 18"/>,
+  chevl:<path d="M14.5 6l-6 6 6 6"/>,
+  chevr:<path d="M9.5 6l6 6-6 6"/>,
+  chevd:<path d="M6 9.5l6 6 6-6"/>,
+  alert:<g><circle cx="12" cy="12" r="9"/><path d="M12 7.5V13M12 16.4v.2"/></g>,
+  clock:<g><circle cx="12" cy="12" r="9"/><path d="M12 7v5.2l3.4 2"/></g>,
+  spark:<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>,
+  check:<path d="M5 12.5l4.5 4.5L19 7.5"/>,
+  dl:<path d="M12 4v11M7.5 11.5L12 16l4.5-4.5M4.5 19.5h15"/>,
+  print:<g><path d="M7 8V4h10v4M7 17H4.5V10h15V17H17"/><rect x="7" y="14.5" width="10" height="6" rx="1"/></g>,
+  bell:<path d="M18 16H6c1.2-1.4 1.8-2.4 1.8-5a4.2 4.2 0 018.4 0c0 2.6.6 3.6 1.8 5zM10 19a2 2 0 004 0"/>,
+  redo:<path d="M4 16v-5a5 5 0 015-5h10M15.5 2.5L19 6l-3.5 3.5"/>,
+  inbox:<path d="M4 13.5V18a2 2 0 002 2h12a2 2 0 002-2v-4.5M4 13.5L7 5.5h10l3 8M4 13.5h4.8l1 2h4.4l1-2H20"/>,
+  note:<g><path d="M6 3.5h9L20 8.5v12H6z"/><path d="M14.5 3.5v5.5H20M9 13h6M9 16.5h6"/></g>,
+  tool:<path d="M20.3 7.1a4.6 4.6 0 01-6 5.3l-6.4 6.4a2.1 2.1 0 11-3-3l6.4-6.4a4.6 4.6 0 015.3-6l-2.9 2.9 3.7 3.7z"/>,
+  box:<g><path d="M3.5 8L12 3.5 20.5 8v8L12 20.5 3.5 16z"/><path d="M3.5 8L12 12.5 20.5 8M12 12.5v8"/></g>,
+  camera:<g><path d="M4 8.5a2 2 0 012-2h2l1.5-2h5L16 6.5h2a2 2 0 012 2V18a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><circle cx="12" cy="13" r="3.4"/></g>,
+  image:<g><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M4.5 17l4.5-4.5 3 3 3.5-3.5 4.5 4.5"/></g>,
+  clip:<path d="M8.5 12l6-6a3.3 3.3 0 014.7 4.7l-7.3 7.3a5 5 0 01-7-7l6.8-6.8"/>
+};
+const I=({n,s,c})=><svg className="i" viewBox="0 0 24 24" style={{width:s,height:s,color:c}}>{PATHS[n]}</svg>;
+
+/* ============ app ============ */
+function App(){
+  const [,setTick]=useState(0);
+  const R=useCallback(()=>setTick(t=>t+1),[]);
+  const [role,setRoleState]=useState('admin');
+  const [view,setView]=useState('dashboard');
+  const [toast,setToastState]=useState(null);
+  const toastT=useRef();
+  const say=useCallback(m=>{setToastState(m);clearTimeout(toastT.current);toastT.current=setTimeout(()=>setToastState(null),2400);},[]);
+  const [drawerIdx,setDrawerIdx]=useState(-1);
+  const [modal,setModal]=useState(false);
+  const [empModal,setEmpModal]=useState(false);
+  const searchRef=useRef();
+
+  const viewer=byName(ROLE_VIEWER[role]);
+  const scope=[viewer].concat(descendants(viewer.n));
+  const shorts=scope.map(p=>p.s);
+  const bossChain=(()=>{let c=[],cur=viewer.boss;while(cur){c.push(cur);const b=byName(cur);cur=b?b.boss:null;}return c;})();
+  const canApprove=from=>{const p=byShort(from);return role==='admin'||role==='mgmt'||!!(p&&p.boss===viewer.n);};
+  const canAssignIssue=role==='admin'||role==='mgmt'||viewer.n===MAINT_HEAD;
+
+  const mine=tasks.filter(t=>inScope(t,shorts));
+  const open=mine.filter(t=>t.status!=='done').length;
+  const over=mine.filter(isOverdue).length;
+  const today=mine.filter(isToday).length;
+  const done=mine.filter(t=>t.status==='done').length;
+  const qReqs=requests.map((r,i)=>({r,i})).filter(o=>shorts.includes(o.r.from));
+  const qExts=tasks.map((t,i)=>({t,i})).filter(o=>o.t.extReq&&inScope(o.t,shorts));
+  const reqN=qReqs.filter(o=>o.r.kind==='request').length;
+  const issN=qReqs.filter(o=>o.r.kind==='issue').length;
+
+  function attentionList(){
+    const load=workloadMap();
+    return scope.filter(p=>p.role==='Teacher').map(p=>{
+      const pm=tasks.filter(t=>hasWho(t,p.s));
+      const od=pm.filter(isOverdue);
+      const worst=od.slice().sort((a,b)=>a.date<b.date?-1:1)[0];
+      const rs=[];
+      if(od.length)rs.push(od.length+' overdue — worst is '+overdueDays(worst)+' day'+(overdueDays(worst)!=1?'s':'')+' late');
+      if(load[p.s]>=3)rs.push(load[p.s]+' open tasks — heaviest load on the team');
+      return {p,od:od.length,load:load[p.s],reason:rs.join(' · ')};
+    }).filter(x=>x.reason).sort((a,b)=>b.od-a.od||b.load-a.load);
+  }
+
+  /* actions */
+  const setRole=r=>{setRoleState(r);setDrawerIdx(-1);};
+  const quickDone=i=>{const t=tasks[i];
+    if(t.status==='done'){setDrawerIdx(i);say('To reopen, set a new due date in the task panel');return;}
+    const nd=completeTask(t);
+    R();say(nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd)
+      :t.coWho&&t.coWho.length?'Marked done for all assignees':'Task marked done');};
+  const remindPerson=s=>{const p=byShort(s);say('Reminder sent to '+(p?p.n.split(' ')[0]:s)+' on WhatsApp');};
+  const approveReq=i=>{const r=requests[i];if(!r||r.kind!=='request')return;
+    if(!canApprove(r.from)){say('Only the department boss can approve this');return;}
+    const s=suggestWho('purchase',scope);const d=new Date(TODAY);d.setDate(d.getDate()+4);
+    tasks.unshift({t:r.t,who:s?s.s:r.from,type:'purchase',bucket:'accounts',prio:'med',date:iso(d),status:'open',
+      note:'From '+(byShort(r.from)||{}).n+(r.note?' — “'+r.note+'”':''),origin:'request'});
+    requests.splice(i,1);R();
+    say('Request approved · '+(s?byShort(s.s).n:'')+' (procurement, Accounts department) will procure');};
+  const declineReq=i=>{const r=requests[i];if(!r)return;requests.splice(i,1);R();
+    say((r.kind==='issue'?'Issue':'Request')+' declined — '+(byShort(r.from)||{n:r.from}).n.split(' ')[0]+' will be notified');};
+  const assignIssue=(i,who)=>{const r=requests[i];if(!r||!who)return;
+    const d=new Date(TODAY);d.setDate(d.getDate()+1);
+    tasks.unshift({t:r.t,who,type:'repair',bucket:'maintenance',prio:'high',date:iso(d),status:'open',
+      note:'Reported by '+(byShort(r.from)||{}).n+(r.note?' — “'+r.note+'”':''),origin:'issue',files:r.files});
+    requests.splice(i,1);R();say('Issue assigned to '+byShort(who).n+' · notified on WhatsApp');};
+  const approveExt=i=>{const t=tasks[i];if(!t||!t.extReq)return;
+    if(!canApprove(t.who)){say('Only the department boss can approve this');return;}
+    t.date=t.extReq.newDate;delete t.extReq;R();
+    say('Extension approved — new due date '+fmtDate(t.date)+' · assignee notified');};
+  const rejectExt=i=>{const t=tasks[i];if(!t||!t.extReq)return;
+    if(!canApprove(t.who)){say('Only the department boss can decide this');return;}
+    delete t.extReq;R();say('Extension rejected — original due date stands');};
+
+  function exportCSV(kind){
+    if(kind==='tasks'){
+      const rows=[['Task','Type','Department','Priority','Repeats','Assignee','Due','Status','Overdue','Note']];
+      tasks.filter(t=>inScope(t,shorts)).forEach(t=>rows.push([t.t,TYPES[t.type||'work'],BUCKETS[t.bucket]||'',PRIOS[t.prio||'med'].l,t.recur?recurLabel(t.recur,t.recurOn):'',
+        assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),t.date+(t.time?' '+fmtTime(t.time):''),ST[t.status].l,isOverdue(t)?'Yes':'No',t.note||'']));
+      csvDownload(iso(new Date())+'-teamflow-tasks.csv',rows);say('Tasks exported (CSV)');
+    }else{
+      const load=workloadMap();const rows=[['Employee','Department','Role','Open','Overdue','Done']];
+      scope.filter(p=>p.role==='Teacher').forEach(p=>{const tt=tasks.filter(t=>hasWho(t,p.s));
+        rows.push([p.n,p.dept,p.role,load[p.s],tt.filter(isOverdue).length,tt.filter(t=>t.status==='done').length]);});
+      csvDownload(iso(new Date())+'-teamflow-workload.csv',rows);say('Workload exported (CSV)');
+    }
+  }
+  function printReport(repWho,repBucket){
+    repBucket=repBucket||'all';
+    const list=tasks.filter(t=>inScope(t,shorts)&&(repBucket==='all'||t.bucket===repBucket)&&(repWho==='all'||hasWho(t,repWho)));
+    const segs=deliveryStats(list);const tot=segs.reduce((a,x)=>a+x.v,0)||1;
+    let b='<h1 style="margin:0 0 4px;font-family:Bricolage Grotesque,sans-serif">TeamFlow — Team Report</h1>';
+    b+='<div style="color:#555;margin-bottom:18px">Prepared for '+viewer.n+' ('+viewer.role+') · '+new Date().toDateString()+' · '+list.length+' tasks'+(repBucket==='all'?'':' · department: '+BUCKETS[repBucket])+(repWho==='all'?'':' · staff: '+(byShort(repWho)||{}).n)+'</div>';
+    b+='<div style="display:flex;gap:34px;align-items:center;margin-bottom:24px">'+donutSVG(segs,140,24)
+      +'<div style="flex:1">'+segs.map(x=>'<div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid #eee;font-size:13px"><span style="width:11px;height:11px;border-radius:3px;background:'+x.c+';display:inline-block"></span>'+x.l+'<b style="margin-left:auto">'+x.v+' · '+Math.round(x.v/tot*100)+'%</b></div>').join('')
+      +'<div style="font-size:12px;color:#555;margin-top:8px"><b>'+Math.round(segs[0].v/tot*100)+'%</b> of tasks were completed on time.</div></div></div>';
+    b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Task</th><th style="text-align:left;padding:6px">Assignee</th><th style="text-align:left;padding:6px">Type</th><th style="text-align:left;padding:6px">Due</th><th style="text-align:left;padding:6px">Status</th></tr>';
+    list.forEach(t=>{b+='<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+t.t+'</td><td style="padding:6px">'+assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')+'</td><td style="padding:6px">'+TYPES[t.type||'work']+'</td><td style="padding:6px">'+t.date+(isOverdue(t)?' (overdue)':'')+'</td><td style="padding:6px">'+ST[t.status].l+'</td></tr>';});
+    b+='</table>';
+    const pr=document.getElementById('print-report');pr.innerHTML=b;pr.style.display='block';
+    const ot=document.title;document.title=iso(new Date())+'-teamflow-team-report';
+    window.print();
+    setTimeout(()=>{pr.style.display='none';document.title=ot;},300);
+  }
+
+  /* keyboard */
+  useEffect(()=>{
+    const h=e=>{
+      const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+      if(e.key==='Escape'){setModal(false);setEmpModal(false);setDrawerIdx(-1);document.activeElement.blur();return;}
+      if(typing)return;
+      if(e.key==='/'){e.preventDefault();searchRef.current&&searchRef.current.focus();return;}
+      if(e.key==='n'||e.key==='N'){e.preventDefault();setModal(true);return;}
+      const vs=['dashboard','tasks','calendar','people','reports'];
+      if(/^[1-5]$/.test(e.key))setView(vs[+e.key-1]);
+    };
+    document.addEventListener('keydown',h);
+    return ()=>document.removeEventListener('keydown',h);
+  },[]);
+
+  const ctx={role,view,setView,say,R,scope,shorts,viewer,mine,canApprove,canAssignIssue,bossChain,
+    quickDone,remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,
+    setDrawerIdx,setModal,setEmpModal,exportCSV,printReport,qReqs,qExts,attentionList};
+
+  return <div className="app">
+    <aside className="sidebar">
+      <div className="brand"><span className="logo"><I n="logo"/></span><span className="bt">TeamFlow</span></div>
+      {[['dashboard','grid','Dashboard','1'],['tasks','checkc','Tasks','2'],['calendar','cal','Calendar','3'],['people','users','People & roles','4'],['reports','chart','Reports','5']].map(([v,ic,l,k])=>
+        <button key={v} className={'navitem'+(view===v?' on':'')} onClick={()=>setView(v)}>
+          <I n={ic}/><span className="lb">{l}</span><span className="kbd">{k}</span></button>)}
+      <div className="side-foot">
+        <div className="side-lab">Viewing as</div>
+        <select className="roleSel" value={role} onChange={e=>setRole(e.target.value)}>
+          <option value="admin">Administrator · Priya</option>
+          <option value="mgmt">Management · Rajesh</option>
+          <option value="srm">Manager · Anita</option>
+          <option value="jrm">Team Member · Vikram</option>
+        </select>
+        <div className="companion">React build · companion to the TeamFlow mobile app. Press <b>N</b> for a new task, <b>/</b> to search.</div>
+      </div>
+    </aside>
+    <div className="main">
+      <Topbar ctx={ctx} searchRef={searchRef}/>
+      <div className="stripbar">
+        <div className="strip">
+          <I n="spark" c="var(--accent-ink)"/>
+          <div>
+            <b>{open} open {SCOPE_WORD[role]}</b>{over?` · ${over} overdue`:' · nothing overdue'}{today?` · ${today} due today`:''}
+            {attentionList().length?<span> · <b>{attentionList()[0].p.n.split(' ')[0]} needs attention</b></span>:<span> · everyone is on track</span>}
+            {reqN?<span> · <b>{reqN} waiting approval</b></span>:null}
+            {issN?<span> · <b>{issN} issue{issN>1?'s':''} to assign</b></span>:null}
+            {qExts.length?<span> · <b>{qExts.length} extension{qExts.length>1?'s':''} to review</b></span>:null}
+          </div>
+          <div className="chips">
+            {over?<span className="chip-s red">{over} overdue</span>:null}
+            {today?<span className="chip-s amber">{today} due today</span>:null}
+            {!over&&!today?<span className="chip-s green">On track</span>:null}
+            {reqN+qExts.length?<span className="chip-s teal">{reqN+qExts.length} to approve</span>:null}
+            {issN?<span className="chip-s amber">{issN} to assign</span>:null}
+          </div>
+        </div>
+      </div>
+      {view==='dashboard'&&<Dashboard ctx={ctx} open={open} over={over} today={today} done={done}/>}
+      {view==='tasks'&&<TasksView ctx={ctx}/>}
+      {view==='calendar'&&<CalendarView ctx={ctx}/>}
+      {view==='people'&&<PeopleView ctx={ctx}/>}
+      {view==='reports'&&<ReportsView ctx={ctx}/>}
+    </div>
+    {drawerIdx>=0&&<><div className="scrim" onClick={()=>setDrawerIdx(-1)}/><Drawer ctx={ctx} idx={drawerIdx}/></>}
+    {modal&&<QuickCapture ctx={ctx} close={()=>setModal(false)}/>}
+    {empModal&&<EmpModal ctx={ctx} close={()=>setEmpModal(false)}/>}
+    {toast&&<div className="toast"><I n="check"/>{toast}</div>}
+  </div>;
+}
+
+/* ============ topbar + search ============ */
+function Topbar({ctx,searchRef}){
+  const [q,setQ]=useState('');
+  const TITLES={dashboard:"Dashboard",tasks:"Tasks",calendar:"Team calendar",people:"People & roles",reports:"Reports"};
+  const ql=q.trim().toLowerCase();
+  const tHits=ql?tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)&&(o.t.t.toLowerCase().includes(ql)||assignees(o.t).some(a=>byShort(a)&&byShort(a).n.toLowerCase().includes(ql)))).slice(0,5):[];
+  const pHits=ql?ctx.scope.filter(p=>p.n.toLowerCase().includes(ql)||p.dept.toLowerCase().includes(ql)).slice(0,4):[];
+  return <div className="topbar">
+    <h1>{TITLES[ctx.view]}</h1>
+    <div className="tb-right">
+      <div className="searchwrap">
+        <I n="search"/>
+        <input ref={searchRef} className="search" placeholder="Search tasks or people…" value={q} onChange={e=>setQ(e.target.value)}/>
+        <span className="search-kbd">/</span>
+        {ql?<div className="searchdrop">
+          {tHits.length?<div className="sd-head">Tasks</div>:null}
+          {tHits.map(o=>{const p=byShort(o.t.who);
+            return <div key={'t'+o.i} className="sd-item" onClick={()=>{setQ('');ctx.setView('tasks');ctx.setDrawerIdx(o.i);}}>
+              <span className="avex">{p?p.av:'?'}</span><div><div className="t">{o.t.t}</div><div className="m">{p?p.n:o.t.who} · {fmtDate(o.t.date)} · {ST[o.t.status].l}</div></div></div>;})}
+          {pHits.length?<div className="sd-head">People</div>:null}
+          {pHits.map(p=><div key={'p'+p.s} className="sd-item" onClick={()=>{setQ('');ctx.setView('people');}}>
+            <span className="avex" style={{background:avColor(p.n),color:'#fff'}}>{p.av}</span><div><div className="t">{p.n}</div><div className="m">{p.role} · {p.dept}</div></div></div>)}
+          {!tHits.length&&!pHits.length?<div className="sd-empty">No matches for “{q}”</div>:null}
+        </div>:null}
+      </div>
+      <button className="btn primary" onClick={()=>ctx.setModal(true)}><I n="plus"/>New task</button>
+      <div className="av">{ctx.viewer.av}</div>
+    </div>
+  </div>;
+}
+
+/* ============ shared bits ============ */
+const Empty=({t,s})=><div className="empty"><I n="inbox"/><div><b>{t}</b><br/>{s}</div></div>;
+function TagsFor({t}){
+  return <>
+    <span className="tag gray">{TYPES[t.type||'work']}</span>
+    {t.bucket?<span className="tag blue">{BUCKETS[t.bucket]||t.bucket}</span>:null}
+    {t.status!=='open'&&t.status!=='done'?<span className={'tag '+ST[t.status].c}>{ST[t.status].l}</span>:null}
+    {t.recur?<span className="tag teal" title={'Repeats '+recurLabel(t.recur,t.recurOn).toLowerCase()+' — next occurrence is created on completion'}>↻ {recurLabel(t.recur,t.recurOn)}</span>:null}
+    {t.selfAssigned?<span className="tag green">Self{t.instructedBy?' · per '+t.instructedBy:''}</span>:null}
+    {t.origin?<span className={'tag '+(t.origin==='issue'?'amber':'blue')}>{t.origin==='issue'?'Reported issue':'Supply request'}</span>:null}
+    {(t.log&&t.log.length)||t.note?<span className="tag teal"><I n="note" s={11}/> {t.log?t.log.length:1}</span>:null}
+    {t.files&&t.files.length?<span className="tag gray"><I n="clip" s={11}/> {t.files.length}</span>:null}
+    {t.extReq?<span className="tag amber"><I n="clock" s={11}/> ext → {fmtDate(t.extReq.newDate)}</span>:null}
+  </>;
+}
+function TaskRow({t,i,ctx}){
+  const p=byShort(t.who),od=isOverdue(t),dn=t.status==='done';
+  return <div className={'trow'+(dn?' done':'')} onClick={()=>ctx.setDrawerIdx(i)}>
+    <button className={'donebtn'+(dn?' on':'')} onClick={e=>{e.stopPropagation();ctx.quickDone(i);}} aria-label="Mark done"><I n="check"/></button>
+    <div className="body">
+      <div className="tt">{t.t}</div>
+      <div className="meta">
+        <span className="avex">{p?p.av:'?'}</span>{p?p.n:t.who}
+        {t.coWho&&t.coWho.length?<span className="tag teal" title={'Jointly with '+t.coWho.map(a=>(byShort(a)||{n:a}).n).join(', ')}>+{t.coWho.length} joint</span>:null}
+        {t.coWho&&t.coWho.length&&t.status!=='done'&&(t.doneBy||[]).length?<span className="tag green">✓ {(t.doneBy||[]).length}/{assignees(t).length} · pending {assignees(t).filter(a=>!(t.doneBy||[]).includes(a)).map(a=>(byShort(a)||{n:a}).n.split(' ')[0]).join(', ')}</span>:null}
+        {t.reopened?<span className="tag red" title={t.reopened.comment||''}>↻ Reopened</span>:null}
+        <TagsFor t={t}/>
+      </div>
+    </div>
+    <span className="prio" style={{background:PRIOS[t.prio||'med'].c}} title={PRIOS[t.prio||'med'].l+' priority'}/>
+    {dn?<span className="duecell"><I n="check"/>Closed</span>
+      :od?<span className="duecell over"><I n="alert"/>{fmtDate(t.date)} · {overdueDays(t)}d late</span>
+      :isToday(t)?<span className="duecell" style={{color:'var(--amber)'}}><I n="clock"/>Today{t.time?' · '+fmtTime(t.time):''}</span>
+      :<span className="duecell"><I n="cal"/>{fmtDate(t.date)}{t.time?' · '+fmtTime(t.time):''}</span>}
+  </div>;
+}
+
+/* ============ dashboard ============ */
+function Bars({rows,pct}){
+  if(!rows.length)return <Empty t="No data yet" s="Assign a task to see the chart fill up."/>;
+  const max=Math.max(1,...rows.map(r=>r[1]));
+  return <>{rows.map(([k,v,vd],ix)=><div className="barrow" key={ix}>
+    <div className="k">{k}</div><div className="track"><i style={{width:(v/max*100)+'%',background:vd||undefined}}/></div><div className="v">{pct?v+'%':v}</div></div>)}</>;
+}
+function Dashboard({ctx,open,over,today,done}){
+  const {mine,shorts}=ctx;
+  const [loadBucket,setLoadBucket]=useState('all');
+  const segs=deliveryStats(mine);
+  const segTot=segs.reduce((a,x)=>a+x.v,0);
+  const pend=ctx.qReqs.length+ctx.qExts.length;
+  const bTot=mine.length||1;
+  const bRows=Object.keys(BUCKETS).map(k=>({k,c:mine.filter(t=>t.bucket===k).length})).filter(o=>o.c).sort((a,b)=>b.c-a.c);
+  const wStaff=ctx.scope.filter(p=>p.role==='Teacher');
+  const wCnt=p=>tasks.filter(t=>hasWho(t,p.s)&&t.status!=='done'&&(loadBucket==='all'||t.bucket===loadBucket)).length;
+  const wRows=wStaff.map(p=>({p,l:wCnt(p)})).sort((a,b)=>b.l-a.l);
+  const wMax=Math.max(1,...wRows.map(o=>o.l));
+  const ods=tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,shorts)&&isOverdue(o.t)).sort((a,b)=>a.t.date<b.t.date?-1:1);
+  const attn=ctx.attentionList().slice(0,4);
+  const attnColors=['var(--red)','var(--amber)','var(--accent)','var(--blue)'];
+  const KP=[['Open tasks',open,'var(--accent)','var(--accent-soft)','checkc',100],
+    ['Overdue',over,'var(--red)','var(--red-soft)','alert',open?over/open*100:0],
+    ['Due today',today,'var(--amber)','var(--amber-soft)','clock',open?today/open*100:0],
+    ['Completed',done,'var(--green)','var(--green-soft)','check',100]];
+  const pIss=ctx.qReqs.filter(o=>o.r.kind==='issue').length;
+  const pApp=ctx.qReqs.filter(o=>o.r.kind==='request').length+ctx.qExts.length;
+  return <div className="view">
+    <div className="kpis">
+      {KP.map(([l,n,c,cs,ic,p])=><div className="kpi" key={l}>
+        <div className="top"><span className="l">{l}</span><span className="ic" style={{background:cs,color:c}}><I n={ic}/></span></div>
+        <div className="n" style={{color:c}}>{n}</div><div className="bar"><i style={{width:Math.max(6,p)+'%',background:c}}/></div></div>)}
+      <div className="kpi" style={{cursor:'pointer',borderColor:pend?'var(--amber)':undefined}} title="Jump to the queue"
+        onClick={()=>{const el=document.getElementById('dashReq');el&&el.scrollIntoView({behavior:'smooth',block:'center'});}}>
+        <div className="top"><span className="l">Waiting in queue</span><span className="ic" style={{background:'var(--amber-soft)',color:'var(--amber)'}}><I n="tool"/>{pend?<span className="pulsedot"/>:null}</span></div>
+        <div className="n" style={{color:pend?'var(--amber)':'var(--green)'}}>{pend}</div>
+        <div className="l" style={{marginTop:4}}>{pIss} to assign · {pApp} to approve</div>
+      </div>
+    </div>
+    <div className="grid2">
+      <div>
+        <div className="panel">
+          <div className="h-row"><h3>Delivery performance</h3><span className="tag gray">{segTot?Math.round(segs[0].v/segTot*100)+'% on time':'no data'}</span></div>
+          <div style={{display:'flex',gap:24,alignItems:'center',flexWrap:'wrap'}}>
+            <div dangerouslySetInnerHTML={{__html:donutSVG(segs,132,22)}}/>
+            <div style={{flex:1,minWidth:190}}>
+              {segs.map(x=>{const tot=segTot||1;return <div className="leg" key={x.l}><span className="dot2" style={{background:x.c}}/>{x.l}<b>{x.v} · {Math.round(x.v/tot*100)}%</b></div>;})}
+            </div>
+          </div>
+        </div>
+        <div className="panel">
+          <div className="h-row"><h3>Tasks by department</h3><span className="tag gray">% of all tasks</span></div>
+          <Bars pct rows={bRows.map(o=>[BUCKETS[o.k],Math.round(o.c/bTot*100)])}/>
+        </div>
+        <div className="panel">
+          <div className="h-row"><h3>Team workload</h3>
+            <select className="fsel" style={{padding:'6px 10px',fontSize:12.5}} value={loadBucket} onChange={e=>setLoadBucket(e.target.value)}>
+              <option value="all">All departments</option>
+              {Object.entries(BUCKETS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+            </select></div>
+          <div className="scrollbox">
+            {wRows.map(o=>{const c=o.l>=3?'var(--red)':o.l===2?'var(--amber)':'var(--green)';
+              return <div className="barrow" key={o.p.s}><div className="k">{o.p.s}</div>
+                <div className="track"><i style={{width:(o.l?Math.max(4,o.l/wMax*100):0)+'%',background:c}}/></div><div className="v">{o.l}</div></div>;})}
+          </div>
+        </div>
+      </div>
+      <div>
+        <QueuePanel ctx={ctx}/>
+        <div className="panel">
+          <div className="h-row"><h3><I n="spark" c="var(--accent-ink)"/>Who needs attention</h3><span className="tag green">FREE · LIVE</span></div>
+          {attn.length?attn.map((x,ix)=><div className="attn" key={x.p.s}>
+            <div className="ring" style={{background:attnColors[ix%4]}}>{x.p.av}</div>
+            <div><div className="nm">{x.p.n}</div><div className="rs">{x.reason} · {x.p.dept}</div></div>
+            <div className="act"><button className="linkbtn" onClick={()=>ctx.remindPerson(x.p.s)}>Remind</button></div></div>)
+          :<Empty t="Everyone is on track" s="No overdue work or overloaded people right now."/>}
+        </div>
+        <div className="panel">
+          <div className="h-row"><h3><I n="alert" c="var(--red)"/>Overdue — act now</h3><span className="tag red">{ods.length?ods.length+' late':'clear'}</span></div>
+          {ods.length?ods.slice(0,4).map(o=>{const p=byShort(o.t.who);
+            return <div className="attn" key={o.i}>
+              <div className="ring" style={{background:'var(--red)'}}>{p?p.av:'?'}</div>
+              <div style={{flex:1,minWidth:0}}><div className="nm">{o.t.t}</div><div className="rs">{p?p.n:o.t.who} · {overdueDays(o.t)} day{overdueDays(o.t)!=1?'s':''} late · was due {fmtDate(o.t.date)}</div></div>
+              <div className="act"><button className="linkbtn" onClick={()=>ctx.remindPerson(o.t.who)}>Remind</button>
+              <button className="linkbtn" onClick={()=>ctx.setDrawerIdx(o.i)}>Open</button></div></div>;})
+          :<Empty t="Nothing overdue" s="All work is on schedule."/>}
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+function QueuePanel({ctx}){
+  const head=byName(MAINT_HEAD);
+  const [sel,setSel]=useState({});
+  const total=ctx.qReqs.length+ctx.qExts.length;
+  return <div className="panel" id="dashReq">
+    <div className="h-row"><h3><I n="tool" c="var(--amber)"/>Incoming reports & requests</h3><span className="tag amber">{total?total+' waiting':'clear'}</span></div>
+    {total?<>
+      {ctx.qExts.map(o=>{const t=o.t,p=byShort(t.who),can=ctx.canApprove(t.who);
+        return <div className="attn" key={'e'+o.i}>
+          <div className="ring" style={{background:'var(--blue)'}}><I n="clock" c="#fff"/></div>
+          <div style={{flex:1,minWidth:0}}>
+            <div className="nm">{t.t} <span className="tag blue">Extension</span></div>
+            <div className="rs">{p?p.n:t.who} asks {fmtDate(t.date)} → <b>{fmtDate(t.extReq.newDate)}</b>{t.extReq.reason?' · “'+t.extReq.reason+'”':''} · approver: {p&&p.boss?p.boss.split(' ')[0]+' (dept boss)':'—'}</div></div>
+          <div className="act">{can?<><button className="linkbtn" onClick={()=>ctx.approveExt(o.i)}>Approve</button>
+            <button className="linkbtn mut" onClick={()=>ctx.rejectExt(o.i)}>Reject</button></>
+            :<span className="rs" style={{whiteSpace:'nowrap'}}>Waiting for {p&&p.boss?p.boss.split(' ')[0]:'manager'}</span>}</div>
+        </div>;})}
+      {ctx.qReqs.map(o=>{const r=o.r,p=byShort(r.from);
+        if(r.kind==='issue'){
+          const can=ctx.canAssignIssue,sug=suggestFixer(r.t);
+          const pool=STAFF.filter(x=>x.dept==='Maintenance'&&x.role==='Teacher');
+          const cur=sel[o.i]||(sug?sug.s:pool[0]&&pool[0].s);
+          return <div className="attn" key={'r'+o.i}>
+            <div className="ring" style={{background:'var(--amber)'}}><I n="tool" c="#fff"/></div>
+            <div style={{flex:1,minWidth:0}}>
+              <div className="nm">{r.t} <span className="tag amber">Issue</span></div>
+              <div className="rs">From {p?p.n:r.from} · {fmtDate(r.date)}{r.note?' · “'+r.note+'”':''} · direct to {head?head.n.split(' ')[0]:'—'} (maintenance head)</div>
+              {r.files&&r.files.length?<div className="filelist">{r.files.map((x,ix)=>x.url?<img key={ix} className="thumb" src={x.url} title={x.name}/>:<span key={ix} className="filechip">{x.name}</span>)}</div>:null}
+              {can?<>
+                <div className="rs" style={{marginTop:6,color:'var(--accent-ink)'}}>✦ Suggested: <b>{sug?byShort(sug.s).n:'—'}</b>{sug?' — '+sug.why:''}</div>
+                <div style={{display:'flex',gap:8,marginTop:7,alignItems:'center'}}>
+                  <select className="fsel" style={{padding:'6px 9px',fontSize:12.5}} value={cur} onChange={e=>setSel({...sel,[o.i]:e.target.value})}>
+                    {pool.map(x=><option key={x.s} value={x.s}>{x.n}</option>)}
+                  </select>
+                  <button className="linkbtn" onClick={()=>ctx.assignIssue(o.i,cur)}>Assign →</button>
+                </div></>
+                :<div className="rs" style={{marginTop:4}}>Waiting for {head?head.n.split(' ')[0]:'head'} to assign</div>}
+            </div>
+          </div>;
+        }
+        return <div className="attn" key={'r'+o.i}>
+          <div className="ring" style={{background:'var(--accent)'}}><I n="box" c="#fff"/></div>
+          <div style={{flex:1,minWidth:0}}>
+            <div className="nm">{r.t} <span className="tag teal">Request</span></div>
+            <div className="rs">From {p?p.n:r.from} · {fmtDate(r.date)}{r.note?' · “'+r.note+'”':''} · approver: {p&&p.boss?p.boss.split(' ')[0]+' (dept boss)':'—'}</div></div>
+          <div className="act">{ctx.canApprove(r.from)?<><button className="linkbtn" onClick={()=>ctx.approveReq(o.i)}>Approve</button>
+            <button className="linkbtn mut" onClick={()=>ctx.declineReq(o.i)}>Decline</button></>
+            :<span className="rs" style={{whiteSpace:'nowrap'}}>Waiting for {p&&p.boss?p.boss.split(' ')[0]:'manager'}</span>}</div>
+        </div>;})}
+    </>:<Empty t="Queue is clear" s="Supply requests wait here for approval; maintenance issues go straight to the maintenance head; extension requests to the dept boss."/>}
+  </div>;
+}
+
+/* ============ tasks view ============ */
+function TasksView({ctx}){
+  const [ft,setFt]=useState('all');const [fs,setFs]=useState('all');const [fw,setFw]=useState('all');const [fb,setFb]=useState('all');
+  const rows=tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)
+    &&(ft==='all'||(o.t.type||'work')===ft)&&(fs==='all'||o.t.status===fs)&&(fw==='all'||hasWho(o.t,fw))&&(fb==='all'||o.t.bucket===fb));
+  const g={over:[],today:[],up:[],done:[]};
+  rows.forEach(o=>{if(o.t.status==='done')g.done.push(o);else if(isOverdue(o.t))g.over.push(o);else if(isToday(o.t))g.today.push(o);else g.up.push(o);});
+  g.over.sort((a,b)=>a.t.date<b.t.date?-1:1);g.up.sort((a,b)=>a.t.date<b.t.date?-1:1);
+  const grp=(cls,ic,label,arr)=>arr.length?<React.Fragment key={label}>
+    <div className={'group-h '+cls}><I n={ic}/>{label}<span className="cnt">{arr.length}</span></div>
+    {arr.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx}/>)}</React.Fragment>:null;
+  const any=rows.length>0;
+  return <div className="view">
+    <div className="filters">
+      <select className="fsel" value={ft} onChange={e=>setFt(e.target.value)}><option value="all">All types</option>
+        {Object.entries(TYPES).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
+      <select className="fsel" value={fs} onChange={e=>setFs(e.target.value)}><option value="all">All statuses</option>
+        {Object.entries(ST).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}</select>
+      <select className="fsel" value={fw} onChange={e=>setFw(e.target.value)}><option value="all">All employees</option>
+        {ctx.scope.filter(p=>p.role==='Teacher'||p.n===ctx.viewer.n).map(p=><option key={p.s} value={p.s}>{p.n}</option>)}</select>
+      <select className="fsel" value={fb} onChange={e=>setFb(e.target.value)}><option value="all">All departments</option>
+        {Object.entries(BUCKETS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
+      <div className="spacer"/>
+      <button className="btn soft" onClick={()=>ctx.exportCSV('tasks')}><I n="dl"/>Export CSV</button>
+    </div>
+    {any?<>
+      {grp('red','alert','Overdue',g.over)}
+      {grp('amber','clock','Due today',g.today)}
+      {grp('','cal','Upcoming',g.up)}
+      {grp('','check','Done',g.done)}
+    </>:<Empty t="No tasks match" s="Try clearing a filter, or press N to assign a new task."/>}
+  </div>;
+}
+
+/* ============ drawer ============ */
+function Drawer({ctx,idx}){
+  const t=tasks[idx];
+  const [note,setNote]=useState('');
+  const [reassign,setReassign]=useState(false);
+  const [reDate,setReDate]=useState('');
+  const [reNote,setReNote]=useState('');
+  useEffect(()=>{setNote('');setReassign(false);setReDate('');setReNote('');},[idx]);
+  if(!t)return null;
+  const p=byShort(t.who),od=isOverdue(t);
+  const tl=[{w:'Assigned to '+assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),d:fmtDate(t.date)+' due date set'}];
+  if(t.status==='inprogress'||t.status==='partial')tl.push({w:'Marked '+ST[t.status].l.toLowerCase(),d:'from mobile'});
+  const logs=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
+  logs.forEach(x=>tl.push({w:'“'+x.text+'”',d:(x.by?x.by.split(' ')[0]:'')+(x.when?' · '+x.when:'')}));
+  if(t.extReq)tl.push({w:'Extension requested → '+fmtDate(t.extReq.newDate),d:t.extReq.reason||'pending approval'});
+  if(t.reopened)tl.push({w:'Reopened by '+t.reopened.by.split(' ')[0]+(t.reopened.comment?' — “'+t.reopened.comment+'”':''),d:'new due '+fmtDate(t.date)});
+  if(t.coWho&&t.coWho.length&&(t.doneBy||[]).length&&t.status!=='done')tl.push({w:'Done by '+(t.doneBy||[]).map(a=>(byShort(a)||{n:a}).n.split(' ')[0]).join(', '),d:'waiting on '+assignees(t).filter(a=>!(t.doneBy||[]).includes(a)).map(a=>(byShort(a)||{n:a}).n.split(' ')[0]).join(', ')});
+  if(t.status==='done')tl.push({w:'Completed',d:t.doneOn?fmtDate(t.doneOn):'closed'});
+  return <div className="drawer">
+    <div className="dr-head"><h3>{t.t}</h3>
+      <button className="iconbtn" onClick={()=>ctx.setDrawerIdx(-1)}><I n="x"/></button></div>
+    <div className="dr-body">
+      <div className="dr-sec">Status</div>
+      <div className="segs">{Object.keys(ST).map(s=>
+        <button key={s} className={t.status===s?'on':''} onClick={()=>{if(s==='done'){const nd=completeTask(t);ctx.say(nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'Status → Done');}else{t.status=s;delete t.doneOn;ctx.say('Status → '+ST[s].l);}ctx.R();}}>{ST[s].l}</button>)}</div>
+      {t.coWho&&t.coWho.length?<>
+        <div className="dr-sec">Completion — each member confirms</div>
+        {assignees(t).map(a=>{const q=byShort(a);const dn=(t.doneBy||[]).includes(a);
+          return <div className="kv" key={a}>
+            <div className="k"><span className="avex">{q?q.av:'?'}</span></div>
+            <div className="v" style={{flex:1}}>{q?q.n:a}</div>
+            <button className={'btn '+(dn?'primary':'ghost')} style={{padding:'6px 12px',minHeight:0}}
+              onClick={()=>{t.doneBy=dn?(t.doneBy||[]).filter(x=>x!==a):[...(t.doneBy||[]),a];
+                if(assignees(t).every(x=>(t.doneBy||[]).includes(x))){const nd=completeTask(t);ctx.say(nd?'All done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'All members done — task completed');}
+                else if(t.status==='done'){t.status='open';delete t.doneOn;}
+                ctx.R();}}>{dn?'✓ Done':'Pending'}</button>
+          </div>;})}
+      </>:null}
+      {t.status==='done'&&ctx.canApprove(t.who)?<>
+        <div className="dr-sec" style={{color:'var(--red)'}}>Not up to the mark? Reopen</div>
+        <div className="kv"><div className="k">New due</div><div className="v" style={{flex:1}}>
+          <input type="date" className="fsel" style={{width:'100%'}} value={reDate} onChange={e=>setReDate(e.target.value)}/></div></div>
+        <textarea className="dr-note" value={reNote} onChange={e=>setReNote(e.target.value)} placeholder="What needs to be fixed? (sent to the assignee)"/>
+        <button className="btn ghost" style={{marginTop:9,color:'var(--red)'}} onClick={()=>{
+          if(!reDate){ctx.say('Pick a new due date first');return;}
+          t.status='open';t.date=reDate;delete t.doneOn;t.doneBy=[];
+          t.reopened={by:ctx.viewer.n,comment:reNote.trim()};
+          t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
+          t.log.push({by:ctx.viewer.n,when:fmtDate(iso(TODAY)),text:'Reopened — '+(reNote.trim()||'not up to the mark')});
+          if(reNote.trim())t.note=reNote.trim();
+          ctx.R();ctx.say('Task reopened — new due '+fmtDate(t.date)+' · assignee notified');}}>
+          <I n="redo"/>Reopen task</button>
+      </>:null}
+      <div className="dr-sec">Details</div>
+      <div className="kv"><div className="k">Assignee{t.coWho&&t.coWho.length?'s':''}</div>
+        <div className="v">{assignees(t).map(a=>{const q=byShort(a);return <React.Fragment key={a}><span className="avex">{q?q.av:'?'}</span>{q?q.n:a}</React.Fragment>;})}
+        {t.coWho&&t.coWho.length?<span className="tag teal">joint</span>:<span className="roletag">{p?p.dept:''}</span>}</div></div>
+      {reassign?<div className="kv"><div className="k">Move to</div><div className="v" style={{flex:1}}>
+        <select className="fsel" style={{width:'100%'}} defaultValue="" onChange={e=>{if(!e.target.value)return;t.who=e.target.value;t.coWho=undefined;ctx.R();ctx.say('Reassigned to '+byShort(e.target.value).n);setReassign(false);}}>
+          <option value="">Choose a person…</option>
+          {ctx.scope.filter(x=>x.role==='Teacher').map(x=><option key={x.s} value={x.s}>{x.n} · {x.dept}</option>)}
+        </select></div></div>:null}
+      <div className="kv"><div className="k">Due</div><div className="v" style={{color:od?'var(--red)':undefined}}>{fmtDate(t.date)}{t.time?' · '+fmtTime(t.time):''}{od?' · '+overdueDays(t)+' days late':''}</div></div>
+      <div className="kv"><div className="k">Type</div><div className="v"><span className="tag gray">{TYPES[t.type||'work']}</span></div></div>
+      <div className="kv"><div className="k">Department</div><div className="v"><span className="tag blue">{BUCKETS[t.bucket]||'—'}</span></div></div>
+      <div className="kv"><div className="k">Priority</div><div className="v"><span className="prio" style={{background:PRIOS[t.prio||'med'].c}}/>{PRIOS[t.prio||'med'].l}</div></div>
+      {t.recur?<div className="kv"><div className="k">Repeats</div><div className="v"><span className="tag teal">↻ {recurLabel(t.recur,t.recurOn)}</span><span style={{fontWeight:500,color:'var(--muted)',fontSize:12.5}}>next created on completion</span></div></div>:null}
+      {t.selfAssigned?<div className="kv"><div className="k">Origin</div><div className="v"><span className="tag green">Self-logged</span>{t.instructedBy?' as per '+t.instructedBy:''}</div></div>:null}
+      {t.extReq?<div className="kv"><div className="k">Extension</div><div className="v">asks {fmtDate(t.extReq.newDate)}{t.extReq.reason?' — “'+t.extReq.reason+'”':''}</div></div>:null}
+      {t.files&&t.files.length?<div className="kv" style={{alignItems:'flex-start'}}><div className="k">Attachments</div>
+        <div className="v"><span className="filelist" style={{marginTop:0}}>{t.files.map((x,ix)=>x.url?<img key={ix} className="thumb" src={x.url} title={x.name}/>:<span key={ix} className="filechip">{x.name}</span>)}</span></div></div>:null}
+      <div className="dr-sec">Job log — notes & updates</div>
+      <textarea className="dr-note" value={note} onChange={e=>setNote(e.target.value)} placeholder="Add an update — progress, blockers, instructions… (kept forever, visible to assignee and boss)"/>
+      <button className="btn soft" style={{marginTop:9}} onClick={()=>{
+        const txt=note.trim(); if(!txt){ctx.say('Write something first');return;}
+        t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
+        t.log.push({by:ctx.viewer.n,when:fmtDate(iso(TODAY)),text:txt});
+        t.note=txt;setNote('');ctx.R();ctx.say('Added to the job log');}}><I n="note"/>Add to log</button>
+      <div className="dr-sec">Add proof of work — photos & files</div>
+      {t.files&&t.files.length?<div className="filelist" style={{marginTop:0,marginBottom:8}}>{t.files.map((x,ix)=>x.url?<img key={ix} className="thumb" src={x.url} title={x.name}/>:<span key={ix} className="filechip">{x.name}</span>)}</div>:null}
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        {[['camera','Camera',{accept:'image/*',capture:'environment'}],['image','Photos',{accept:'image/*',multiple:true}],['clip','Files',{multiple:true}]].map(([ic,l,at])=>
+          <label key={l} className="btn ghost" style={{flex:1,justifyContent:'center',cursor:'pointer',minWidth:90}}>
+            <I n={ic}/>{l}
+            <input type="file" style={{display:'none'}} {...at} onChange={e=>{
+              const nf=[...e.target.files].map(x=>({name:x.name,url:(x.type||'').startsWith('image/')?URL.createObjectURL(x):null}));
+              if(!nf.length)return;
+              t.files=(t.files||[]).concat(nf);ctx.R();ctx.say(nf.length+' attachment'+(nf.length>1?'s':'')+' added');}}/>
+          </label>)}
+      </div>
+      <div className="dr-sec">Activity</div>
+      <div className="timeline">{tl.map((x,ix)=><div className="tl" key={ix}>{x.w}<div className="when">{x.d}</div></div>)}</div>
+    </div>
+    <div className="dr-actions">
+      <button className="btn ghost" style={{flex:1}} onClick={()=>ctx.remindPerson(t.who)}><I n="bell"/>Remind</button>
+      <button className="btn ghost" style={{flex:1}} onClick={()=>setReassign(!reassign)}><I n="redo"/>Reassign</button>
+      {t.status!=='done'?<button className="btn primary" style={{flex:1}} onClick={()=>{const nd=completeTask(t);ctx.R();ctx.setDrawerIdx(-1);ctx.say(nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'Task marked done');}}><I n="check"/>Done</button>:null}
+    </div>
+  </div>;
+}
+
+/* ============ calendar ============ */
+function CalendarView({ctx}){
+  const [base,setBase]=useState(new Date(2026,6,1));
+  const [selDay,setSelDay]=useState(null);
+  const [fw,setFw]=useState('all');
+  const [fb,setFb]=useState('all');
+  const y=base.getFullYear(),m=base.getMonth();
+  const firstDow=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate();
+  const vis=tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)&&o.t.date&&(fb==='all'||o.t.bucket===fb)&&(fw==='all'||hasWho(o.t,fw)));
+  const empOpts=ctx.scope.filter(p=>(p.role==='Teacher'||p.n===ctx.viewer.n)&&(fb==='all'||tasks.some(t=>hasWho(t,p.s)&&t.bucket===fb&&t.status!=='done')));
+  const byDay={};vis.forEach(o=>{const d=new Date(o.t.date+'T00:00:00');if(d.getFullYear()===y&&d.getMonth()===m)(byDay[d.getDate()]=byDay[d.getDate()]||[]).push(o);});
+  const monthEvs=Object.values(byDay).flat();
+  const bks=[...new Set(monthEvs.map(o=>o.t.bucket).filter(Boolean))];
+  const cells=[];
+  for(let i=0;i<firstDow;i++)cells.push(<div key={'e'+i} className="calcell empty2"/>);
+  for(let d=1;d<=days;d++){
+    const dow=new Date(y,m,d).getDay();
+    const isT=y===TODAY.getFullYear()&&m===TODAY.getMonth()&&d===TODAY.getDate();
+    const evs=byDay[d]||[];
+    cells.push(<div key={d} className={'calcell'+(isT?' today':'')+(dow===0||dow===6?' wkend':'')} onClick={()=>setSelDay(d)}>
+      <div className="caldate"><span>{d}</span>{isT?<span className="tdy">TODAY</span>:null}</div>
+      {evs.slice(0,3).map(o=>{const p=byShort(o.t.who),od=isOverdue(o.t),dn=o.t.status==='done';
+        return <div key={o.i} className="calev" style={{background:bucketColor(o.t.bucket),opacity:dn?.55:1,boxShadow:od?'0 0 0 1.5px var(--red)':undefined,cursor:'pointer'}}
+          title={dn?'Done — open task':'Open task'} onClick={e=>{e.stopPropagation();ctx.setDrawerIdx(o.i);}}>
+          <span className="who2">{dn?'✓':p?p.av:''}</span><span className="txt" style={{textDecoration:dn?'line-through':undefined}}>{o.t.t}</span></div>;})}
+      {evs.length>3?<div className="calmore">+{evs.length-3} more</div>:null}
+    </div>);
+  }
+  return <div className="view">
+    <div className="calhead">
+      <button className="navb" onClick={()=>{setBase(new Date(y,m-1,1));setSelDay(null);}}><I n="chevl"/></button>
+      <div className="calmon">{base.toLocaleString('en',{month:'long',year:'numeric'})}</div>
+      <button className="navb" onClick={()=>{setBase(new Date(y,m+1,1));setSelDay(null);}}><I n="chevr"/></button>
+      <div className="spacer"/>
+      <select className="fsel" value={fb} onChange={e=>{setFb(e.target.value);setFw('all');}}>
+        <option value="all">All departments</option>
+        {Object.entries(BUCKETS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
+      <select className="fsel" value={fw} onChange={e=>setFw(e.target.value)}>
+        <option value="all">{fb==='all'?'All employees':'All in '+BUCKETS[fb]}</option>
+        {empOpts.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}</select>
+    </div>
+    <div className="panel">
+      <div className="calgrid">
+        {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=><div key={d} className="caldow">{d}</div>)}
+        {cells}
+      </div>
+      {bks.length?<div className="callegend">
+        {bks.map(b=><span key={b}><span className="ldot" style={{background:bucketColor(b)}}/>{BUCKETS[b]||b}</span>)}
+        <span style={{marginLeft:'auto'}}><span className="ldot" style={{background:'#fff',boxShadow:'0 0 0 1.5px var(--red)'}}/>red ring = overdue</span>
+      </div>:null}
+    </div>
+    {selDay!=null?<div className="panel">
+      {byDay[selDay]?<>
+        <div className="h-row"><h3><I n="cal"/>Due on {selDay} {base.toLocaleString('en',{month:'long'})} — {byDay[selDay].length} task{byDay[selDay].length!=1?'s':''}</h3></div>
+        {byDay[selDay].map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx}/>)}
+      </>:<Empty t={'Nothing due on '+selDay+' '+base.toLocaleString('en',{month:'long'})} s="Pick another day, or press N to schedule a task."/>}
+    </div>:null}
+  </div>;
+}
+
+/* ============ people ============ */
+function TreeNode({name}){
+  const p=byName(name);const kids=STAFF.filter(x=>x.boss===name);
+  return <div>
+    <div className="tnode"><span className="avex" style={{background:avColor(p.n),color:'#fff'}}>{p.av}</span><b>{p.n}</b><span className={'tag '+(ROLE_TAG[p.role]||'gray')}>{p.role}</span></div>
+    {kids.length?<div className="tchild">{kids.map(k=><TreeNode key={k.n} name={k.n}/>)}</div>:null}
+  </div>;
+}
+function PeopleView({ctx}){
+  const [q,setQ]=useState('');const [fr,setFr]=useState('all');
+  const canM=ctx.role==='admin'||ctx.role==='mgmt';
+  const load=workloadMap();
+  const list=ctx.scope.filter(p=>(fr==='all'||p.role===fr)&&(!q||p.n.toLowerCase().includes(q.toLowerCase())||p.dept.toLowerCase().includes(q.toLowerCase())));
+  const maxL=Math.max(1,...ctx.scope.map(p=>load[p.s]||0));
+  const removeEmp=s=>{const p=byShort(s);if(!p)return;
+    const op=tasks.filter(t=>hasWho(t,s)&&t.status!=='done').length;
+    if(op){ctx.say('Reassign '+p.n.split(' ')[0]+"'s "+op+' open task'+(op>1?'s':'')+' first');return;}
+    if(Object.values(ROLE_VIEWER).includes(p.n)){ctx.say(p.n.split(' ')[0]+" backs a demo role view and can't be removed");return;}
+    if(STAFF.some(x=>x.boss===p.n)){ctx.say('Move '+p.n.split(' ')[0]+"'s direct reports to another manager first");return;}
+    if(!window.confirm('Remove '+p.n+' from TeamFlow?'))return;
+    STAFF.splice(STAFF.indexOf(p),1);ctx.R();ctx.say(p.n+' removed');};
+  return <div className="view">
+    <div className="filters">
+      <input className="fsel" style={{width:230}} placeholder="Search name or department…" value={q} onChange={e=>setQ(e.target.value)}/>
+      <select className="fsel" value={fr} onChange={e=>setFr(e.target.value)}><option value="all">All roles</option>
+        {Object.keys(ROLE_TAG).map(r=><option key={r}>{r}</option>)}</select>
+      <div className="spacer"/>
+      {canM?<button className="btn primary" onClick={()=>ctx.setEmpModal(true)}><I n="plus"/>Add employee</button>:null}
+    </div>
+    <div className="grid2">
+      <div className="panel" style={{padding:'6px 6px 4px'}}>
+        <table><thead><tr><th>Name</th><th>Role</th><th>Department</th><th>Reports to</th><th>Workload</th>{canM?<th/>:null}</tr></thead>
+        <tbody>{list.length?list.map(p=>{const l=load[p.s]||0;const c=l>=3?'var(--red)':l===2?'var(--amber)':'var(--green)';
+          return <tr key={p.n}><td><span className="avex" style={{marginRight:8,background:avColor(p.n),color:'#fff'}}>{p.av}</span><b>{p.n}</b></td>
+            <td><span className={'tag '+(ROLE_TAG[p.role]||'gray')}>{p.role}</span></td><td>{p.dept}</td>
+            <td style={{color:'var(--muted)'}}>{p.boss?p.boss.split(' ')[0]:'—'}</td>
+            <td><span className="loadbar"><i style={{width:(l/maxL*100)+'%',background:c}}/></span><b>{l}</b> open</td>
+            {canM?<td>{p.n!==ctx.viewer.n?<button className="iconbtn" title={'Remove '+p.n} onClick={()=>removeEmp(p.s)}><I n="x" s={15}/></button>:null}</td>:null}
+          </tr>;}):<tr><td colSpan={6}><Empty t="No one matches" s="Try a different name or clear the role filter."/></td></tr>}</tbody></table>
+      </div>
+      <div className="panel"><h3>Reporting hierarchy — your span</h3><div className="tree"><TreeNode name={ctx.viewer.n}/></div></div>
+    </div>
+  </div>;
+}
+function EmpModal({ctx,close}){
+  const [f,setF]=useState({n:'',role:'Teacher',dept:'Academics',boss:'Anita Desai',phone:''});
+  const save=()=>{
+    const n=f.n.trim();
+    if(!n){ctx.say('Enter the employee name');return;}
+    if(byName(n)){ctx.say('That name is already in the team');return;}
+    const parts=n.split(' ');let sh=parts[0],i=2;
+    while(byShort(sh))sh=parts[0]+(parts[1]?parts[1][0]:'')+(byShort(parts[0]+(parts[1]?parts[1][0]:''))?i++:'');
+    STAFF.push({n,s:sh,role:f.role,dept:f.dept,boss:f.boss||null,av:parts.map(x=>x[0]).join('').slice(0,2).toUpperCase()});
+    close();ctx.R();ctx.say(n+' added · WhatsApp invite sent');};
+  return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
+    <div className="modal" style={{width:480}}>
+      <div className="qc-head"><h3>Add employee</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
+      <div className="mf">
+        <label>Full name</label>
+        <input value={f.n} onChange={e=>setF({...f,n:e.target.value})} placeholder="e.g. Sunita Sharma" autoFocus/>
+        <div className="row2">
+          <div><label>Role</label><select value={f.role} onChange={e=>setF({...f,role:e.target.value})}>
+            {Object.keys(ROLE_TAG).map(r=><option key={r}>{r}</option>)}</select></div>
+          <div><label>Department</label><select value={f.dept} onChange={e=>setF({...f,dept:e.target.value})}>
+            {DEPTS.map(d=><option key={d}>{d}</option>)}</select></div>
+        </div>
+        <div className="row2">
+          <div><label>Reports to</label><select value={f.boss} onChange={e=>setF({...f,boss:e.target.value})}>
+            {STAFF.filter(p=>p.role!=='Teacher').map(p=><option key={p.n} value={p.n}>{p.n} · {p.role}</option>)}</select></div>
+          <div><label>Phone (WhatsApp)</label><input value={f.phone} onChange={e=>setF({...f,phone:e.target.value})} placeholder="+91 …"/></div>
+        </div>
+        <div className="whysm" style={{marginTop:12}}>They'll get a WhatsApp invite with a one-tap login link — no password to remember.</div>
+      </div>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} onClick={save}><I n="check"/>Add & send invite</button>
+      </div>
+    </div>
+  </div>;
+}
+
+/* ============ reports ============ */
+function ReportsView({ctx}){
+  const [fw,setFw]=useState('all');
+  const [fb,setFb]=useState('all');
+  const mine=tasks.filter(t=>inScope(t,ctx.shorts)&&(fb==='all'||t.bucket===fb)&&(fw==='all'||hasWho(t,fw)));
+  const dn=mine.filter(t=>t.status==='done').length,ov=mine.filter(isOverdue).length;
+  const rate=mine.length?Math.round(dn/mine.length*100):0;
+  const segs=deliveryStats(mine);const segTot=segs.reduce((a,x)=>a+x.v,0);
+  const empOpts=ctx.scope.filter(p=>(p.role==='Teacher'||p.n===ctx.viewer.n)&&(fb==='all'||tasks.some(t=>hasWho(t,p.s)&&t.bucket===fb)));
+  const workers=ctx.scope.filter(p=>p.role==='Teacher'&&(fw==='all'||p.s===fw)&&(fb==='all'||tasks.some(t=>hasWho(t,p.s)&&t.bucket===fb)));
+  const load=workloadMap();
+  const byEmp=fw==='all'
+    ?workers.map(p=>{const tt=mine.filter(t=>hasWho(t,p.s));return [p.s,tt.length?Math.round(tt.filter(t=>t.status==='done').length/tt.length*100):0];})
+    :Object.keys(BUCKETS).map(k=>({k,tt:mine.filter(t=>t.bucket===k)})).filter(o=>o.tt.length)
+      .map(o=>[BUCKETS[o.k],Math.round(o.tt.filter(t=>t.status==='done').length/o.tt.length*100)]);
+  const KP=[['Total tasks',mine.length,'var(--accent)','var(--accent-soft)','checkc'],
+    ['Completed',dn,'var(--green)','var(--green-soft)','check'],
+    ['Overdue',ov,'var(--red)','var(--red-soft)','alert'],
+    ['Completion rate',rate+'%','var(--blue)','var(--blue-soft)','chart']];
+  return <div className="view">
+    <div className="filters">
+      <select className="fsel" value={fb} onChange={e=>{setFb(e.target.value);setFw('all');}}>
+        <option value="all">All departments</option>
+        {Object.entries(BUCKETS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
+      <select className="fsel" value={fw} onChange={e=>setFw(e.target.value)}>
+        <option value="all">{fb==='all'?'All staff':'All in '+BUCKETS[fb]}</option>
+        {empOpts.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}</select>
+      <div className="spacer"/>
+      <button className="btn soft" onClick={()=>ctx.exportCSV('tasks')}><I n="dl"/>Tasks CSV</button>
+      <button className="btn soft" onClick={()=>ctx.exportCSV('workload')}><I n="dl"/>Workload CSV</button>
+      <button className="btn primary" onClick={()=>ctx.printReport(fw,fb)}><I n="print"/>Export PDF</button>
+    </div>
+    <div className="kpis">{KP.map(([l,n,c,cs,ic])=><div className="kpi" key={l}>
+      <div className="top"><span className="l">{l}</span><span className="ic" style={{background:cs,color:c}}><I n={ic}/></span></div>
+      <div className="n" style={{color:c}}>{n}</div></div>)}</div>
+    <div className="panel">
+      <div className="h-row"><h3>Delivery performance</h3><span className="tag gray">{segTot?Math.round(segs[0].v/segTot*100)+'% completed on time':'no data yet'}</span></div>
+      <div style={{display:'flex',gap:30,alignItems:'center',flexWrap:'wrap'}}>
+        <div dangerouslySetInnerHTML={{__html:donutSVG(segs,150,26)}}/>
+        <div style={{flex:1,minWidth:230}}>{segs.map(x=>{const tot=segTot||1;
+          return <div className="leg" key={x.l}><span className="dot2" style={{background:x.c}}/>{x.l}<b>{x.v} · {Math.round(x.v/tot*100)}%</b></div>;})}</div>
+      </div>
+    </div>
+    <div className="grid2">
+      <div className="panel"><h3>{fw==='all'?'Completion by employee':'Completion by department — '+(byShort(fw)||{n:fw}).n}</h3><Bars rows={byEmp}/></div>
+      <div className="panel"><h3>Tasks by type</h3>
+        <Bars rows={Object.keys(TYPES).map(k=>[TYPES[k],mine.filter(t=>(t.type||'work')===k).length]).filter(r=>r[1]>0)}/></div>
+    </div>
+    <div className="panel"><h3>Workload — open tasks per employee</h3>
+      <table><thead><tr><th>Employee</th><th>Department</th><th>Open</th><th>Overdue</th><th>Done</th></tr></thead>
+      <tbody>{workers.map(p=>{const tt=mine.filter(t=>hasWho(t,p.s));
+        return <tr key={p.s}><td><span className="avex" style={{marginRight:8,background:avColor(p.n),color:'#fff'}}>{p.av}</span>{p.n}</td>
+          <td>{p.dept}</td><td><b>{load[p.s]}</b></td>
+          <td style={{color:tt.filter(isOverdue).length?'var(--red)':undefined}}>{tt.filter(isOverdue).length}</td>
+          <td>{tt.filter(t=>t.status==='done').length}</td></tr>;})}</tbody></table>
+    </div>
+  </div>;
+}
+
+/* ============ quick capture ============ */
+const QC_SAMPLES=[
+  "Ask Hari to fix the broken projector in the science lab by 10 am tomorrow",
+  "We are running low on chalk and markers, order more this week",
+  "Ask Meena and Kavya to prepare the annual day schedule by friday",
+  "Ask Suresh to service the water purifiers every month"
+];
+function QuickCapture({ctx,close}){
+  const [kind,setKind]=useState('task');
+  const [txt,setTxt]=useState('');
+  const [mode,setMode]=useState('others');
+  const [whos,setWhos]=useState([]);const [whoSugg,setWhoSugg]=useState(true);const [whoWhy,setWhoWhy]=useState('');
+  const [when,setWhen]=useState(null);const [whenSugg,setWhenSugg]=useState(true);const [whenWhy,setWhenWhy]=useState('');
+  const [dueTime,setDueTime]=useState('');
+  const [type,setType]=useState('work');const [prio,setPrio]=useState('med');
+  const [recur,setRecur]=useState(null);
+  const [recurOn,setRecurOn]=useState(null);
+  const [bucket,setBucket]=useState('administration');const [bucketSugg,setBucketSugg]=useState(true);
+  const [pick,setPick]=useState(null);
+  const [whoQ,setWhoQ]=useState('');
+  const [opts,setOpts]=useState(false);
+  const [boss,setBoss]=useState('');const [note,setNote]=useState('');
+  const [files,setFiles]=useState([]);
+  const [rec,setRec]=useState(false);
+  const canMulti=ctx.role!=='jrm';
+  const parsed=kind==='task'&&txt.trim().length>=6;
+
+  function parse(text){
+    setTxt(text);
+    if(kind!=='task'||text.trim().length<6)return;
+    const low=text.toLowerCase();
+    const named=ctx.scope.filter(p=>p.role==='Teacher'&&new RegExp('\\b'+p.s.toLowerCase()+'\\b').test(low)).map(p=>p.s);
+    if(named.length){setWhos(named);setWhoSugg(false);setWhoWhy(named.length>1?'all named in your sentence — joint task':'named in your sentence');}
+    else{const s=suggestWho(guessType(low),ctx.scope);if(s&&(whoSugg||!whos.length)){setWhos([s.s]);setWhoSugg(true);setWhoWhy(s.why);}}
+    const gt=guessType(low);setType(gt);
+    if(bucketSugg)setBucket(guessBucket(low));
+    const gd=guessDate(low);
+    if(gd){setWhen(gd.date);setWhenSugg(false);setWhenWhy(gd.why);}
+    else if(whenSugg||!when){const s=suggestDue(gt);setWhen(s.date);setWhenSugg(true);setWhenWhy(s.why);}
+    if(/\burgent|asap|immediately|critical\b/.test(low))setPrio('high');
+    const wm=low.match(/\bevery\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)s?\b/);
+    if(wm){const on={sunday:0,monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6}[wm[1]];
+      setRecur('weekly');setRecurOn(on);
+      const nd=nextAnchor('weekly',on,iso(TODAY));setWhen(nd);setWhenSugg(false);setWhenWhy('every '+DOW[on]+' — first on '+fmtDate(nd));}
+    else{const gr=guessRecur(low);if(gr){setRecur(gr);setRecurOn(defaultRecurOn(gr,when||iso(TODAY)));}}
+    const gtm=guessTime(low);if(gtm)setDueTime(gtm.time);
+  }
+  function record(){
+    setRec(true);const sample=QC_SAMPLES[Math.floor(Math.random()*QC_SAMPLES.length)];
+    let i=0;const tick=setInterval(()=>{i+=3;parse(sample.slice(0,i));
+      if(i>=sample.length){clearInterval(tick);setRec(false);parse(sample);}},40);
+  }
+  function toggleWho(v){
+    let next;
+    if(!canMulti)next=[v];
+    else{next=whos.slice();const ix=next.indexOf(v);
+      if(ix>-1){if(next.length>1)next.splice(ix,1);}else next.push(v);}
+    setWhos(next);setWhoSugg(false);
+    setWhoWhy(next.length>1?'joint task — it appears in each person’s list':'you picked '+(byShort(next[0])||{n:''}).n.split(' ')[0]);
+    if(!canMulti)setPick(null);
+  }
+  function filePicked(e){
+    const nf=[...e.target.files].map(x=>({name:x.name,url:(x.type||'').startsWith('image/')?URL.createObjectURL(x):null}));
+    setFiles(files.concat(nf));
+  }
+  function go(){
+    const clean=txt.trim();
+    if(kind!=='task'){
+      if(!clean){ctx.say(kind==='issue'?'Describe the issue first':'Say what you need first');return;}
+      requests.unshift({kind:kind==='issue'?'issue':'request',t:clean.charAt(0).toUpperCase()+clean.slice(1),
+        from:ctx.viewer.s,date:iso(TODAY),note:note.trim(),files:kind==='issue'&&files.length?files.slice():undefined});
+      close();ctx.R();
+      ctx.say(kind==='issue'?'Issue sent to Vikram (maintenance head)':'Request sent to your department boss for approval');
+      return;
+    }
+    if(!clean||clean.length<3){ctx.say('Type or speak the task first');return;}
+    let list=whos;
+    if(mode==='self')list=[ctx.viewer.s];
+    if(!list.length){ctx.say('Pick at least one person');return;}
+    tasks.unshift({t:cleanTask(clean),who:list[0],coWho:list.length>1?list.slice(1):undefined,
+      type,bucket,prio,recur,recurOn:recur?recurOn:null,date:when||iso(TODAY),time:dueTime||null,status:'open',note:note.trim(),
+      selfAssigned:mode==='self',instructedBy:boss||null});
+    close();ctx.R();
+    const names=list.map(a=>(byShort(a)||{n:a}).n).join(' + ');
+    ctx.say((mode==='self'?'Added to your list':'Assigned '+(list.length>1?'jointly to ':'to ')+names+' · sent on WhatsApp')+(recur?' · '+recurLabel(recur,recurOn):'')+(boss?' · as per '+boss:''));
+  }
+  const dts=[0,1,7].map(n=>{const d=new Date(TODAY);d.setDate(d.getDate()+n);return d;});
+  const whoList=ctx.scope.filter(x=>x.role==='Teacher'&&(!whoQ||x.n.toLowerCase().includes(whoQ.toLowerCase())||x.dept.toLowerCase().includes(whoQ.toLowerCase())));
+  const hints={task:<span>Type or speak in plain words — <b>AI fills in who, when and what type</b>. Tap any value to change it.</span>,
+    issue:<span>Goes straight to <b>Vikram (maintenance head)</b> — he assigns the right person, no approval needed.</span>,
+    request:<span>Goes to <b>your department boss</b> for one-tap approval, then to procurement (Accounts department).</span>};
+  const phs={task:'Try: "Ask Hari to fix the lab projector by Friday"',issue:"What's broken? e.g. Projector in Lab 2 not working",request:'What do you need? e.g. 2 boxes of chalk for Class 5'};
+  return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
+    <div className="modal">
+      <div className="qc-head"><h3>New</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
+      <div className="selfseg" style={{marginTop:12}}>
+        {[['task','Task'],['issue','Report issue'],['request','Request supplies']].map(([k,l])=>
+          <button key={k} className={kind===k?'on':''} onClick={()=>setKind(k)}>{l}</button>)}
+      </div>
+      <div className="qc-input-row">
+        <input className="qc-input" autoFocus placeholder={phs[kind]} value={txt} onChange={e=>parse(e.target.value)}/>
+        <button className={'micbtn'+(rec?' rec':'')} onClick={record} title="Speak"><I n="mic"/></button>
+      </div>
+      <div className="qc-hint">{hints[kind]}</div>
+      {kind==='issue'?<div className="qc-attach">
+        {[['camera','Camera',{accept:'image/*',capture:'environment'}],['image','Photos',{accept:'image/*',multiple:true}],['clip','Files',{multiple:true}]].map(([ic,l,at])=>
+          <label key={l} className="btn soft"><I n={ic}/>{l}<input type="file" style={{display:'none'}} onChange={filePicked} {...at}/></label>)}
+        {files.length?<div className="filelist">{files.map((x,ix)=>x.url?<img key={ix} className="thumb" src={x.url} title={x.name}/>:<span key={ix} className="filechip">{x.name}</span>)}</div>:null}
+      </div>:null}
+      {kind!=='task'?<div className="qc-opts">
+        <label>{kind==='issue'?'Extra details (optional)':'Why / for which class? (optional)'}</label>
+        <textarea rows={2} value={note} onChange={e=>setNote(e.target.value)} placeholder="Any details…"/>
+      </div>:null}
+      {kind==='task'?<div className="selfseg">
+        <button className={mode==='others'?'on':''} onClick={()=>setMode('others')}>For someone else</button>
+        <button className={mode==='self'?'on':''} onClick={()=>setMode('self')}>For myself</button>
+      </div>:null}
+      {parsed?<div className="qc-parsed">
+        <div className="aihead"><I n="spark" s={14}/> AI understood</div>
+        <div className="fieldrow"><div className="k">Task</div><div className="v">{cleanTask(txt)}</div></div>
+        <div className="fieldrow"><div className="k">Assign to</div><div className="v">
+          <span className="editchip" onClick={()=>setPick(pick==='who'?null:'who')}>
+            {mode==='self'?'You — '+ctx.viewer.n:whos.map(a=>(byShort(a)||{n:a}).n).join(' + ')||'—'} <I n="chevd" s={13}/></span>
+          {whoWhy&&mode!=='self'?<div className="whysm"><b>{whoSugg?'✦ Suggested':'✓'}</b> — {whoWhy}</div>:null}
+          {pick==='who'&&mode!=='self'?<div className="pickrow">
+            <input className="fsel" style={{width:'100%'}} placeholder="Search name or department…" value={whoQ} onChange={e=>setWhoQ(e.target.value)}/>
+            {canMulti?<div className="whysm">Tap more than one person to assign jointly</div>:null}
+            {whoList.length?whoList.map(x=><button key={x.s} className={'pk'+(whos.includes(x.s)?' cur':'')} onClick={()=>toggleWho(x.s)}>{whos.includes(x.s)?'✓ ':''}{x.n} · {x.dept}</button>)
+              :<div className="whysm">No one matches “{whoQ}”</div>}
+          </div>:null}
+        </div></div>
+        <div className="fieldrow"><div className="k">Due</div><div className="v">
+          <span className="editchip" onClick={()=>setPick(pick==='when'?null:'when')}>{fmtDate(when)}{dueTime?' · '+fmtTime(dueTime):''} <I n="chevd" s={13}/></span>
+          {whenWhy?<div className="whysm"><b>{whenSugg?'✦ Suggested':'✓'}</b> — {whenWhy}</div>:null}
+          {pick==='when'?<div className="pickrow">{dts.map(d=><button key={iso(d)} className={'pk'+(iso(d)===when?' cur':'')}
+            onClick={()=>{setWhen(iso(d));setWhenSugg(false);setWhenWhy('you picked this date');}}>
+            {d.toDateString()===TODAY.toDateString()?'Today':fmtDate(iso(d))}</button>)}
+            <input type="date" className="fsel" style={{padding:'5px 9px',fontSize:12.5}} value={when||''} min={iso(TODAY)} aria-label="Pick any date"
+              onChange={e=>{const v=e.target.value;if(!v)return;setWhen(v);setWhenSugg(false);setWhenWhy('you picked this date');}}/>
+            <input type="time" className="fsel" style={{padding:'5px 9px',fontSize:12.5}} value={dueTime} aria-label="Due time (optional)"
+              onChange={e=>setDueTime(e.target.value)}/>
+            <button className="pk" onClick={()=>setPick(null)}>✓ Set</button></div>:null}
+        </div></div>
+        <div className="fieldrow"><div className="k">Type</div><div className="v">
+          <span className="editchip" onClick={()=>setPick(pick==='type'?null:'type')}>{TYPES[type]} <I n="chevd" s={13}/></span>
+          {pick==='type'?<div className="pickrow">{Object.keys(TYPES).map(k=><button key={k} className={'pk'+(k===type?' cur':'')}
+            onClick={()=>{setType(k);if(whoSugg&&mode!=='self'){const s=suggestWho(k,ctx.scope);if(s){setWhos([s.s]);setWhoWhy(s.why);}}if(whenSugg){const s=suggestDue(k);setWhen(s.date);setWhenWhy(s.why);}setPick(null);}}>{TYPES[k]}</button>)}</div>:null}
+        </div></div>
+        <div className="fieldrow"><div className="k">Department</div><div className="v">
+          <span className="editchip" onClick={()=>setPick(pick==='bucket'?null:'bucket')}>{BUCKETS[bucket]||bucket} <I n="chevd" s={13}/></span>
+          {pick==='bucket'?<div className="pickrow">{Object.keys(BUCKETS).map(k=><button key={k} className={'pk'+(k===bucket?' cur':'')}
+            onClick={()=>{setBucket(k);setBucketSugg(false);setPick(null);}}>{BUCKETS[k]}</button>)}</div>:null}
+        </div></div>
+        <div className="fieldrow"><div className="k">Priority</div><div className="v">
+          <span className="editchip" onClick={()=>setPick(pick==='prio'?null:'prio')}>
+            <span className="prio" style={{background:PRIOS[prio].c}}/>{PRIOS[prio].l} <I n="chevd" s={13}/></span>
+          {pick==='prio'?<div className="pickrow">{Object.keys(PRIOS).map(k=><button key={k} className={'pk'+(k===prio?' cur':'')}
+            onClick={()=>{setPrio(k);setPick(null);}}>{PRIOS[k].l}</button>)}</div>:null}
+        </div></div>
+        <div className="fieldrow"><div className="k">Repeat</div><div className="v">
+          <span className="editchip" onClick={()=>setPick(pick==='recur'?null:'recur')}>{recur?'↻ '+recurLabel(recur,recurOn):"Doesn't repeat"} <I n="chevd" s={13}/></span>
+          {recur?<div className="whysm">Next occurrence is scheduled automatically each time it's completed</div>:null}
+          {pick==='recur'?<>
+            <div className="pickrow">
+              <button className={'pk'+(!recur?' cur':'')} onClick={()=>{setRecur(null);setRecurOn(null);setPick(null);}}>Doesn't repeat</button>
+              {Object.keys(RECURS).map(k=><button key={k} className={'pk'+(k===recur?' cur':'')}
+                onClick={()=>{setRecur(k);setRecurOn(defaultRecurOn(k,when||iso(TODAY)));if(k==='daily')setPick(null);}}>{RECURS[k]}</button>)}
+            </div>
+            {recur==='weekly'?<div className="pickrow"><div className="whysm" style={{width:'100%',marginTop:2}}>On which day of the week?</div>
+              {[1,2,3,4,5,6,0].map(ix=><button key={ix} className={'pk'+(recurOn===ix?' cur':'')}
+                onClick={()=>{setRecurOn(ix);const nd=nextAnchor('weekly',ix,iso(TODAY));setWhen(nd);setWhenSugg(false);setWhenWhy('first occurrence — every '+DOW[ix]);setPick(null);}}>{DOW[ix]}</button>)}</div>:null}
+            {recur==='monthly'?<div className="pickrow"><div className="whysm" style={{width:'100%',marginTop:2}}>On which date of the month?</div>
+              <select className="fsel" value={recurOn||1} onChange={e=>{const v=+e.target.value;setRecurOn(v);
+                const nd=nextAnchor('monthly',v,iso(TODAY));setWhen(nd);setWhenSugg(false);setWhenWhy('first occurrence — the '+ord(v)+' of every month');setPick(null);}}>
+                {Array.from({length:31},(_,i)=>i+1).map(n=><option key={n} value={n}>{ord(n)} of every month</option>)}</select></div>:null}
+            {recur==='yearly'?<div className="pickrow"><div className="whysm" style={{width:'100%',marginTop:2}}>On which day and month?</div>
+              <select className="fsel" value={(recurOn&&recurOn.d)||1} onChange={e=>{const v={d:+e.target.value,m:(recurOn&&recurOn.m)||0};setRecurOn(v);
+                const nd=nextAnchor('yearly',v,iso(TODAY));setWhen(nd);setWhenSugg(false);setWhenWhy('first occurrence — every year on '+v.d+' '+MONTHS[v.m]);}}>
+                {Array.from({length:31},(_,i)=>i+1).map(n=><option key={n} value={n}>{ord(n)}</option>)}</select>
+              <select className="fsel" value={(recurOn&&recurOn.m)||0} onChange={e=>{const v={d:(recurOn&&recurOn.d)||1,m:+e.target.value};setRecurOn(v);
+                const nd=nextAnchor('yearly',v,iso(TODAY));setWhen(nd);setWhenSugg(false);setWhenWhy('first occurrence — every year on '+v.d+' '+MONTHS[v.m]);}}>
+                {MONTHS.map((mn,ix)=><option key={mn} value={ix}>{mn}</option>)}</select></div>:null}
+          </>:null}
+        </div></div>
+      </div>:null}
+      {kind==='task'?<>
+        <button className="qc-opts-t" onClick={()=>setOpts(!opts)}><span>More options</span><I n="chevd"/></button>
+        {opts?<div className="qc-opts">
+          <label>On instruction of</label>
+          <select value={boss} onChange={e=>setBoss(e.target.value)}>
+            <option value="">No one — own initiative</option>
+            {ctx.bossChain.map(n=><option key={n} value={BOSS_LABEL[n]}>{BOSS_LABEL[n]}</option>)}
+          </select>
+          <label>Note (optional)</label>
+          <textarea rows={2} value={note} onChange={e=>setNote(e.target.value)} placeholder="Any details…"/>
+        </div>:null}
+      </>:null}
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} onClick={go}>
+          <I n={kind==='task'?'check':kind==='issue'?'tool':'box'}/>
+          {kind==='task'?'Assign task':kind==='issue'?'Send to maintenance head':'Send request'}
+        </button>
+      </div>
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
