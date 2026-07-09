@@ -739,12 +739,26 @@ function WorkerPending({ctx}){
 
 /* ============ tasks tab ============ */
 function AllTasks({ctx,acts}){
+  const [mode,setMode]=useState('byme'); // 'byme' = assigned by me (to my team) · 'mine' = assigned to me
   const [f,setF]=useState('all');
-  const counts={all:ctx.mine.length};
-  Object.keys(TYPES).forEach(k=>counts[k]=ctx.mine.filter(o=>(o.t.type||'work')===k).length);
-  const list=ctx.mine.filter(o=>f==='all'||(o.t.type||'work')===f);
+  const [fboss,setFboss]=useState('all');
+  const bosses=bossesFor(ctx.role);
+  const byWho=ctx.role==='worker'?ctx.mine:ctx.mine.filter(o=>mode==='mine'?hasWhoM(o.t,ctx.r.self):!hasWhoM(o.t,ctx.r.self));
+  const scoped=mode==='mine'&&fboss!=='all'?byWho.filter(o=>fboss==='self'?!o.t.instructedBy:o.t.instructedBy===fboss):byWho;
+  const counts={all:scoped.length};
+  Object.keys(TYPES).forEach(k=>counts[k]=scoped.filter(o=>(o.t.type||'work')===k).length);
+  const list=scoped.filter(o=>f==='all'||(o.t.type||'work')===f);
   return <div>
     {ctx.role==='worker'?<WorkerPending ctx={ctx}/>:null}
+    {ctx.role!=='worker'?<div className="modetabs">
+      <button className={'mtab'+(mode==='byme'?' on':'')} onClick={()=>setMode('byme')}>Assigned by me</button>
+      <button className={'mtab'+(mode==='mine'?' on':'')} onClick={()=>setMode('mine')}>Assigned to me</button>
+    </div>:null}
+    {ctx.role!=='worker'&&mode==='mine'&&bosses.length?<select className="selsel" style={{marginBottom:12}} value={fboss} onChange={e=>setFboss(e.target.value)}>
+      <option value="all">All bosses</option>
+      <option value="self">Own initiative</option>
+      {bosses.map(b=><option key={b} value={b}>{b}</option>)}
+    </select>:null}
     <div className="sec">All tasks</div>
     <div className="typechips" style={{overflowX:'auto',flexWrap:'nowrap'}}>
       {[['all','All','']].concat(Object.entries(TYPES).map(([k,v])=>[k,v.l,v.e])).map(([k,l,e])=>
