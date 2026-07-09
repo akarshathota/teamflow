@@ -1032,9 +1032,13 @@ function QueuePanel({ctx}){
 
 /* ============ tasks view ============ */
 function TasksView({ctx}){
+  const [mode,setMode]=useState('byme'); // 'byme' = assigned by me (to my team) · 'mine' = assigned to me
   const [ft,setFt]=useState('all');const [fs,setFs]=useState('all');const [fw,setFw]=useState('all');const [fb,setFb]=useState('all');
-  const rows=tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)
+  const [fboss,setFboss]=useState('all');
+  const base=tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)
     &&(ft==='all'||(o.t.type||'work')===ft)&&(fs==='all'||o.t.status===fs)&&(fw==='all'||hasWho(o.t,fw))&&(fb==='all'||o.t.bucket===fb));
+  const byWho=base.filter(o=>mode==='mine'?hasWho(o.t,ctx.viewer.s):!hasWho(o.t,ctx.viewer.s));
+  const rows=mode==='mine'&&fboss!=='all'?byWho.filter(o=>fboss==='self'?!o.t.instructedBy:o.t.instructedBy===fboss):byWho;
   const g={over:[],today:[],up:[],done:[]};
   rows.forEach(o=>{if(o.t.status==='done')g.done.push(o);else if(isOverdue(o.t))g.over.push(o);else if(isToday(o.t))g.today.push(o);else g.up.push(o);});
   g.over.sort((a,b)=>a.t.date<b.t.date?-1:1);g.up.sort((a,b)=>a.t.date<b.t.date?-1:1);
@@ -1043,13 +1047,22 @@ function TasksView({ctx}){
     {arr.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx}/>)}</React.Fragment>:null;
   const any=rows.length>0;
   return <div className="view">
+    <div className="segs" style={{maxWidth:340,marginBottom:16}}>
+      <button className={mode==='byme'?'on':''} onClick={()=>setMode('byme')}>Assigned by me</button>
+      <button className={mode==='mine'?'on':''} onClick={()=>setMode('mine')}>Assigned to me</button>
+    </div>
     <div className="filters">
       <select className="fsel" value={ft} onChange={e=>setFt(e.target.value)}><option value="all">All types</option>
         {Object.entries(TYPES).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
       <select className="fsel" value={fs} onChange={e=>setFs(e.target.value)}><option value="all">All statuses</option>
         {Object.entries(ST).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}</select>
-      <select className="fsel" value={fw} onChange={e=>setFw(e.target.value)}><option value="all">All employees</option>
-        {ctx.scope.filter(p=>p.role==='Teacher'||p.n===ctx.viewer.n).map(p=><option key={p.s} value={p.s}>{p.n}</option>)}</select>
+      {mode==='byme'?<select className="fsel" value={fw} onChange={e=>setFw(e.target.value)}><option value="all">All employees</option>
+        {ctx.scope.filter(p=>p.role==='Teacher'||p.n===ctx.viewer.n).map(p=><option key={p.s} value={p.s}>{p.n}</option>)}</select>:null}
+      {mode==='mine'&&ctx.bossChain.length?<select className="fsel" value={fboss} onChange={e=>setFboss(e.target.value)}>
+        <option value="all">All bosses</option>
+        <option value="self">Own initiative</option>
+        {ctx.bossChain.map(n=><option key={n} value={BOSS_LABEL[n]}>{BOSS_LABEL[n]}</option>)}
+      </select>:null}
       <select className="fsel" value={fb} onChange={e=>setFb(e.target.value)}><option value="all">All departments</option>
         {Object.entries(BUCKETS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
       <div className="spacer"/>
@@ -1060,7 +1073,7 @@ function TasksView({ctx}){
       {grp('amber','clock','Due today',g.today)}
       {grp('','cal','Upcoming',g.up)}
       {grp('','check','Done',g.done)}
-    </>:<Empty t="No tasks match" s="Try clearing a filter, or press N to assign a new task."/>}
+    </>:<Empty t="No tasks match" s={mode==='mine'?'Nothing assigned to you here — try clearing a filter.':'Try clearing a filter, or press N to assign a new task.'}/>}
   </div>;
 }
 
