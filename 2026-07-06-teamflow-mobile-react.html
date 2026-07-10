@@ -248,7 +248,7 @@ const peopleDemo=[
   {n:"Arjun Menon", s:"In · 8:50", c:"var(--green)"},
 ];
 const ROLES={
-  admin:{name:"Priya Nair",org:"Greenwood School · Admin",av:"P",team:ALL_STAFF,self:"Priya",rank:0,
+  admin:{name:"Akarsh",org:"Greenwood School · Admin",av:"A",team:ALL_STAFF,self:"Akarsh",rank:0,
     tabs:["home","alltasks","calendar","insights","notices","more"],admin:true,billing:true,canPost:true,
     brief:"Across all 4 teams: 2 tasks at risk today and 1 person is overloaded. You have full visibility and control."},
   mgmt:{name:"Rajesh Menon",org:"Greenwood School · Management",av:"R",team:ALL_STAFF,self:"Rajesh",rank:1,
@@ -263,7 +263,7 @@ const ROLES={
   worker:{name:"Hari Charan",org:"Teacher",av:"H",team:["Hari"],self:"Hari",rank:4,
     tabs:["alltasks","calendar","notices"],admin:false,billing:false,canPost:false,brief:""}
 };
-const CHAIN=[{rank:0,label:"Priya (Admin)"},{rank:1,label:"Rajesh (Management)"},{rank:2,label:"Anita (Manager)"},{rank:3,label:"Vikram (Team Member)"}];
+const CHAIN=[{rank:0,label:"Akarsh (Admin)"},{rank:1,label:"Rajesh (Management)"},{rank:2,label:"Anita (Manager)"},{rank:3,label:"Vikram (Team Member)"}];
 const bossesFor=role=>CHAIN.filter(c=>c.rank<ROLES[role].rank).map(c=>c.label);
 /* same approval model as the console: admin/mgmt approve anything, otherwise only the person's direct boss */
 const FIRST=n=>String(n).split(' ')[0];

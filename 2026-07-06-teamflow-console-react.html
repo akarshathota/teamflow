@@ -422,8 +422,8 @@ async function saveStaffRow(p){
 }
 async function deleteStaffRow(p){if(p.id)await sb.from('staff').delete().eq('id',p.id);}
 
-const ROLE_VIEWER={admin:"Priya Nair",mgmt:"Rajesh Menon",srm:"Anita Desai",jrm:"Vikram Rao"};
-const BOSS_LABEL={"Priya Nair":"Priya (Admin)","Rajesh Menon":"Rajesh (Management)","Anita Desai":"Anita (Manager)","Vikram Rao":"Vikram (Team Member)"};
+const ROLE_VIEWER={admin:"Akarsh",mgmt:"Rajesh Menon",srm:"Anita Desai",jrm:"Vikram Rao"};
+const BOSS_LABEL={"Akarsh":"Akarsh (Admin)","Rajesh Menon":"Rajesh (Management)","Anita Desai":"Anita (Manager)","Vikram Rao":"Vikram (Team Member)"};
 const SCOPE_WORD={admin:"all teams",mgmt:"org-wide",srm:"your teams",jrm:"your team"};
 
 /* ============ helpers ============ */
@@ -842,7 +842,7 @@ function App(){
         {myRoleKey==='admin'?<>
           <div className="side-lab">Preview as</div>
           <select className="roleSel" value={role} onChange={e=>setRole(e.target.value)}>
-            <option value="admin">Administrator · Priya</option>
+            <option value="admin">Administrator · Akarsh</option>
             <option value="mgmt">Management · Rajesh</option>
             <option value="srm">Manager · Anita</option>
             <option value="jrm">Team Member · Vikram</option>
