@@ -261,6 +261,7 @@ const ROLES={
     tabs:["alltasks","calendar","notices"],admin:false,billing:false,canPost:false,brief:""}
 };
 const CHAIN=[{rank:0,label:"Priya (Admin)"},{rank:1,label:"Rajesh (Management)"},{rank:2,label:"Anita (Manager)"},{rank:3,label:"Vikram (Team Member)"}];
+const DB_ROLE_TO_KEY={Administrator:'admin',Management:'mgmt',Manager:'srm','Team Member':'jrm',Teacher:'worker'};
 const bossesFor=role=>CHAIN.filter(c=>c.rank<ROLES[role].rank).map(c=>c.label);
 /* same approval model as the console: admin/mgmt approve anything, otherwise only the person's direct boss */
 const FIRST=n=>String(n).split(' ')[0];
@@ -318,7 +319,7 @@ async function loadAll(){
     sb.from('notices').select('*').order('created_at',{ascending:false})
   ]);
   const byId=Object.fromEntries((staffRows||[]).map(r=>[r.id,{name:r.name,short:r.short_name,initials:r.initials}]));
-  ALL_PEOPLE.length=0;ALL_PEOPLE.push(...(staffRows||[]).map(r=>({n:r.name,s:r.short_name,id:r.id})));
+  ALL_PEOPLE.length=0;ALL_PEOPLE.push(...(staffRows||[]).map(r=>({n:r.name,s:r.short_name,id:r.id,authId:r.auth_user_id,role:r.role})));
   MEMBERS.length=0;MEMBERS.push(...(staffRows||[]).filter(r=>r.role==='Teacher'||r.role==='Team Member').map(r=>({
     n:r.short_name,i:r.initials,dept:r.department,role:JOB_TITLE[r.short_name]||r.role,
     types:(SKILLS[r.short_name]||{}).types||[],buckets:(SKILLS[r.short_name]||{}).buckets||[],id:r.id})));
@@ -535,18 +536,67 @@ const PATHS={
 };
 const I=({n,s,c})=><svg className="i" viewBox="0 0 24 24" style={{width:s,height:s,color:c}}>{PATHS[n]}</svg>;
 
+/* ============ login ============ */
+function LoginScreen(){
+  const [id,setId]=useState('');const [pw,setPw]=useState('');const [err,setErr]=useState('');const [busy,setBusy]=useState(false);
+  const go=async()=>{
+    if(!id.trim()||!pw){setErr('Enter your email/username and password');return;}
+    setBusy(true);setErr('');
+    const email=id.includes('@')?id.trim():id.trim()+'@teamflow.demo';
+    const {error}=await sb.auth.signInWithPassword({email,password:pw});
+    setBusy(false);
+    if(error)setErr('Could not sign in — check your email/username and password');
+  };
+  return <div className="phone"><div className="notch"/><div className="screen" style={{display:'flex',flexDirection:'column',justifyContent:'center',padding:'0 24px'}}>
+    <h3 className="brandfont" style={{fontSize:22,margin:'0 0 20px'}}>TeamFlow</h3>
+    <div style={{fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Email or username</div>
+    <input className="typein" style={{marginBottom:12}} value={id} onChange={e=>setId(e.target.value)}
+      onKeyDown={e=>e.key==='Enter'&&go()} placeholder="priya@teamflow.demo or hari" autoFocus/>
+    <div style={{fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Password</div>
+    <input type="password" className="typein" style={{marginBottom:14}} value={pw} onChange={e=>setPw(e.target.value)}
+      onKeyDown={e=>e.key==='Enter'&&go()} placeholder="••••••••"/>
+    {err?<div style={{color:'var(--red)',fontSize:12.5,marginBottom:12}}>{err}</div>:null}
+    <button className="send" disabled={busy} onClick={go}>{busy?'Signing in…':'Sign in'}</button>
+  </div></div>;
+}
+
 /* ============ app ============ */
 function App(){
   const [,setTick]=useState(0);
   const R=useCallback(()=>setTick(t=>t+1),[]);
-  const [role,setRole]=useState('admin');
+  const [previewRole,setPreviewRole]=useState(null); // admin-only "preview as" override
   const [page,setPage]=useState('home');
   const [sheet,setSheet]=useState(null); // {kind, idx?}
   const [toast,setToastS]=useState(null);
   const tRef=useRef();
   const say=useCallback(m=>{setToastS(m);clearTimeout(tRef.current);tRef.current=setTimeout(()=>setToastS(null),2400);},[]);
   const [loaded,setLoaded]=useState(false);
-  useEffect(()=>{loadAll().then(()=>setLoaded(true)).catch(e=>{console.error(e);setLoaded(true);say('Could not load data from Supabase — check your connection');});},[]);
+  const [session,setSession]=useState(undefined); // undefined=checking · null=signed out · object=signed in
+  useEffect(()=>{
+    sb.auth.getSession().then(({data})=>setSession(data.session));
+    const {data:sub}=sb.auth.onAuthStateChange((_e,sess)=>setSession(sess));
+    return ()=>sub.subscription.unsubscribe();
+  },[]);
+  useEffect(()=>{
+    if(!session)return;
+    loadAll().then(()=>setLoaded(true)).catch(e=>{console.error(e);setLoaded(true);say('Could not load data from Supabase — check your connection');});
+  },[session]);
+
+  const loadingScreen=msg=><div className="phone"><div className="notch"/><div className="screen" style={{display:'flex',alignItems:'center',justifyContent:'center',color:'var(--muted)',fontSize:13}}>{msg}</div></div>;
+  if(session===undefined)return loadingScreen('Loading…');
+  if(session===null)return <LoginScreen/>;
+  if(!loaded)return loadingScreen('Loading TeamFlow…');
+
+  const myPerson=ALL_PEOPLE.find(p=>p.authId===session.user.id);
+  if(!myPerson)return <div className="phone"><div className="notch"/><div className="screen" style={{display:'flex',flexDirection:'column',gap:14,alignItems:'center',justifyContent:'center',color:'var(--muted)',fontSize:13,padding:24,textAlign:'center'}}>
+    <div>Your account isn't linked to a staff record. Contact your administrator.</div>
+    <button className="syncb" onClick={()=>sb.auth.signOut()}>Sign out</button></div></div>;
+  const myRoleKey=DB_ROLE_TO_KEY[myPerson.role];
+  if(!myRoleKey)return <div className="phone"><div className="notch"/><div className="screen" style={{display:'flex',flexDirection:'column',gap:14,alignItems:'center',justifyContent:'center',color:'var(--muted)',fontSize:13,padding:24,textAlign:'center'}}>
+    <div>This account isn't set up for a supported role. Contact your administrator.</div>
+    <button className="syncb" onClick={()=>sb.auth.signOut()}>Sign out</button></div></div>;
+  const role=(myRoleKey==='admin'&&previewRole)?previewRole:myRoleKey;
+
   const r=ROLES[role];
   const scope=r.team;
   const mine=tasks.map((t,i)=>({t,i})).filter(o=>assigneesM(o.t).some(a=>scope.includes(a)));
@@ -558,7 +608,7 @@ function App(){
     +pendingReqs.filter(q=>canApproveFrom(role,q.from)).length
     +tasks.filter(t=>t.extReq&&canApproveFrom(role,t.who)).length;
 
-  const switchRole=v=>{setRole(v);const rr=ROLES[v];if(!rr.tabs.includes(page))setPage(rr.tabs[0]);setSheet(null);};
+  const switchRole=v=>{setPreviewRole(v);const rr=ROLES[v];if(!rr.tabs.includes(page))setPage(rr.tabs[0]);setSheet(null);};
   const ctx={role,r,scope,mine,say,R,setSheet,setPage,page};
 
   const needExt=t=>{if(t.done||!t.date)return false;const lim=new Date(TODAY);lim.setDate(lim.getDate()+2);return t.date<=iso(lim);};
@@ -593,8 +643,6 @@ function App(){
     needExt,
   };
 
-  if(!loaded)return <div className="phone"><div className="notch"/><div className="screen" style={{display:'flex',alignItems:'center',justifyContent:'center',color:'var(--muted)',fontSize:13}}>Loading TeamFlow…</div></div>;
-
   return <>
   <div className="phone"><div className="notch"/><div className="screen">
     <div className="top">
@@ -603,12 +651,15 @@ function App(){
         <div className="av">{r.av}</div>
       </div>
       <div className="rolebar">
-        <span className="demo">DEMO · VIEW AS</span>
-        <select className="rolesel" value={role} onChange={e=>switchRole(e.target.value)}>
-          <option value="admin">Administrator</option><option value="mgmt">Management</option>
-          <option value="srm">Manager</option><option value="jrm">Team Member</option>
-          <option value="worker">Teacher</option>
-        </select>
+        {myRoleKey==='admin'?<>
+          <span className="demo">PREVIEW AS</span>
+          <select className="rolesel" value={role} onChange={e=>switchRole(e.target.value)}>
+            <option value="admin">Administrator</option><option value="mgmt">Management</option>
+            <option value="srm">Manager</option><option value="jrm">Team Member</option>
+            <option value="worker">Teacher</option>
+          </select>
+        </>:<span className="rolesel">{myPerson.n}</span>}
+        <button className="uploadbtn" style={{flex:'0 0 auto',padding:'6px 10px',fontSize:11}} onClick={()=>sb.auth.signOut()}>Sign out</button>
       </div>
       <div className="summary">
         <b>{role==='worker'?`You have ${openN} task${openN!=1?'s':''}`:`${openN} open · ${r.org.split('·')[0].trim()}`}</b> · {overN} overdue · {todayN} due today
