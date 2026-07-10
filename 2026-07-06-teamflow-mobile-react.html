@@ -275,6 +275,12 @@ const canAssignIssues=role=>role==='admin'||role==='mgmt'||role==='jrm'; /* jrm 
    MEMBERS (Teachers + the maintenance Team Member) is just the assignable operational subset. */
 let ALL_PEOPLE=[];
 const findPerson=n=>ALL_PEOPLE.find(p=>p.n.toLowerCase()===String(n).toLowerCase()||p.s.toLowerCase()===String(n).toLowerCase());
+/* srm/jrm's real reporting-line scope, mirroring console's descendants() — walks ALL_PEOPLE's
+   boss field (short names, matching t.who's convention) rather than a role-config hardcoded list.
+   Only need this for srm/jrm: admin/mgmt scope is role-based (ALL_STAFF, position-independent) and
+   worker never has reports in this org. */
+function descendantsM(shortName){let out=[],q=ALL_PEOPLE.filter(p=>p.boss===shortName);
+  while(q.length){const p=q.shift();out.push(p);q=q.concat(ALL_PEOPLE.filter(x=>x.boss===p.s));}return out;}
 
 function extLabel(dateStr){
   const d=new Date(dateStr+'T00:00:00');
@@ -315,7 +321,8 @@ async function loadAll(){
     sb.from('notices').select('*').order('created_at',{ascending:false})
   ]);
   const byId=Object.fromEntries((staffRows||[]).map(r=>[r.id,{name:r.name,short:r.short_name,initials:r.initials}]));
-  ALL_PEOPLE.length=0;ALL_PEOPLE.push(...(staffRows||[]).map(r=>({n:r.name,s:r.short_name,id:r.id,authId:r.auth_user_id,role:r.role})));
+  ALL_PEOPLE.length=0;ALL_PEOPLE.push(...(staffRows||[]).map(r=>({n:r.name,s:r.short_name,id:r.id,authId:r.auth_user_id,role:r.role,
+    boss:r.boss_id&&byId[r.boss_id]?byId[r.boss_id].short:null})));
   MEMBERS.length=0;MEMBERS.push(...(staffRows||[]).filter(r=>r.role==='Teacher'||r.role==='Team Member').map(r=>({
     n:r.short_name,i:r.initials,dept:r.department,role:JOB_TITLE[r.short_name]||r.role,
     types:(SKILLS[r.short_name]||{}).types||[],buckets:(SKILLS[r.short_name]||{}).buckets||[],id:r.id})));
@@ -626,17 +633,23 @@ function App(){
   /* When Preview As is engaged this is a hypothetical simulation with no real backing person, so
      keep the canonical demo persona for that role. Otherwise show whoever's actually logged in —
      ROLES[role].name/av used to be a fixed persona per role, which showed every admin/mgmt
-     account as "Priya"/"Rajesh" regardless of who signed in. Same fix for `team`: ROLES.worker.team
-     was hardcoded to ["Hari"], so any other Teacher's real account would've seen Hari's tasks
-     instead of their own — safe to just use [myPerson.s] since no Teacher has direct reports in
-     this org. srm/jrm keep their role-config team (still position-hardcoded like admin/mgmt used
-     to be — fine for now since Anita/Vikram are still the only real accounts at those tiers, but
-     the same class of bug as Akarsh's if a second Manager/Team Member is ever added). */
+     account as "Priya"/"Rajesh" regardless of who signed in. Same fix for `team`: worker/srm/jrm
+     all used to be hardcoded per-role lists (ROLES.worker.team=["Hari"], srm=Anita's exact roster,
+     jrm=Vikram's), so any other real account at those tiers would've seen the demo persona's
+     people instead of their own. worker just needs [myPerson.s] (no Teacher has reports here);
+     srm/jrm now walk the real boss_id chain via descendantsM(). Preserves each role's original
+     self-inclusion behavior exactly (srm included Anita herself in her own team, jrm did NOT
+     include Vikram in his) rather than unifying them, since that's an existing behavioral
+     distinction, not something this fix was asked to change. admin/mgmt stay on ALL_STAFF
+     unchanged — that's already role-based, not position-based, so it was never broken. */
   const previewing=role!==myRoleKey;
   const r=previewing?ROLES[role]:{...ROLES[role],name:myPerson.n,
     self:myPerson.s,
     av:myPerson.n.split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase(),
-    team:role==='worker'?[myPerson.s]:ROLES[role].team};
+    team:role==='worker'?[myPerson.s]
+      :role==='srm'?[myPerson.s].concat(descendantsM(myPerson.s).map(p=>p.s))
+      :role==='jrm'?descendantsM(myPerson.s).map(p=>p.s)
+      :ROLES[role].team};
   const scope=r.team;
   const mine=tasks.map((t,i)=>({t,i})).filter(o=>assigneesM(o.t).some(a=>scope.includes(a)));
   const openN=mine.filter(o=>!o.t.done).length;
