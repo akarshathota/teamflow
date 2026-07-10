@@ -623,7 +623,14 @@ function App(){
     <button className="syncb" onClick={()=>sb.auth.signOut()}>Sign out</button></div></div>;
   const role=(myRoleKey==='admin'&&previewRole)?previewRole:myRoleKey;
 
-  const r=ROLES[role];
+  /* When Preview As is engaged this is a hypothetical simulation with no real backing person, so
+     keep the canonical demo persona for that role. Otherwise show whoever's actually logged in —
+     ROLES[role].name/av used to be a fixed persona per role, which showed every admin/mgmt
+     account as "Priya"/"Rajesh" regardless of who signed in. */
+  const previewing=role!==myRoleKey;
+  const r=previewing?ROLES[role]:{...ROLES[role],name:myPerson.n,
+    self:myPerson.n.split(' ')[0]||myPerson.n,
+    av:myPerson.n.split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase()};
   const scope=r.team;
   const mine=tasks.map((t,i)=>({t,i})).filter(o=>assigneesM(o.t).some(a=>scope.includes(a)));
   const openN=mine.filter(o=>!o.t.done).length;

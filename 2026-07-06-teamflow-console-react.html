@@ -719,8 +719,17 @@ function App(){
   const role=(myRoleKey==='admin'&&previewRole)?previewRole:myRoleKey;
   const setRole=r=>{setPreviewRole(r);setDrawerIdx(-1);};
 
-  const viewer=byName(ROLE_VIEWER[role])||{n:'',s:'',role:'',dept:'',boss:null,av:''};
-  const scope=[viewer].concat(descendants(viewer.n));
+  /* viewer = the identity actually driving the dashboard. When Preview As is engaged, that's a
+     hypothetical simulation with no real backing person, so fall back to the canonical demo
+     persona for that role (same as always). Otherwise it's whoever's actually logged in — not a
+     fixed per-role persona, which used to show every admin/mgmt account as "Priya"/"Rajesh". */
+  const previewing=role!==myRoleKey;
+  const viewer=previewing?(byName(ROLE_VIEWER[role])||{n:'',s:'',role:'',dept:'',boss:null,av:''}):myStaff;
+  /* admin/mgmt see the whole org regardless of where they sit in the boss_id tree (matches their
+     RLS access and mobile's ALL_STAFF team) — walking descendants() from a specific person only
+     makes sense for the tree-scoped srm/jrm roles. */
+  const scope=(role==='admin'||role==='mgmt')?STAFF.slice():[viewer].concat(descendants(viewer.n));
+  const treeRoot=(role==='admin'||role==='mgmt')?(STAFF.find(p=>!p.boss)||viewer).n:viewer.n;
   const shorts=scope.map(p=>p.s);
   const bossChain=(()=>{let c=[],cur=viewer.boss;while(cur){c.push(cur);const b=byName(cur);cur=b?b.boss:null;}return c;})();
   const canApprove=from=>{const p=byShort(from);return role==='admin'||role==='mgmt'||!!(p&&p.boss===viewer.n);};
@@ -819,7 +828,7 @@ function App(){
     setTimeout(()=>{pr.style.display='none';document.title=ot;},300);
   }
 
-  const ctx={role,view,setView,say,R,scope,shorts,viewer,mine,canApprove,canAssignIssue,bossChain,
+  const ctx={role,view,setView,say,R,scope,shorts,viewer,treeRoot,mine,canApprove,canAssignIssue,bossChain,
     quickDone,remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,
     setDrawerIdx,setModal,setEmpModal,setResetTarget,exportCSV,printReport,qReqs,qExts,attentionList};
 
@@ -1357,7 +1366,7 @@ function PeopleView({ctx}){
             </td>:null}
           </tr>;}):<tr><td colSpan={6}><Empty t="No one matches" s="Try a different name or clear the role filter."/></td></tr>}</tbody></table>
       </div>
-      <div className="panel"><h3>Reporting hierarchy — your span</h3><div className="tree"><TreeNode name={ctx.viewer.n}/></div></div>
+      <div className="panel"><h3>Reporting hierarchy — your span</h3><div className="tree"><TreeNode name={ctx.treeRoot}/></div></div>
     </div>
   </div>;
 }
