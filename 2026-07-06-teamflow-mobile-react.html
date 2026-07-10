@@ -577,6 +577,8 @@ function App(){
   const [previewRole,setPreviewRole]=useState(null); // admin-only "preview as" override
   const [page,setPage]=useState('home');
   const [sheet,setSheet]=useState(null); // {kind, idx?}
+  const sheetRef=useRef(null);
+  useEffect(()=>{sheetRef.current=sheet;},[sheet]);
   const [toast,setToastS]=useState(null);
   const tRef=useRef();
   const say=useCallback(m=>{setToastS(m);clearTimeout(tRef.current);tRef.current=setTimeout(()=>setToastS(null),2400);},[]);
@@ -590,6 +592,28 @@ function App(){
   useEffect(()=>{
     if(!session)return;
     loadAll().then(()=>setLoaded(true)).catch(e=>{console.error(e);setLoaded(true);say('Could not load data from Supabase — check your connection');});
+  },[session]);
+  useEffect(()=>{
+    if(!session)return;
+    let t;
+    const taskSheetKinds=['update','ext','reopen','reassign','event'];
+    const refetch=()=>{clearTimeout(t);t=setTimeout(()=>{
+      const cur=sheetRef.current;
+      const openId=cur&&taskSheetKinds.includes(cur.kind)&&tasks[cur.idx]?tasks[cur.idx].id:null;
+      loadAll().then(()=>{
+        if(openId){const ni=tasks.findIndex(x=>x.id===openId);setSheet(ni<0?null:{...cur,idx:ni});}
+        R();
+      }).catch(console.error);
+    },400);};
+    const ch=sb.channel('teamflow-sync')
+      .on('postgres_changes',{event:'*',schema:'public',table:'staff'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'tasks'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'task_assignees'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'task_log'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'requests'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'notices'},refetch)
+      .subscribe();
+    return ()=>{clearTimeout(t);sb.removeChannel(ch);};
   },[session]);
 
   const loadingScreen=msg=><div className="phone"><div className="notch"/><div className="screen" style={{display:'flex',alignItems:'center',justifyContent:'center',color:'var(--muted)',fontSize:13}}>{msg}</div></div>;

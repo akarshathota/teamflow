@@ -674,6 +674,8 @@ function App(){
   const toastT=useRef();
   const say=useCallback(m=>{setToastState(m);clearTimeout(toastT.current);toastT.current=setTimeout(()=>setToastState(null),2400);},[]);
   const [drawerIdx,setDrawerIdx]=useState(-1);
+  const drawerIdxRef=useRef(-1);
+  useEffect(()=>{drawerIdxRef.current=drawerIdx;},[drawerIdx]);
   const [modal,setModal]=useState(false);
   const [empModal,setEmpModal]=useState(false);
   const searchRef=useRef();
@@ -687,6 +689,27 @@ function App(){
   useEffect(()=>{
     if(!session)return;
     loadAll().then(()=>setLoaded(true)).catch(e=>{console.error(e);setLoaded(true);say('Could not load data from Supabase — check your connection');});
+  },[session]);
+  useEffect(()=>{
+    if(!session)return;
+    let t;
+    const refetch=()=>{clearTimeout(t);t=setTimeout(()=>{
+      const di=drawerIdxRef.current;
+      const openId=di>=0&&tasks[di]?tasks[di].id:null;
+      loadAll().then(()=>{
+        if(openId)setDrawerIdx(tasks.findIndex(x=>x.id===openId)); // findIndex's -1-on-miss doubles as "closed"
+        R();
+      }).catch(console.error);
+    },400);};
+    const ch=sb.channel('teamflow-sync')
+      .on('postgres_changes',{event:'*',schema:'public',table:'staff'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'tasks'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'task_assignees'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'task_log'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'requests'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'notices'},refetch)
+      .subscribe();
+    return ()=>{clearTimeout(t);sb.removeChannel(ch);};
   },[session]);
   useEffect(()=>{
     const h=e=>{
