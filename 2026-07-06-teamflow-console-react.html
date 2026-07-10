@@ -1632,19 +1632,21 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <label>Name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Neha Kapoor" autoFocus/>
         <label>Email (their real login)</label><input value={f.email||''} onChange={e=>setF({...f,email:e.target.value})} placeholder="name@school.org"/>
       </div>
-      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
-      <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
-        const name=(f.name||'').trim();
-        if(!name){setErr('Enter a name.');return;}
-        if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((f.email||'').trim())){setErr('Enter a valid email — Management needs a real login.');return;}
-        setBusy(true);setErr('');
-        try{
-          const admin=STAFF.find(p=>p.role==='Administrator');
-          const j=await createStaffAccount({name,role:'Management',department:(mgmtMembers()[0]||{}).dept||'Administration',boss:admin.n,email:f.email.trim()});
-          STAFF.push({n:j.name,s:j.short_name,role:'Management',dept:(mgmtMembers()[0]||{}).dept||'Administration',boss:admin.n,bossId:admin.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
-          ctx.R();say('Added '+name+' to Management');setBusy(false);setResult(j);
-        }catch(e){setBusy(false);setErr(e.message);}
-      }}>{busy?'Adding…':'Add'}</button>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+          const name=(f.name||'').trim();
+          if(!name){setErr('Enter a name.');return;}
+          if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((f.email||'').trim())){setErr('Enter a valid email — Management needs a real login.');return;}
+          setBusy(true);setErr('');
+          try{
+            const admin=STAFF.find(p=>p.role==='Administrator');
+            const j=await createStaffAccount({name,role:'Management',department:(mgmtMembers()[0]||{}).dept||'Administration',boss:admin.n,email:f.email.trim()});
+            STAFF.push({n:j.name,s:j.short_name,role:'Management',dept:(mgmtMembers()[0]||{}).dept||'Administration',boss:admin.n,bossId:admin.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
+            ctx.R();say('Added '+name+' to Management');setBusy(false);setResult(j);
+          }catch(e){setBusy(false);setErr(e.message);}
+        }}>{busy?'Adding…':'Add'}</button>
+      </div>
     </ModalShell>;
   }
   if(step==='add-dept'){
@@ -1653,19 +1655,21 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <label>Department name</label><input value={f.dept||''} onChange={e=>setF({...f,dept:e.target.value})} placeholder="e.g. Facilities" autoFocus/>
         <label>Sr. Manager name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Priya Nair"/>
       </div>
-      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
-      <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
-        const dept=(f.dept||'').trim(),name=(f.name||'').trim();
-        if(!dept||!name){setErr('Enter both a department name and a Sr. Manager name.');return;}
-        if(orgDepts().some(d=>d.dept.toLowerCase()===dept.toLowerCase())){setErr('A department with that name already exists.');return;}
-        setBusy(true);setErr('');
-        try{
-          const boss=mgmtMembers()[0];
-          const j=await createStaffAccount({name,role:'Manager',department:dept,boss:boss.n});
-          STAFF.push({n:j.name,s:j.short_name,role:'Manager',dept,boss:boss.n,bossId:boss.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
-          ctx.R();say('Added department "'+dept+'" with Sr. Manager '+name);setBusy(false);setResult(j);
-        }catch(e){setBusy(false);setErr(e.message);}
-      }}>{busy?'Adding…':'Add'}</button>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+          const dept=(f.dept||'').trim(),name=(f.name||'').trim();
+          if(!dept||!name){setErr('Enter both a department name and a Sr. Manager name.');return;}
+          if(orgDepts().some(d=>d.dept.toLowerCase()===dept.toLowerCase())){setErr('A department with that name already exists.');return;}
+          setBusy(true);setErr('');
+          try{
+            const boss=mgmtMembers()[0];
+            const j=await createStaffAccount({name,role:'Manager',department:dept,boss:boss.n});
+            STAFF.push({n:j.name,s:j.short_name,role:'Manager',dept,boss:boss.n,bossId:boss.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
+            ctx.R();say('Added department "'+dept+'" with Sr. Manager '+name);setBusy(false);setResult(j);
+          }catch(e){setBusy(false);setErr(e.message);}
+        }}>{busy?'Adding…':'Add'}</button>
+      </div>
     </ModalShell>;
   }
   if(step==='add-jrm'||step==='add-lead'||step==='add-staff'){
@@ -1682,33 +1686,35 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           {depts.map(d=><option key={d.id} value={d.id}>{d.dept}{d.n?' — '+d.n:''}</option>)}
         </select>
       </div>
-      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
-      <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
-        const name=(f.name||'').trim();
-        const deptId=f.deptId||(depts[0]||{}).id;
-        const deptHead=depts.find(d=>d.id===deptId);
-        if(!name){setErr('Enter a name.');return;}
-        if(!deptHead){setErr('Pick a department.');return;}
-        const dbRole=step==='add-jrm'?'Team Member':step==='add-lead'?'Team Lead':'Teacher';
-        const attachPoint=step==='add-jrm'?deptHead
-          :step==='add-lead'?(orgDeepestOfType(deptHead.n,'Team Member')||deptHead)
-          :(orgDeepestOfType(deptHead.n,'Team Lead')||orgDeepestOfType(deptHead.n,'Team Member')||deptHead);
-        if(step==='add-jrm'||step==='add-lead'){
-          const existing=orgDeepestOfType(deptHead.n,dbRole);
-          const candidates=directReports(attachPoint.n);
-          if(!existing&&candidates.length){
-            setOaCtx({dbRole,name,deptHead,attachPoint,candidates});
-            setStep('add-reassign');
-            return;
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+          const name=(f.name||'').trim();
+          const deptId=f.deptId||(depts[0]||{}).id;
+          const deptHead=depts.find(d=>d.id===deptId);
+          if(!name){setErr('Enter a name.');return;}
+          if(!deptHead){setErr('Pick a department.');return;}
+          const dbRole=step==='add-jrm'?'Team Member':step==='add-lead'?'Team Lead':'Teacher';
+          const attachPoint=step==='add-jrm'?deptHead
+            :step==='add-lead'?(orgDeepestOfType(deptHead.n,'Team Member')||deptHead)
+            :(orgDeepestOfType(deptHead.n,'Team Lead')||orgDeepestOfType(deptHead.n,'Team Member')||deptHead);
+          if(step==='add-jrm'||step==='add-lead'){
+            const existing=orgDeepestOfType(deptHead.n,dbRole);
+            const candidates=directReports(attachPoint.n);
+            if(!existing&&candidates.length){
+              setOaCtx({dbRole,name,deptHead,attachPoint,candidates});
+              setStep('add-reassign');
+              return;
+            }
           }
-        }
-        setBusy(true);setErr('');
-        try{
-          const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,boss:attachPoint.n});
-          STAFF.push({n:j.name,s:j.short_name,role:dbRole,dept:deptHead.dept,boss:attachPoint.n,bossId:attachPoint.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
-          ctx.R();say('Added '+TIER_LABEL[dbRole]+' '+name+' under '+deptHead.dept);setBusy(false);setResult(j);
-        }catch(e){setBusy(false);setErr(e.message);}
-      }}>{busy?'Adding…':'Add'}</button>
+          setBusy(true);setErr('');
+          try{
+            const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,boss:attachPoint.n});
+            STAFF.push({n:j.name,s:j.short_name,role:dbRole,dept:deptHead.dept,boss:attachPoint.n,bossId:attachPoint.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
+            ctx.R();say('Added '+TIER_LABEL[dbRole]+' '+name+' under '+deptHead.dept);setBusy(false);setResult(j);
+          }catch(e){setBusy(false);setErr(e.message);}
+        }}>{busy?'Adding…':'Add'}</button>
+      </div>
     </ModalShell>;
   }
   if(step==='add-reassign'){
@@ -1721,20 +1727,22 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <input type="checkbox" checked={checked[c.id]!==false} onChange={e=>setChecked({...checked,[c.id]:e.target.checked})}/>
         {TIER_LABEL[c.role]||c.role} — {c.n}
       </label>)}</div>
-      <button className="btn soft" style={{flex:1}} onClick={close}>Back</button>
-      <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
-        setBusy(true);setErr('');
-        try{
-          const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,boss:attachPoint.n});
-          const newPerson={n:j.name,s:j.short_name,role:dbRole,dept:deptHead.dept,boss:attachPoint.n,bossId:attachPoint.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null};
-          STAFF.push(newPerson);
-          const moved=candidates.filter(c=>checked[c.id]!==false);
-          for(const c of moved){await updateStaffFields(c.id,{boss_id:j.id});const local=byId(c.id);if(local){local.boss=j.name;local.bossId=j.id;}}
-          ctx.R();
-          say('Added '+TIER_LABEL[dbRole]+' '+name+' under '+deptHead.dept+(moved.length?' — '+moved.length+' report'+(moved.length===1?'':'s')+' now reporting to them':''));
-          setBusy(false);setResult(j);
-        }catch(e){setBusy(false);setErr(e.message);}
-      }}>{busy?'Adding…':'Add'}</button>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={close}>Back</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+          setBusy(true);setErr('');
+          try{
+            const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,boss:attachPoint.n});
+            const newPerson={n:j.name,s:j.short_name,role:dbRole,dept:deptHead.dept,boss:attachPoint.n,bossId:attachPoint.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null};
+            STAFF.push(newPerson);
+            const moved=candidates.filter(c=>checked[c.id]!==false);
+            for(const c of moved){await updateStaffFields(c.id,{boss_id:j.id});const local=byId(c.id);if(local){local.boss=j.name;local.bossId=j.id;}}
+            ctx.R();
+            say('Added '+TIER_LABEL[dbRole]+' '+name+' under '+deptHead.dept+(moved.length?' — '+moved.length+' report'+(moved.length===1?'':'s')+' now reporting to them':''));
+            setBusy(false);setResult(j);
+          }catch(e){setBusy(false);setErr(e.message);}
+        }}>{busy?'Adding…':'Add'}</button>
+      </div>
     </ModalShell>;
   }
 
@@ -1748,7 +1756,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <button onClick={()=>{setOaCtx({dbRole:'Team Lead'});setStep('remove-person');}}>Team Lead</button>
         <button style={{gridColumn:'1/-1'}} onClick={()=>{setOaCtx({dbRole:'Teacher'});setStep('remove-person');}}>Staff</button>
       </div>
-      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+      <div className="qc-actions"><button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button></div>
     </ModalShell>;
   }
   if(step==='remove-person'){
@@ -1759,13 +1767,15 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <select value={f.targetId||entries[0].id} onChange={e=>setF({...f,targetId:e.target.value})}>
           {entries.map(e=><option key={e.id} value={e.id}>{personLabel(e)}</option>)}
         </select></div>:null}
-      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
-      {entries.length?<button className="btn primary" style={{flex:2,justifyContent:'center'}} onClick={()=>{
-        const target=byId(f.targetId||entries[0].id);
-        exportPersonTasksCsv(target);
-        setOaCtx({...oaCtx,target});
-        setStep('remove-action');
-      }}>Continue</button>:null}
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+        {entries.length?<button className="btn primary" style={{flex:2,justifyContent:'center'}} onClick={()=>{
+          const target=byId(f.targetId||entries[0].id);
+          exportPersonTasksCsv(target);
+          setOaCtx({...oaCtx,target});
+          setStep('remove-action');
+        }}>Continue</button>:null}
+      </div>
     </ModalShell>;
   }
   if(step==='remove-action'){
@@ -1779,7 +1789,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <button onClick={()=>setStep('remove-replace-name')}>Replace<small>Bring in someone new</small></button>
         <button disabled={!candidateCount} onClick={()=>setStep('remove-promote-pick')}>Promote<small>{candidateCount?'Anyone in the org':'No one to promote'}</small></button>
       </div>
-      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+      <div className="qc-actions"><button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button></div>
     </ModalShell>;
   }
   if(step==='remove-replace-name'){
@@ -1790,22 +1800,24 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <label>New {TIER_LABEL[target.role]} name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Deepa Iyer" autoFocus/>
         {isAdminTier?<><label>Email (their real login)</label><input value={f.email||''} onChange={e=>setF({...f,email:e.target.value})} placeholder="name@school.org"/></>:null}
       </div>
-      <button className="btn soft" style={{flex:1}} onClick={()=>setStep('remove-action')}>Back</button>
-      <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
-        const name=(f.name||'').trim();
-        if(!name){setErr('Enter a name for the replacement.');return;}
-        if(isAdminTier&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((f.email||'').trim())){setErr('Enter a valid email for this role.');return;}
-        setBusy(true);setErr('');
-        try{
-          const j=await createStaffAccount({name,role:target.role,department:target.dept,boss:target.boss,email:isAdminTier?f.email.trim():undefined});
-          const reports=directReports(target.n);
-          for(const r of reports){await updateStaffFields(r.id,{boss_id:j.id});const local=byId(r.id);if(local){local.boss=name;local.bossId=j.id;}}
-          await deleteStaffAccount(target.id);
-          STAFF.splice(STAFF.indexOf(target),1);
-          STAFF.push({n:j.name,s:j.short_name,role:target.role,dept:target.dept,boss:target.boss,bossId:target.bossId,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
-          ctx.R();say(name+' now fills the '+TIER_LABEL[target.role]+' position'+(target.dept?' ('+target.dept+')':''));setBusy(false);setResult(j);
-        }catch(e){setBusy(false);setErr(e.message);}
-      }}>{busy?'Replacing…':'Confirm replace'}</button>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={()=>setStep('remove-action')}>Back</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+          const name=(f.name||'').trim();
+          if(!name){setErr('Enter a name for the replacement.');return;}
+          if(isAdminTier&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((f.email||'').trim())){setErr('Enter a valid email for this role.');return;}
+          setBusy(true);setErr('');
+          try{
+            const j=await createStaffAccount({name,role:target.role,department:target.dept,boss:target.boss,email:isAdminTier?f.email.trim():undefined});
+            const reports=directReports(target.n);
+            for(const r of reports){await updateStaffFields(r.id,{boss_id:j.id});const local=byId(r.id);if(local){local.boss=name;local.bossId=j.id;}}
+            await deleteStaffAccount(target.id);
+            STAFF.splice(STAFF.indexOf(target),1);
+            STAFF.push({n:j.name,s:j.short_name,role:target.role,dept:target.dept,boss:target.boss,bossId:target.bossId,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
+            ctx.R();say(name+' now fills the '+TIER_LABEL[target.role]+' position'+(target.dept?' ('+target.dept+')':''));setBusy(false);setResult(j);
+          }catch(e){setBusy(false);setErr(e.message);}
+        }}>{busy?'Replacing…':'Confirm replace'}</button>
+      </div>
     </ModalShell>;
   }
   if(step==='remove-promote-pick'){
@@ -1816,11 +1828,13 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <select value={f.promotedId||candidates[0].id} onChange={e=>setF({...f,promotedId:e.target.value})}>
           {candidates.map(c=><option key={c.id} value={c.id}>{personLabel(c)}</option>)}
         </select></div>
-      <button className="btn soft" style={{flex:1}} onClick={()=>setStep('remove-action')}>Back</button>
-      <button className="btn primary" style={{flex:2,justifyContent:'center'}} onClick={()=>{
-        setOaCtx({...oaCtx,promotedId:f.promotedId||candidates[0].id});
-        setStep('remove-promote-mode');
-      }}>Continue</button>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={()=>setStep('remove-action')}>Back</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} onClick={()=>{
+          setOaCtx({...oaCtx,promotedId:f.promotedId||candidates[0].id});
+          setStep('remove-promote-mode');
+        }}>Continue</button>
+      </div>
     </ModalShell>;
   }
   if(step==='remove-promote-mode'){
@@ -1829,7 +1843,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <button disabled={busy} onClick={()=>doPromote(true)}>Temporary<small>Covers the role — you can revert them later</small></button>
         <button disabled={busy} onClick={()=>doPromote(false)}>Permanent<small>Fills the role for good</small></button>
       </div>
-      <button className="btn soft" style={{flex:1}} onClick={()=>setStep('remove-promote-pick')}>Back</button>
+      <div className="qc-actions"><button className="btn soft" style={{flex:1}} onClick={()=>setStep('remove-promote-pick')}>Back</button></div>
     </ModalShell>;
   }
   if(step==='revert-name'){
@@ -1842,8 +1856,9 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <label>New {TIER_LABEL[newHireRole]} name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Priya Nair" autoFocus/>
         {isAdminTier?<><label>Email (their real login)</label><input value={f.email||''} onChange={e=>setF({...f,email:e.target.value})} placeholder="name@school.org"/></>:null}
       </div>
-      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
-      <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
         const name=(f.name||'').trim();
         if(!name){setErr('Enter a name for the permanent replacement.');return;}
         if(isAdminTier&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((f.email||'').trim())){setErr('Enter a valid email for this role.');return;}
@@ -1867,26 +1882,29 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           ctx.R();say(name+' now fills '+TIER_LABEL[newHireRole]+' — '+person.n+' is back to '+TIER_LABEL[snap.home_role]);setBusy(false);setResult(j);
         }catch(e){setBusy(false);setErr(e.message);}
       }}>{busy?'Reverting…':'Confirm revert'}</button>
+      </div>
     </ModalShell>;
   }
   if(step==='rename-dept'){
     const {person}=oaCtx;
     return <ModalShell close={close} err={err} title="Rename department" sub="Updates the department name for everyone in it.">
       <div className="mf"><label>Department name</label><input value={f.dept!==undefined?f.dept:person.dept} onChange={e=>setF({...f,dept:e.target.value})} autoFocus/></div>
-      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
-      <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
-        const newName=(f.dept!==undefined?f.dept:person.dept).trim();
-        if(!newName){setErr('Enter a department name.');return;}
-        if(newName!==person.dept&&orgDepts().some(d=>d.dept.toLowerCase()===newName.toLowerCase())){setErr('A department with that name already exists.');return;}
-        setBusy(true);setErr('');
-        try{
-          const oldName=person.dept;
-          const group=[person,...descendants(person.n)];
-          for(const p of group){await updateStaffFields(p.id,{department:newName});p.dept=newName;}
-          ctx.R();say(oldName===newName?'No change made':'Renamed "'+oldName+'" to "'+newName+'"');
-          setBusy(false);close();
-        }catch(e){setBusy(false);setErr(e.message);}
-      }}>{busy?'Saving…':'Save'}</button>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+          const newName=(f.dept!==undefined?f.dept:person.dept).trim();
+          if(!newName){setErr('Enter a department name.');return;}
+          if(newName!==person.dept&&orgDepts().some(d=>d.dept.toLowerCase()===newName.toLowerCase())){setErr('A department with that name already exists.');return;}
+          setBusy(true);setErr('');
+          try{
+            const oldName=person.dept;
+            const group=[person,...descendants(person.n)];
+            for(const p of group){await updateStaffFields(p.id,{department:newName});p.dept=newName;}
+            ctx.R();say(oldName===newName?'No change made':'Renamed "'+oldName+'" to "'+newName+'"');
+            setBusy(false);close();
+          }catch(e){setBusy(false);setErr(e.message);}
+        }}>{busy?'Saving…':'Save'}</button>
+      </div>
     </ModalShell>;
   }
   if(step==='person-detail'){
@@ -1896,7 +1914,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         {person.authId?<button className="btn soft" onClick={()=>{close();ctx.setResetTarget(person);}}><I n="key" s={15}/>Reset password</button>:null}
         {person.tempCovering?<button className="btn soft" onClick={()=>{setOaCtx({person});setStep('revert-name');}}>Revert to their original role</button>:null}
       </div>
-      <button className="btn soft" style={{flex:1}} onClick={close}>Close</button>
+      <div className="qc-actions"><button className="btn soft" style={{flex:1}} onClick={close}>Close</button></div>
     </ModalShell>;
   }
   return null;
