@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TeamFlow — Task columns mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./shared.css">
+<style>
+  body{margin:0;font-family:'IBM Plex Sans',-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);
+    background:#f1f0e9;-webkit-font-smoothing:antialiased}
+  h1,.brandfont{font-family:'Bricolage Grotesque',sans-serif}
+
+  /* ===== reused verbatim from the console app's own CSS, so this drops in as-is later ===== */
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:var(--sh-sm)}
+  .scrollbox{overflow-y:auto;padding-right:6px;scrollbar-width:thin}
+  .trow{display:flex;align-items:center;gap:13px;background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:13px 16px;margin-bottom:8px;cursor:pointer;box-shadow:var(--sh-sm);transition:border-color .15s}
+  .trow:hover{border-color:var(--accent-border);box-shadow:var(--sh-md)}
+  .trow.done{opacity:.6}
+  .trow.done .tt{text-decoration:line-through;color:var(--muted)}
+  .donebtn{width:26px;height:26px;border-radius:50%;border:2px solid #c9c6b8;background:var(--card);cursor:pointer;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;color:transparent}
+  .donebtn:hover{border-color:var(--green);color:#c9c6b8}
+  .donebtn.on{background:var(--green);border-color:var(--green);color:#fff}
+  .donebtn svg{width:14px;height:14px;stroke-width:3}
+  .trow .body{flex:1;min-width:0}
+  .trow .tt{font-size:14px;font-weight:600;line-height:1.35}
+  .trow .meta{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted);margin-top:5px;flex-wrap:wrap}
+  .avex{width:22px;height:22px;border-radius:50%;background:#e6e4da;color:var(--ink2);display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex:0 0 auto}
+  .tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:5px;white-space:nowrap}
+  .tag.gray{background:#efeee7;color:#5d6367}
+  .tag.blue{background:var(--blue-soft);color:var(--blue)}
+  .tag.amber{background:var(--amber-soft);color:var(--amber)}
+  .tag.red{background:var(--red-soft);color:var(--red)}
+  .tag.teal{background:var(--accent-soft);color:var(--accent-ink)}
+  .duecell{font-size:12.5px;font-weight:600;color:var(--ink2);display:flex;align-items:center;gap:6px;flex:0 0 auto;white-space:nowrap}
+  .duecell.over{color:var(--red);font-weight:700}
+  .fsel{border:1.5px solid var(--line);border-radius:8px;padding:8px 11px;font-family:inherit;font-size:13px;font-weight:600;outline:none;background:var(--card);cursor:pointer;color:var(--ink)}
+  .fsel:focus{border-color:var(--accent)}
+  .fsel:disabled{opacity:.5;cursor:not-allowed}
+  .empty{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--muted);font-size:13px;padding:36px 16px;text-align:center}
+
+  /* ===== new for this mockup ===== */
+  .page{max-width:1240px;margin:0 auto;padding:26px 24px 60px}
+  .review-bar{background:#23262a;color:#fff;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:14px;margin-bottom:22px;font-size:13px}
+  .review-bar b{font-weight:700}
+  .review-bar .roles{display:flex;gap:6px;margin-left:auto}
+  .review-bar button{border:1.5px solid rgba(255,255,255,.25);background:none;color:#fff;padding:7px 13px;border-radius:7px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+  .review-bar button.on{background:var(--accent);border-color:var(--accent)}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 20px}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:start}
+  .col-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .col-head h3{margin:0;font-size:14.5px;font-weight:700}
+  .col-note{font-size:11px;color:var(--muted);font-weight:600;background:#efeee7;padding:2px 8px;border-radius:6px}
+  .col-toprow{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+  .kebab-slot{display:inline-block}
+  .kebab{width:32px;height:32px;border-radius:8px;border:1.5px solid var(--line);background:var(--card);display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto;position:relative}
+  .kebab:hover{border-color:var(--accent-border)}
+  .kebab svg{width:16px;height:16px}
+  .kebab-menu{position:absolute;top:38px;right:0;background:var(--card);border:1px solid var(--line);border-radius:9px;box-shadow:var(--sh-lg);padding:6px;width:150px;z-index:20;display:none}
+  .kebab-menu.open{display:block}
+  .kebab-menu button{width:100%;text-align:left;border:none;background:none;padding:8px 10px;border-radius:6px;font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;display:flex;align-items:center;gap:8px}
+  .kebab-menu button:hover{background:#f1f0e9}
+  .kebab-menu svg{width:14px;height:14px;color:var(--muted)}
+  .segtabs{display:flex;background:#efeee7;border-radius:8px;padding:3px;gap:2px}
+  .segtabs button{flex:1;border:none;background:none;font-family:inherit;font-size:12.5px;font-weight:700;color:var(--muted);padding:7px 0;border-radius:6px;cursor:pointer}
+  .segtabs button.on{background:var(--card);color:var(--ink);box-shadow:var(--sh-sm)}
+  .col-empty-note{font-size:12px;color:var(--muted);padding:10px 2px;line-height:1.5}
+  .gated{display:none}
+  .gated.show{display:block}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(20,25,28,.45);display:none;align-items:center;justify-content:center;z-index:100}
+  .modal-overlay.open{display:flex}
+  .modal-card{background:var(--card);border-radius:14px;box-shadow:var(--sh-lg);padding:22px;width:320px}
+  .modal-card h3{margin:0 0 4px;font-size:16px}
+  .modal-card .sub{margin:0 0 16px;color:var(--muted);font-size:13px}
+  .fmt-choices{display:flex;gap:10px;margin-bottom:14px}
+  .fmt-btn{flex:1;border:1.5px solid var(--line);background:var(--card);border-radius:10px;padding:16px 10px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;font-family:inherit}
+  .fmt-btn:hover{border-color:var(--accent-border);background:var(--accent-soft)}
+  .fmt-btn svg{width:26px;height:26px;color:var(--accent-ink)}
+  .fmt-btn b{font-size:13px;color:var(--ink)}
+  .modal-cancel{width:100%;border:none;background:#efeee7;color:var(--ink2);font-family:inherit;font-weight:700;font-size:13px;padding:10px;border-radius:8px;cursor:pointer}
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:#23262a;color:#fff;padding:11px 18px;border-radius:9px;font-size:13px;font-weight:600;box-shadow:var(--sh-lg);z-index:110;opacity:0;pointer-events:none;transition:opacity .2s}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="review-bar">
+    <span><b>Review mockup</b> — not wired to real data. Switch roles to preview what each one sees.</span>
+    <div class="roles">
+      <button class="on" data-role="jrm">Team Member</button>
+      <button data-role="srm">Manager</button>
+      <button data-role="mgmt">Management</button>
+    </div>
+  </div>
+
+  <h1>Tasks</h1>
+  <p class="sub">Three-column layout from the wireframe — My Tasks · Department Tasks (Manager/Management only) · Assigned by my bosses.</p>
+
+  <div class="cols">
+
+    <!-- ===== Column 1: My Tasks ===== -->
+    <div class="panel">
+      <div class="col-head"><h3>My tasks</h3><span class="kebab-slot" data-list="My tasks"></span></div>
+      <div class="col-toprow">
+        <select class="fsel" style="flex:1">
+          <option>All departments</option>
+          <option>Maintenance</option>
+          <option>Academic</option>
+          <option>Accounts</option>
+        </select>
+      </div>
+      <div class="scrollbox" style="max-height:520px">
+        <div class="trow"><button class="donebtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+          <div class="body"><div class="tt">Prepare term-2 exam timetable</div>
+            <div class="meta"><span class="tag teal">Academic</span><span class="duecell">Due Jul 8</span></div></div></div>
+        <div class="trow"><button class="donebtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+          <div class="body"><div class="tt">Service the water purifiers</div>
+            <div class="meta"><span class="tag amber">Maintenance</span><span class="duecell over">2d overdue</span></div></div></div>
+        <div class="trow"><button class="donebtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+          <div class="body"><div class="tt">Reconcile last month's petty cash</div>
+            <div class="meta"><span class="tag blue">Accounts</span><span class="duecell">Due Jul 9</span></div></div></div>
+        <div class="trow done"><button class="donebtn on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+          <div class="body"><div class="tt">Repair the library AC unit</div>
+            <div class="meta"><span class="tag gray">Closed · Jul 1</span></div></div></div>
+      </div>
+    </div>
+
+    <!-- ===== Column 2: Assigned to me by [boss chain dropdown] ===== -->
+    <div class="panel">
+      <div class="col-head"><h3>Assigned to me by</h3><span class="kebab-slot" data-list="Assigned to me"></span></div>
+      <div class="col-toprow">
+        <select class="fsel" id="bossDropdown" style="flex:1"></select>
+      </div>
+      <div class="scrollbox" style="max-height:460px" id="bossTaskList"></div>
+    </div>
+
+    <!-- ===== Column 3: Department Tasks — Manager/Management only ===== -->
+    <div class="panel gated" id="deptCol">
+      <div class="col-head"><h3>Department tasks</h3><span class="col-note">Manager · Management</span><span class="kebab-slot" data-list="Department tasks"></span></div>
+      <div class="col-toprow" style="flex-direction:column;align-items:stretch;gap:8px">
+        <div class="segtabs">
+          <button class="on" data-seg="me">By me</button>
+          <button data-seg="others">By others</button>
+        </div>
+        <select class="fsel" id="deptDropdown">
+          <option>All departments</option>
+          <option>Maintenance</option>
+          <option>Academic</option>
+          <option>Accounts</option>
+        </select>
+      </div>
+      <div class="col-empty-note" id="deptNote"></div>
+      <div class="scrollbox" style="max-height:460px">
+        <div class="trow"><button class="donebtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+          <div class="body"><div class="tt">Check classroom networking points</div>
+            <div class="meta"><span class="avex">RK</span>Ravi Kumar<span class="duecell">Due Jul 10</span></div></div></div>
+        <div class="trow"><button class="donebtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+          <div class="body"><div class="tt">Deep-clean the assembly hall</div>
+            <div class="meta"><span class="avex">LM</span>Latha M.<span class="duecell">Due Jul 12</span></div></div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="modal-overlay" id="exportModal">
+  <div class="modal-card">
+    <h3>Export list</h3>
+    <p class="sub" id="exportModalSub">Choose a format</p>
+    <div class="fmt-choices">
+      <button class="fmt-btn" data-fmt="PDF">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3.5h9L20 8.5v12H6z"/><path d="M14.5 3.5v5.5H20"/><text x="8.5" y="17" font-size="6.5" font-weight="700" stroke="none" fill="currentColor">PDF</text></svg>
+        <b>PDF</b>
+      </button>
+      <button class="fmt-btn" data-fmt="XLSX">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3.5h9L20 8.5v12H6z"/><path d="M14.5 3.5v5.5H20"/><text x="7.5" y="17" font-size="6" font-weight="700" stroke="none" fill="currentColor">XLS</text></svg>
+        <b>XLSX</b>
+      </button>
+    </div>
+    <button class="modal-cancel" id="exportCancel">Cancel</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const roleBtns = document.querySelectorAll('.review-bar [data-role]');
+const deptCol = document.getElementById('deptCol');
+const deptDropdown = document.getElementById('deptDropdown');
+const deptNote = document.getElementById('deptNote');
+
+/* boss chain per role — same concept as the real app's bossChain (walks viewer.boss upward),
+   just hardcoded here since this is a static mockup. Matches the real org hierarchy:
+   Akarsh (Admin, root) -> Rajesh Menon (Management) -> Anita Desai (Manager) -> Vikram Rao (Team Member) */
+const bossChains={
+  jrm:[{n:'Anita',label:'Anita (Manager)'},{n:'Rajesh',label:'Rajesh (Management)'},{n:'Akarsh',label:'Akarsh (Admin)'}],
+  srm:[{n:'Rajesh',label:'Rajesh (Management)'},{n:'Akarsh',label:'Akarsh (Admin)'}],
+  mgmt:[{n:'Akarsh',label:'Akarsh (Admin)'}],
+};
+const assignedByTasks=[
+  {t:'Check classroom networking points',by:'Anita',due:'Due Jul 10'},
+  {t:'Shortlist candidates for PE teacher role',by:'Rajesh',due:'Due Jul 12'},
+  {t:'Review the new vendor contract',by:'Rajesh',due:'Due Jul 15'},
+  {t:'Prepare Q2 budget summary',by:'Akarsh',due:'Due Jul 14'},
+];
+const bossDropdown=document.getElementById('bossDropdown');
+const bossTaskList=document.getElementById('bossTaskList');
+const rowSvg='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+function renderBossCol(role){
+  const chain=bossChains[role];
+  bossDropdown.innerHTML='<option value="all">All</option>'+chain.map(c=>`<option value="${c.n}">${c.label}</option>`).join('');
+  bossDropdown.value='all';
+  renderBossTasks(role);
+}
+function renderBossTasks(role){
+  const chainNames=bossChains[role].map(c=>c.n);
+  const labelOf=n=>(bossChains[role].find(c=>c.n===n)||{}).label||n;
+  const sel=bossDropdown.value;
+  const list=assignedByTasks.filter(x=>chainNames.includes(x.by)&&(sel==='all'||x.by===sel));
+  bossTaskList.innerHTML=list.length?list.map(x=>`
+    <div class="trow"><button class="donebtn">${rowSvg}</button>
+      <div class="body"><div class="tt">${x.t}</div>
+        <div class="meta"><span class="tag red">As per ${labelOf(x.by)}</span><span class="duecell">${x.due}</span></div></div></div>
+  `).join(''):'<div class="col-empty-note">Nothing assigned to you right now.</div>';
+}
+bossDropdown.addEventListener('change', ()=>renderBossTasks(currentRole));
+
+let currentRole='jrm';
+function setRole(role){
+  currentRole=role;
+  roleBtns.forEach(b=>b.classList.toggle('on', b.dataset.role===role));
+  // wireframe note: "Department tasks" column appears only for Manager/Management
+  deptCol.classList.toggle('show', role==='srm'||role==='mgmt');
+  // wireframe note: the department dropdown inside it is only for Management —
+  // Manager is scoped to their own department, so the dropdown is disabled/fixed for them
+  if(role==='mgmt'){
+    deptDropdown.disabled=false;
+    deptNote.textContent='';
+  }else if(role==='srm'){
+    deptDropdown.disabled=true;
+    deptDropdown.value='Maintenance';
+    deptNote.textContent='Fixed to your own department — only Management can switch departments here.';
+  }
+  renderBossCol(role);
+}
+roleBtns.forEach(b=>b.addEventListener('click', ()=>setRole(b.dataset.role)));
+document.querySelectorAll('.segtabs [data-seg]').forEach(b=>{
+  b.addEventListener('click', e=>{
+    e.currentTarget.parentElement.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+    e.currentTarget.classList.add('on');
+  });
+});
+
+/* one kebab (Export list / Print list) per column, injected so the markup isn't repeated 3x */
+const kebabHTML=`<div class="kebab" onclick="this.querySelector('.kebab-menu').classList.toggle('open')">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg>
+  <div class="kebab-menu">
+    <button class="export-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v11M7.5 11.5L12 16l4.5-4.5M4.5 19.5h15"/></svg>Export list</button>
+    <button class="print-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 8V4h10v4M7 17H4.5V10h15V17H17"/><rect x="7" y="14.5" width="10" height="6" rx="1"/></svg>Print list</button>
+  </div>
+</div>`;
+document.querySelectorAll('.kebab-slot').forEach(slot=>{
+  slot.innerHTML=kebabHTML;
+  const listName=slot.dataset.list;
+  slot.querySelector('.export-btn').addEventListener('click', e=>{
+    e.stopPropagation();
+    slot.querySelector('.kebab-menu').classList.remove('open');
+    openExportModal(listName);
+  });
+  slot.querySelector('.print-btn').addEventListener('click', e=>{
+    e.stopPropagation();
+    slot.querySelector('.kebab-menu').classList.remove('open');
+    showToast('Printing "'+listName+'" (mockup — not wired yet)');
+  });
+});
+document.addEventListener('click', e=>{
+  if(!e.target.closest('.kebab')) document.querySelectorAll('.kebab-menu.open').forEach(m=>m.classList.remove('open'));
+});
+
+/* export format picker */
+const exportModal=document.getElementById('exportModal');
+let exportTarget='';
+function openExportModal(listName){
+  exportTarget=listName;
+  document.getElementById('exportModalSub').textContent='Choose a format for "'+listName+'"';
+  exportModal.classList.add('open');
+}
+function closeExportModal(){ exportModal.classList.remove('open'); }
+document.getElementById('exportCancel').addEventListener('click', closeExportModal);
+exportModal.addEventListener('click', e=>{ if(e.target===exportModal) closeExportModal(); });
+document.querySelectorAll('.fmt-btn').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    showToast('Exporting "'+exportTarget+'" as '+b.dataset.fmt+' (mockup — not wired yet)');
+    closeExportModal();
+  });
+});
+
+let toastT;
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  clearTimeout(toastT);
+  toastT=setTimeout(()=>t.classList.remove('show'), 2600);
+}
+
+setRole('jrm');
+</script>
+</body>
+</html>

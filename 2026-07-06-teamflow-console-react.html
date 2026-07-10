@@ -162,6 +162,21 @@
   .empty svg{width:38px;height:38px;stroke-width:1.4;color:#c2beae}
   .empty b{color:var(--ink2)}
 
+  /* three-column Tasks layout */
+  .cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:start}
+  .colpanel{display:flex;flex-direction:column}
+  .col-head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+  .col-head h3{margin:0;font-size:14.5px;font-weight:700;flex:1}
+  .col-note{font-size:11px;color:var(--muted);font-weight:600;background:#efeee7;padding:2px 8px;border-radius:6px;flex:0 0 auto}
+  .col-toprow{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+  .col-empty-note{font-size:12px;color:var(--muted);padding:0 2px 10px;line-height:1.5}
+  .col-scroll{max-height:calc(100vh - 260px);overflow-y:auto;padding-right:4px}
+  .kebab{width:32px;height:32px;border-radius:8px;border:1.5px solid var(--line);background:var(--card);display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto;position:relative}
+  .kebab:hover{border-color:var(--accent-border)}
+  .kebab-menu{position:absolute;top:38px;right:0;background:var(--card);border:1px solid var(--line);border-radius:9px;box-shadow:var(--sh-lg);padding:6px;width:150px;z-index:20}
+  .kebab-menu button{width:100%;text-align:left;border:none;background:none;padding:8px 10px;border-radius:6px;font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;display:flex;align-items:center;gap:8px}
+  .kebab-menu button:hover{background:#f1f0e9}
+
   /* drawer */
   .scrim{position:fixed;inset:0;background:rgba(27,30,33,.35);z-index:55}
   .drawer{position:fixed;top:0;right:0;width:400px;max-width:96vw;height:100vh;background:var(--card);z-index:60;
@@ -566,7 +581,8 @@ const PATHS={
   camera:<g><path d="M4 8.5a2 2 0 012-2h2l1.5-2h5L16 6.5h2a2 2 0 012 2V18a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><circle cx="12" cy="13" r="3.4"/></g>,
   image:<g><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M4.5 17l4.5-4.5 3 3 3.5-3.5 4.5 4.5"/></g>,
   clip:<path d="M8.5 12l6-6a3.3 3.3 0 014.7 4.7l-7.3 7.3a5 5 0 01-7-7l6.8-6.8"/>,
-  key:<g><circle cx="7.5" cy="7.5" r="4"/><path d="M10.5 10.5L20 20M15.5 15.5l3-3M18.5 18.5l3-3"/></g>
+  key:<g><circle cx="7.5" cy="7.5" r="4"/><path d="M10.5 10.5L20 20M15.5 15.5l3-3M18.5 18.5l3-3"/></g>,
+  dots3:<g><circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none"/></g>
 };
 const I=({n,s,c})=><svg className="i" viewBox="0 0 24 24" style={{width:s,height:s,color:c}}>{PATHS[n]}</svg>;
 
@@ -712,7 +728,11 @@ function App(){
   if(!myStaff)return <div style={{display:'flex',flexDirection:'column',gap:14,alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--muted)',fontSize:14}}>
     <div>Your account isn't linked to a staff record. Contact your administrator.</div>
     <button className="btn ghost" onClick={()=>sb.auth.signOut()}>Sign out</button></div>;
-  const myRoleKey=DB_ROLE_TO_KEY[myStaff.role];
+  /* DB_ROLE_TO_KEY (shared.js) is mobile's superset and includes Teacher:'worker' — harmless there,
+     but console has no Teacher-facing UI at all, so it needs its own explicit block rather than
+     relying on DB_ROLE_TO_KEY[role] being falsy (which stopped being true for Teachers once the
+     dedup shared mobile's map). Caught by testing an actual Teacher login into console. */
+  const myRoleKey=myStaff.role==='Teacher'?null:DB_ROLE_TO_KEY[myStaff.role];
   if(!myRoleKey)return <div style={{display:'flex',flexDirection:'column',gap:14,alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--muted)',fontSize:14}}>
     <div>This account doesn't have console access — open the TeamFlow mobile app instead.</div>
     <button className="btn ghost" onClick={()=>sb.auth.signOut()}>Sign out</button></div>;
@@ -1105,49 +1125,134 @@ function QueuePanel({ctx}){
 }
 
 /* ============ tasks view ============ */
+/* per-column task list export: reuses the same CSV/print machinery as the old scope-wide
+   exportCSV/printReport, just parameterized by an arbitrary row set + label instead of always
+   being the whole scope. */
+function exportRows(rows,label){
+  const csvRows=[['Task','Type','Department','Priority','Repeats','Assignee','Due','Status','Overdue','Note']];
+  rows.forEach(({t})=>csvRows.push([t.t,TYPES[t.type||'work'],BUCKETS[t.bucket]||'',PRIOS[t.prio||'med'].l,t.recur?recurLabel(t.recur,t.recurOn):'',
+    assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),t.date+(t.time?' '+fmtTime(t.time):''),ST[t.status].l,isOverdue(t)?'Yes':'No',t.note||'']));
+  csvDownload(iso(new Date())+'-teamflow-'+label.toLowerCase().replace(/\s+/g,'-')+'.csv',csvRows);
+}
+function printRows(rows,label,viewerName){
+  let b='<h1 style="margin:0 0 4px;font-family:Bricolage Grotesque,sans-serif">TeamFlow — '+label+'</h1>';
+  b+='<div style="color:#555;margin-bottom:18px">Prepared for '+viewerName+' · '+new Date().toDateString()+' · '+rows.length+' tasks</div>';
+  b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Task</th><th style="text-align:left;padding:6px">Assignee</th><th style="text-align:left;padding:6px">Type</th><th style="text-align:left;padding:6px">Due</th><th style="text-align:left;padding:6px">Status</th></tr>';
+  rows.forEach(({t})=>{b+='<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+t.t+'</td><td style="padding:6px">'+assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')+'</td><td style="padding:6px">'+TYPES[t.type||'work']+'</td><td style="padding:6px">'+t.date+(isOverdue(t)?' (overdue)':'')+'</td><td style="padding:6px">'+ST[t.status].l+'</td></tr>';});
+  b+='</table>';
+  const pr=document.getElementById('print-report');pr.innerHTML=b;pr.style.display='block';
+  const ot=document.title;document.title=iso(new Date())+'-teamflow-'+label.toLowerCase().replace(/\s+/g,'-');
+  window.print();
+  setTimeout(()=>{pr.style.display='none';document.title=ot;},300);
+}
+function ExportKebab({label,rows,viewerName,onExport}){
+  const [open,setOpen]=useState(false);
+  const ref=useRef();
+  useEffect(()=>{
+    if(!open)return;
+    const h=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
+    document.addEventListener('click',h);
+    return ()=>document.removeEventListener('click',h);
+  },[open]);
+  return <div className="kebab" ref={ref} onClick={()=>setOpen(o=>!o)}>
+    <I n="dots3" s={16}/>
+    {open?<div className="kebab-menu">
+      <button onClick={e=>{e.stopPropagation();setOpen(false);onExport({label,rows,viewerName});}}><I n="dl" s={14}/>Export list</button>
+      <button onClick={e=>{e.stopPropagation();setOpen(false);printRows(rows,label,viewerName);}}><I n="print" s={14}/>Print list</button>
+    </div>:null}
+  </div>;
+}
+function ExportFormatModal({target,close,say}){
+  return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
+    <div className="modal" style={{width:320}}>
+      <div className="qc-head"><h3>Export list</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
+      <div className="mf">
+        <div className="whysm" style={{marginTop:0,marginBottom:14}}>Choose a format for "{target.label}"</div>
+        <div style={{display:'flex',gap:10}}>
+          <button className="btn ghost" style={{flex:1,flexDirection:'column',height:70,gap:6}}
+            onClick={()=>{printRows(target.rows,target.label,target.viewerName);close();}}><I n="print"/>PDF</button>
+          <button className="btn ghost" style={{flex:1,flexDirection:'column',height:70,gap:6}}
+            onClick={()=>{exportRows(target.rows,target.label);say('Exported "'+target.label+'" — CSV, opens directly in Excel');close();}}><I n="dl"/>XLSX</button>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
 function TasksView({ctx}){
-  const [mode,setMode]=useState('byme'); // 'byme' = assigned by me (to my team) · 'mine' = assigned to me
-  const [ft,setFt]=useState('all');const [fs,setFs]=useState('all');const [fw,setFw]=useState('all');const [fb,setFb]=useState('all');
+  const [fb,setFb]=useState('all');
   const [fboss,setFboss]=useState('all');
-  const base=tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)
-    &&(ft==='all'||(o.t.type||'work')===ft)&&(fs==='all'||o.t.status===fs)&&(fw==='all'||hasWho(o.t,fw))&&(fb==='all'||o.t.bucket===fb));
-  const byWho=base.filter(o=>mode==='mine'?hasWho(o.t,ctx.viewer.s):!hasWho(o.t,ctx.viewer.s));
-  const rows=mode==='mine'&&fboss!=='all'?byWho.filter(o=>fboss==='self'?!o.t.instructedBy:o.t.instructedBy===fboss):byWho;
-  const g={over:[],today:[],up:[],done:[]};
-  rows.forEach(o=>{if(o.t.status==='done')g.done.push(o);else if(isOverdue(o.t))g.over.push(o);else if(isToday(o.t))g.today.push(o);else g.up.push(o);});
-  g.over.sort((a,b)=>a.t.date<b.t.date?-1:1);g.up.sort((a,b)=>a.t.date<b.t.date?-1:1);
-  const grp=(cls,ic,label,arr)=>arr.length?<React.Fragment key={label}>
-    <div className={'group-h '+cls}><I n={ic}/>{label}<span className="cnt">{arr.length}</span></div>
-    {arr.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx}/>)}</React.Fragment>:null;
-  const any=rows.length>0;
+  const [deptSeg,setDeptSeg]=useState('me');
+  const [deptFb,setDeptFb]=useState('all');
+  const [exportFor,setExportFor]=useState(null);
+
+  const showDept=ctx.role==='srm'||ctx.role==='mgmt';
+  const isManagerTier=ctx.role==='srm';
+  const bossLabelOf=n=>BOSS_LABEL[n]||n;
+  const myBossLabel=bossLabelOf(ctx.viewer.n);
+
+  const rowsMine=tasks.map((t,i)=>({t,i})).filter(o=>hasWho(o.t,ctx.viewer.s)&&(fb==='all'||o.t.bucket===fb));
+  const rowsBoss=tasks.map((t,i)=>({t,i})).filter(o=>hasWho(o.t,ctx.viewer.s)&&o.t.instructedBy&&(fboss==='all'||o.t.instructedBy===fboss));
+  // Manager's own dept-lock is intentionally "show everything in my scope" rather than a specific
+  // bucket — staff.department (org-chart HR field, e.g. "Academics") and task.bucket (e.g.
+  // "academic") are separate vocabularies in this data model, not a 1:1 mapping, so guessing a
+  // specific bucket for "their department" would silently misfilter. Management still gets the
+  // real per-bucket dropdown.
+  const effectiveDeptFb=isManagerTier?'all':deptFb;
+  const rowsDept=showDept?tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)&&!hasWho(o.t,ctx.viewer.s)
+    &&(effectiveDeptFb==='all'||o.t.bucket===effectiveDeptFb)
+    &&(deptSeg==='me'?o.t.instructedBy===myBossLabel:o.t.instructedBy!==myBossLabel)):[];
+
+  const col=(label,rows,note)=><>
+    <div className="col-head"><h3>{label}</h3>{note}<ExportKebab label={label} rows={rows} viewerName={ctx.viewer.n} onExport={setExportFor}/></div>
+  </>;
+
   return <div className="view">
-    <div className="segs" style={{maxWidth:340,marginBottom:16}}>
-      <button className={mode==='byme'?'on':''} onClick={()=>setMode('byme')}>Assigned by me</button>
-      <button className={mode==='mine'?'on':''} onClick={()=>setMode('mine')}>Assigned to me</button>
+    <div className="cols3">
+      <div className="panel colpanel">
+        {col('My tasks',rowsMine)}
+        <div className="col-toprow">
+          <select className="fsel" style={{flex:1}} value={fb} onChange={e=>setFb(e.target.value)}>
+            <option value="all">All departments</option>
+            {Object.entries(BUCKETS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+        <div className="scrollbox col-scroll">
+          {rowsMine.length?rowsMine.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx}/>):<Empty t="No tasks" s="Nothing here — try clearing the department filter."/>}
+        </div>
+      </div>
+
+      <div className="panel colpanel">
+        {col('Assigned to me by',rowsBoss)}
+        <div className="col-toprow">
+          <select className="fsel" style={{flex:1}} value={fboss} onChange={e=>setFboss(e.target.value)}>
+            <option value="all">All</option>
+            {ctx.bossChain.map(n=><option key={n} value={bossLabelOf(n)}>{bossLabelOf(n)}</option>)}
+          </select>
+        </div>
+        <div className="scrollbox col-scroll">
+          {rowsBoss.length?rowsBoss.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx}/>):<Empty t="No tasks" s="Nothing assigned to you right now."/>}
+        </div>
+      </div>
+
+      {showDept?<div className="panel colpanel">
+        {col('Department tasks',rowsDept,<span className="col-note">Manager · Management</span>)}
+        <div className="col-toprow" style={{flexDirection:'column',alignItems:'stretch',gap:8}}>
+          <div className="segs">
+            <button className={deptSeg==='me'?'on':''} onClick={()=>setDeptSeg('me')}>By me</button>
+            <button className={deptSeg==='others'?'on':''} onClick={()=>setDeptSeg('others')}>By others</button>
+          </div>
+          <select className="fsel" disabled={isManagerTier} value={effectiveDeptFb} onChange={e=>setDeptFb(e.target.value)}>
+            <option value="all">All departments</option>
+            {Object.entries(BUCKETS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+        {isManagerTier?<div className="col-empty-note">Fixed to your team — only Management can filter by department here.</div>:null}
+        <div className="scrollbox col-scroll">
+          {rowsDept.length?rowsDept.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx}/>):<Empty t="No tasks" s="Nothing here — try switching By me/By others or the department filter."/>}
+        </div>
+      </div>:null}
     </div>
-    <div className="filters">
-      <select className="fsel" value={ft} onChange={e=>setFt(e.target.value)}><option value="all">All types</option>
-        {Object.entries(TYPES).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
-      <select className="fsel" value={fs} onChange={e=>setFs(e.target.value)}><option value="all">All statuses</option>
-        {Object.entries(ST).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}</select>
-      {mode==='byme'?<select className="fsel" value={fw} onChange={e=>setFw(e.target.value)}><option value="all">All employees</option>
-        {ctx.scope.filter(p=>p.role==='Teacher'||p.n===ctx.viewer.n).map(p=><option key={p.s} value={p.s}>{p.n}</option>)}</select>:null}
-      {mode==='mine'&&ctx.bossChain.length?<select className="fsel" value={fboss} onChange={e=>setFboss(e.target.value)}>
-        <option value="all">All bosses</option>
-        <option value="self">Own initiative</option>
-        {ctx.bossChain.map(n=><option key={n} value={BOSS_LABEL[n]}>{BOSS_LABEL[n]}</option>)}
-      </select>:null}
-      <select className="fsel" value={fb} onChange={e=>setFb(e.target.value)}><option value="all">All departments</option>
-        {Object.entries(BUCKETS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
-      <div className="spacer"/>
-      <button className="btn soft" onClick={()=>ctx.exportCSV('tasks')}><I n="dl"/>Export CSV</button>
-    </div>
-    {any?<>
-      {grp('red','alert','Overdue',g.over)}
-      {grp('amber','clock','Due today',g.today)}
-      {grp('','cal','Upcoming',g.up)}
-      {grp('','check','Done',g.done)}
-    </>:<Empty t="No tasks match" s={mode==='mine'?'Nothing assigned to you here — try clearing a filter.':'Try clearing a filter, or press N to assign a new task.'}/>}
+    {exportFor?<ExportFormatModal target={exportFor} close={()=>setExportFor(null)} say={ctx.say}/>:null}
   </div>;
 }
 
