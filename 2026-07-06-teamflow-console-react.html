@@ -1379,7 +1379,8 @@ function EmpModal({ctx,close}){
   const save=async()=>{
     const n=f.n.trim();
     if(!n){setErr('Enter the employee name');return;}
-    if(byName(n)){setErr('That name is already in the team');return;}
+    const existing=byName(n);
+    if(existing&&existing.authId){setErr('That name is already in the team');return;}
     if(isAdminTier&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())){setErr('Enter a valid email for this role');return;}
     setBusy(true);setErr('');
     const {data:{session}}=await sb.auth.getSession();
@@ -1394,7 +1395,8 @@ function EmpModal({ctx,close}){
     }catch(e){setBusy(false);setErr('Could not reach the server — check your connection');return;}
     setBusy(false);
     if(!resp.ok){setErr(j.error||'Could not create account');return;}
-    STAFF.push({n:j.name,s:j.short_name,role:f.role,dept:f.dept,boss:f.boss||null,
+    if(existing){existing.role=f.role;existing.dept=f.dept;existing.boss=f.boss||null;}
+    else STAFF.push({n:j.name,s:j.short_name,role:f.role,dept:f.dept,boss:f.boss||null,
       av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
     ctx.R();
     setResult(j);

@@ -68,8 +68,11 @@ Deno.serve(async (req) => {
       return json({ error: "A real email is required for Administrator/Management accounts" }, 400);
     }
 
-    const { data: existing } = await admin.from("staff").select("id").eq("name", name).maybeSingle();
-    if (existing) return json({ error: "That name is already in the team" }, 409);
+    // "existing, unlinked" = a staff row seeded (e.g. via migration or bulk import) without ever
+    // getting a login — link this call to that row instead of rejecting it as a duplicate name.
+    // A row that already has auth_user_id is a real duplicate, though.
+    const { data: existing } = await admin.from("staff").select("id, auth_user_id, short_name, initials").eq("name", name).maybeSingle();
+    if (existing?.auth_user_id) return json({ error: "That name is already in the team" }, 409);
 
     let bossId: string | null = null;
     if (bossName) {
@@ -77,14 +80,23 @@ Deno.serve(async (req) => {
       bossId = bossRow ? bossRow.id : null;
     }
 
-    const parts = name.split(/\s+/);
-    const initials = parts.map((p: string) => p[0]).join("").slice(0, 2).toUpperCase();
-
     const { data: allStaff } = await admin.from("staff").select("short_name, username");
     const takenShort = new Set((allStaff || []).map((r: any) => r.short_name));
     const takenUser = new Set((allStaff || []).map((r: any) => r.username).filter(Boolean));
-    let shortName = parts[0], i = 2;
-    while (takenShort.has(shortName)) shortName = parts[0] + (parts[1] ? parts[1][0] : "") + i++;
+
+    // Linking keeps the existing short_name — it's already referenced by this person's tasks/logs,
+    // so minting a new one would orphan that history instead of attaching a login to it.
+    let shortName: string, initials: string;
+    if (existing) {
+      shortName = existing.short_name;
+      initials = existing.initials;
+    } else {
+      const parts = name.split(/\s+/);
+      initials = parts.map((p: string) => p[0]).join("").slice(0, 2).toUpperCase();
+      shortName = parts[0];
+      let i = 2;
+      while (takenShort.has(shortName)) shortName = parts[0] + (parts[1] ? parts[1][0] : "") + i++;
+    }
     let username = shortName.toLowerCase(), j = 2;
     while (takenUser.has(username)) username = shortName.toLowerCase() + j++;
 
@@ -100,17 +112,17 @@ Deno.serve(async (req) => {
       return json({ error: "Could not create login: " + (createErr?.message || "unknown error") }, 500);
     }
 
-    const { data: staffRow, error: staffErr } = await admin.from("staff").insert({
-      name,
-      short_name: shortName,
-      initials,
+    const staffFields = {
       role,
       department,
       boss_id: bossId,
       phone,
       auth_user_id: created.user.id,
       username: ADMIN_TIER.includes(role) ? null : username,
-    }).select().single();
+    };
+    const { data: staffRow, error: staffErr } = existing
+      ? await admin.from("staff").update(staffFields).eq("id", existing.id).select().single()
+      : await admin.from("staff").insert({ name, short_name: shortName, initials, ...staffFields }).select().single();
 
     if (staffErr) {
       await admin.auth.admin.deleteUser(created.user.id); // don't leave an orphaned login with no staff row
