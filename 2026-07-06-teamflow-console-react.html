@@ -1340,18 +1340,49 @@ function PeopleView({ctx}){
   </div>;
 }
 function EmpModal({ctx,close}){
-  const [f,setF]=useState({n:'',role:'Teacher',dept:'Academics',boss:'Anita Desai',phone:''});
-  const save=()=>{
+  const [f,setF]=useState({n:'',role:'Teacher',dept:'Academics',boss:'Anita Desai',phone:'',email:''});
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState('');
+  const [result,setResult]=useState(null); // {name, login, username, password}
+  const isAdminTier=f.role==='Administrator'||f.role==='Management';
+  const save=async()=>{
     const n=f.n.trim();
-    if(!n){ctx.say('Enter the employee name');return;}
-    if(byName(n)){ctx.say('That name is already in the team');return;}
-    const parts=n.split(' ');let sh=parts[0],i=2;
-    while(byShort(sh))sh=parts[0]+(parts[1]?parts[1][0]:'')+(byShort(parts[0]+(parts[1]?parts[1][0]:''))?i++:'');
-    const np={n,s:sh,role:f.role,dept:f.dept,boss:f.boss||null,av:parts.map(x=>x[0]).join('').slice(0,2).toUpperCase()};
-    STAFF.push(np);
-    close();ctx.R();
-    saveStaffRow(np).catch(console.error);
-    ctx.say(n+' added · WhatsApp invite sent');};
+    if(!n){setErr('Enter the employee name');return;}
+    if(byName(n)){setErr('That name is already in the team');return;}
+    if(isAdminTier&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())){setErr('Enter a valid email for this role');return;}
+    setBusy(true);setErr('');
+    const {data:{session}}=await sb.auth.getSession();
+    let resp,j;
+    try{
+      resp=await fetch('https://fumggrcamegejihenkhb.supabase.co/functions/v1/create-staff-account',{
+        method:'POST',
+        headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token,
+          apikey:'sb_publishable_bEqR06srB99BHHdvLQy14g_-pLZPWwJ'},
+        body:JSON.stringify({name:n,role:f.role,department:f.dept,boss:f.boss||null,phone:f.phone||null,email:f.email||null})});
+      j=await resp.json();
+    }catch(e){setBusy(false);setErr('Could not reach the server — check your connection');return;}
+    setBusy(false);
+    if(!resp.ok){setErr(j.error||'Could not create account');return;}
+    STAFF.push({n:j.name,s:j.short_name,role:f.role,dept:f.dept,boss:f.boss||null,
+      av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
+    ctx.R();
+    setResult(j);
+  };
+  if(result)return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
+    <div className="modal" style={{width:440}}>
+      <div className="qc-head"><h3>Account created</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
+      <div className="mf">
+        <div className="whysm" style={{marginTop:0,marginBottom:14}}>Share these with {result.name.split(' ')[0]} — the password won't be shown again.</div>
+        <label>{result.username?'Username':'Email'}</label>
+        <input readOnly value={result.username||result.login} onFocus={e=>e.target.select()}/>
+        <label>Password</label>
+        <input readOnly value={result.password} onFocus={e=>e.target.select()}/>
+      </div>
+      <div className="qc-actions">
+        <button className="btn primary" style={{flex:1,justifyContent:'center'}} onClick={close}><I n="check"/>Done</button>
+      </div>
+    </div>
+  </div>;
   return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
     <div className="modal" style={{width:480}}>
       <div className="qc-head"><h3>Add employee</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
@@ -1367,13 +1398,17 @@ function EmpModal({ctx,close}){
         <div className="row2">
           <div><label>Reports to</label><select value={f.boss} onChange={e=>setF({...f,boss:e.target.value})}>
             {STAFF.filter(p=>p.role!=='Teacher').map(p=><option key={p.n} value={p.n}>{p.n} · {p.role}</option>)}</select></div>
-          <div><label>Phone (WhatsApp)</label><input value={f.phone} onChange={e=>setF({...f,phone:e.target.value})} placeholder="+91 …"/></div>
+          <div><label>Phone (optional)</label><input value={f.phone} onChange={e=>setF({...f,phone:e.target.value})} placeholder="+91 …"/></div>
         </div>
-        <div className="whysm" style={{marginTop:12}}>They'll get a WhatsApp invite with a one-tap login link — no password to remember.</div>
+        {isAdminTier?<>
+          <label>Email (their real login)</label>
+          <input value={f.email} onChange={e=>setF({...f,email:e.target.value})} placeholder="name@school.org"/>
+        </>:<div className="whysm" style={{marginTop:12}}>They'll get a generated username and password — shown once here for you to share.</div>}
+        {err?<div style={{color:'var(--red)',fontSize:12.5,marginTop:10}}>{err}</div>:null}
       </div>
       <div className="qc-actions">
         <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
-        <button className="btn primary" style={{flex:2,justifyContent:'center'}} onClick={save}><I n="check"/>Add & send invite</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={save}><I n="check"/>{busy?'Creating…':'Add & create login'}</button>
       </div>
     </div>
   </div>;
