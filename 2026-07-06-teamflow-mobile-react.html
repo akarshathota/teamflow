@@ -372,6 +372,16 @@ async function saveRequestRow(q,kind){
 }
 async function deleteRequestRow(q){if(q.id)await sb.from('requests').delete().eq('id',q.id);}
 async function postNotice(n){await sb.from('notices').insert({title:n.t,body:n.b});}
+/* uploads to the private 'attachments' bucket and returns a long-lived signed URL (10y — this
+   app never rotates it, so anything longer just pushes the same ceiling further out) */
+async function uploadFile(file,folder){
+  const path=folder+'/'+Date.now()+'-'+Math.random().toString(36).slice(2)+'-'+file.name.replace(/[^\w.\-]/g,'_');
+  const {error}=await sb.storage.from('attachments').upload(path,file);
+  if(error)throw error;
+  const {data,error:signErr}=await sb.storage.from('attachments').createSignedUrl(path,315360000);
+  if(signErr)throw signErr;
+  return {name:file.name,url:data.signedUrl,path};
+}
 
 /* ============ helpers ============ */
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -1168,7 +1178,13 @@ function TaskSheet({ctx,close}){
 function IssueSheet({ctx,close}){
   const [txt,setTxt]=useState('');
   const [files,setFiles]=useState([]);
-  const pickF=e=>{const nf=[...e.target.files].map(x=>({name:x.name,url:(x.type||'').startsWith('image/')?URL.createObjectURL(x):null}));setFiles(files.concat(nf));};
+  const pickF=async e=>{
+    const picked=[...e.target.files];
+    if(!picked.length)return;
+    ctx.say('Uploading '+picked.length+' file'+(picked.length>1?'s':'')+'…');
+    try{const nf=await Promise.all(picked.map(x=>uploadFile(x,'issues')));setFiles(files.concat(nf));}
+    catch(err){console.error(err);ctx.say('Upload failed — try again');}
+  };
   const send=()=>{
     if(!txt.trim()){ctx.say('Describe the issue first');return;}
     const nq={t:txt.trim().charAt(0).toUpperCase()+txt.trim().slice(1),from:ctx.r.name,av:ctx.r.av,files:files.length?files.slice():undefined};
@@ -1214,7 +1230,13 @@ function UpdateSheet({ctx,idx,close}){
   const [files,setFiles]=useState([]);
   if(!t)return null;
   const logs=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
-  const pickF=e=>{const nf=[...e.target.files].map(x=>({name:x.name,url:(x.type||'').startsWith('image/')?URL.createObjectURL(x):null}));setFiles(files.concat(nf));};
+  const pickF=async e=>{
+    const picked=[...e.target.files];
+    if(!picked.length)return;
+    ctx.say('Uploading '+picked.length+' file'+(picked.length>1?'s':'')+'…');
+    try{const nf=await Promise.all(picked.map(x=>uploadFile(x,'tasks/'+t.id)));setFiles(files.concat(nf));}
+    catch(err){console.error(err);ctx.say('Upload failed — try again');}
+  };
   const save=()=>{
     t.progress=st;
     if(note.trim()){

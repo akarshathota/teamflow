@@ -440,6 +440,16 @@ async function saveStaffRow(p){
   p.id=data.id;
 }
 async function deleteStaffRow(p){if(p.id)await sb.from('staff').delete().eq('id',p.id);}
+/* uploads to the private 'attachments' bucket and returns a long-lived signed URL (10y — this
+   app never rotates it, so anything longer just pushes the same ceiling further out) */
+async function uploadFile(file,folder){
+  const path=folder+'/'+Date.now()+'-'+Math.random().toString(36).slice(2)+'-'+file.name.replace(/[^\w.\-]/g,'_');
+  const {error}=await sb.storage.from('attachments').upload(path,file);
+  if(error)throw error;
+  const {data,error:signErr}=await sb.storage.from('attachments').createSignedUrl(path,315360000);
+  if(signErr)throw signErr;
+  return {name:file.name,url:data.signedUrl,path};
+}
 
 const ROLE_VIEWER={admin:"Priya Nair",mgmt:"Rajesh Menon",srm:"Anita Desai",jrm:"Vikram Rao"};
 const DB_ROLE_TO_KEY={Administrator:'admin',Management:'mgmt',Manager:'srm','Team Member':'jrm'};
@@ -1216,10 +1226,16 @@ function Drawer({ctx,idx}){
         {[['camera','Camera',{accept:'image/*',capture:'environment'}],['image','Photos',{accept:'image/*',multiple:true}],['clip','Files',{multiple:true}]].map(([ic,l,at])=>
           <label key={l} className="btn ghost" style={{flex:1,justifyContent:'center',cursor:'pointer',minWidth:90}}>
             <I n={ic}/>{l}
-            <input type="file" style={{display:'none'}} {...at} onChange={e=>{
-              const nf=[...e.target.files].map(x=>({name:x.name,url:(x.type||'').startsWith('image/')?URL.createObjectURL(x):null}));
-              if(!nf.length)return;
-              t.files=(t.files||[]).concat(nf);ctx.R();ctx.say(nf.length+' attachment'+(nf.length>1?'s':'')+' added');}}/>
+            <input type="file" style={{display:'none'}} {...at} onChange={async e=>{
+              const picked=[...e.target.files];
+              if(!picked.length)return;
+              ctx.say('Uploading '+picked.length+' file'+(picked.length>1?'s':'')+'…');
+              try{
+                const nf=await Promise.all(picked.map(x=>uploadFile(x,'tasks/'+t.id)));
+                t.files=(t.files||[]).concat(nf);
+                await saveTask(t);
+                ctx.R();ctx.say(nf.length+' attachment'+(nf.length>1?'s':'')+' added');
+              }catch(err){console.error(err);ctx.say('Upload failed — try again');}}}/>
           </label>)}
       </div>
       <div className="dr-sec">Activity</div>
@@ -1534,9 +1550,14 @@ function QuickCapture({ctx,close}){
     setWhoWhy(next.length>1?'joint task — it appears in each person’s list':'you picked '+(byShort(next[0])||{n:''}).n.split(' ')[0]);
     if(!canMulti)setPick(null);
   }
-  function filePicked(e){
-    const nf=[...e.target.files].map(x=>({name:x.name,url:(x.type||'').startsWith('image/')?URL.createObjectURL(x):null}));
-    setFiles(files.concat(nf));
+  async function filePicked(e){
+    const picked=[...e.target.files];
+    if(!picked.length)return;
+    ctx.say('Uploading '+picked.length+' file'+(picked.length>1?'s':'')+'…');
+    try{
+      const nf=await Promise.all(picked.map(x=>uploadFile(x,'issues')));
+      setFiles(files.concat(nf));
+    }catch(err){console.error(err);ctx.say('Upload failed — try again');}
   }
   function go(){
     const clean=txt.trim();
