@@ -497,6 +497,7 @@ const I=({n,s,c})=><svg className="i" viewBox="0 0 24 24" style={{width:s,height
 /* ============ login ============ */
 function LoginScreen(){
   const [id,setId]=useState('');const [pw,setPw]=useState('');const [err,setErr]=useState('');const [busy,setBusy]=useState(false);
+  const [forgot,setForgot]=useState(false); // false=hidden · 'sent' · 'noemail'
   const go=async()=>{
     if(!id.trim()||!pw){setErr('Enter your email/username and password');return;}
     setBusy(true);setErr('');
@@ -505,16 +506,57 @@ function LoginScreen(){
     setBusy(false);
     if(error)setErr('Could not sign in — check your email/username and password');
   };
+  const sendReset=async()=>{
+    const raw=id.trim();
+    if(!raw){setErr('Enter your email or username first');return;}
+    setErr('');
+    if(!raw.includes('@')||raw.toLowerCase().endsWith('@teamflow.demo')){setForgot('noemail');return;}
+    setBusy(true);
+    await sb.auth.resetPasswordForEmail(raw,{redirectTo:window.location.href.split('#')[0]});
+    setBusy(false);
+    setForgot('sent');
+  };
   return <div className="phone"><div className="notch"/><div className="screen" style={{display:'flex',flexDirection:'column',justifyContent:'center',padding:'0 24px'}}>
     <h3 className="brandfont" style={{fontSize:22,margin:'0 0 20px'}}>TeamFlow</h3>
     <div style={{fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Email or username</div>
-    <input className="typein" style={{marginBottom:12}} value={id} onChange={e=>setId(e.target.value)}
+    <input className="typein" style={{marginBottom:12}} value={id} onChange={e=>{setId(e.target.value);setForgot(false);}}
       onKeyDown={e=>e.key==='Enter'&&go()} placeholder="priya@teamflow.demo or hari" autoFocus/>
     <div style={{fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Password</div>
     <input type="password" className="typein" style={{marginBottom:14}} value={pw} onChange={e=>setPw(e.target.value)}
       onKeyDown={e=>e.key==='Enter'&&go()} placeholder="••••••••"/>
     {err?<div style={{color:'var(--red)',fontSize:12.5,marginBottom:12}}>{err}</div>:null}
     <button className="send" disabled={busy} onClick={go}>{busy?'Signing in…':'Sign in'}</button>
+    {forgot==='sent'?<div style={{color:'var(--muted)',fontSize:12.5,marginTop:12,textAlign:'center'}}>Check your email for a reset link.</div>
+      :forgot==='noemail'?<div style={{color:'var(--muted)',fontSize:12.5,marginTop:12,textAlign:'center',lineHeight:1.4}}>This account doesn't have an email on file — ask your Administrator or Management to reset your password from the console.</div>
+      :<button disabled={busy} onClick={sendReset} style={{width:'100%',background:'none',border:'none',color:'var(--accent-ink)',fontSize:13,fontWeight:700,marginTop:12,cursor:'pointer'}}>Forgot password?</button>}
+  </div></div>;
+}
+function ResetPasswordScreen(){
+  const [pw,setPw]=useState('');const [pw2,setPw2]=useState('');const [err,setErr]=useState('');const [busy,setBusy]=useState(false);const [done,setDone]=useState(false);
+  const save=async()=>{
+    if(pw.length<8){setErr('Password must be at least 8 characters');return;}
+    if(pw!==pw2){setErr("Passwords don't match");return;}
+    setBusy(true);setErr('');
+    const {error}=await sb.auth.updateUser({password:pw});
+    setBusy(false);
+    if(error){setErr(error.message);return;}
+    await sb.auth.signOut();
+    setDone(true);
+  };
+  return <div className="phone"><div className="notch"/><div className="screen" style={{display:'flex',flexDirection:'column',justifyContent:'center',padding:'0 24px'}}>
+    <h3 className="brandfont" style={{fontSize:22,margin:'0 0 20px'}}>TeamFlow</h3>
+    {done?<>
+      <div style={{color:'var(--muted)',fontSize:13,marginBottom:16,lineHeight:1.4}}>Password updated. Sign in with your new password.</div>
+      <button className="send" onClick={()=>window.location.href=window.location.href.split('#')[0]}>Back to sign in</button>
+    </>:<>
+      <div style={{fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>New password</div>
+      <input type="password" className="typein" style={{marginBottom:12}} value={pw} onChange={e=>setPw(e.target.value)} autoFocus/>
+      <div style={{fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Confirm password</div>
+      <input type="password" className="typein" style={{marginBottom:14}} value={pw2} onChange={e=>setPw2(e.target.value)}
+        onKeyDown={e=>e.key==='Enter'&&save()}/>
+      {err?<div style={{color:'var(--red)',fontSize:12.5,marginBottom:12}}>{err}</div>:null}
+      <button className="send" disabled={busy} onClick={save}>{busy?'Saving…':'Set new password'}</button>
+    </>}
   </div></div>;
 }
 
@@ -532,9 +574,10 @@ function App(){
   const say=useCallback(m=>{setToastS(m);clearTimeout(tRef.current);tRef.current=setTimeout(()=>setToastS(null),2400);},[]);
   const [loaded,setLoaded]=useState(false);
   const [session,setSession]=useState(undefined); // undefined=checking · null=signed out · object=signed in
+  const [recovery,setRecovery]=useState(false); // true once Supabase reports this session came from a reset-password email link
   useEffect(()=>{
     sb.auth.getSession().then(({data})=>setSession(data.session));
-    const {data:sub}=sb.auth.onAuthStateChange((_e,sess)=>setSession(sess));
+    const {data:sub}=sb.auth.onAuthStateChange((e,sess)=>{if(e==='PASSWORD_RECOVERY')setRecovery(true);setSession(sess);});
     return ()=>sub.subscription.unsubscribe();
   },[]);
   useEffect(()=>{
@@ -566,6 +609,7 @@ function App(){
 
   const loadingScreen=msg=><div className="phone"><div className="notch"/><div className="screen" style={{display:'flex',alignItems:'center',justifyContent:'center',color:'var(--muted)',fontSize:13}}>{msg}</div></div>;
   if(session===undefined)return loadingScreen('Loading…');
+  if(recovery)return <ResetPasswordScreen/>;
   if(session===null)return <LoginScreen/>;
   if(!loaded)return loadingScreen('Loading TeamFlow…');
 

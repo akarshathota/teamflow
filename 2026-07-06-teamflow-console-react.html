@@ -565,13 +565,15 @@ const PATHS={
   box:<g><path d="M3.5 8L12 3.5 20.5 8v8L12 20.5 3.5 16z"/><path d="M3.5 8L12 12.5 20.5 8M12 12.5v8"/></g>,
   camera:<g><path d="M4 8.5a2 2 0 012-2h2l1.5-2h5L16 6.5h2a2 2 0 012 2V18a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><circle cx="12" cy="13" r="3.4"/></g>,
   image:<g><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M4.5 17l4.5-4.5 3 3 3.5-3.5 4.5 4.5"/></g>,
-  clip:<path d="M8.5 12l6-6a3.3 3.3 0 014.7 4.7l-7.3 7.3a5 5 0 01-7-7l6.8-6.8"/>
+  clip:<path d="M8.5 12l6-6a3.3 3.3 0 014.7 4.7l-7.3 7.3a5 5 0 01-7-7l6.8-6.8"/>,
+  key:<g><circle cx="7.5" cy="7.5" r="4"/><path d="M10.5 10.5L20 20M15.5 15.5l3-3M18.5 18.5l3-3"/></g>
 };
 const I=({n,s,c})=><svg className="i" viewBox="0 0 24 24" style={{width:s,height:s,color:c}}>{PATHS[n]}</svg>;
 
 /* ============ login ============ */
 function LoginScreen(){
   const [id,setId]=useState('');const [pw,setPw]=useState('');const [err,setErr]=useState('');const [busy,setBusy]=useState(false);
+  const [forgot,setForgot]=useState(false); // null=hidden · 'sent' · 'noemail'
   const go=async()=>{
     if(!id.trim()||!pw){setErr('Enter your email/username and password');return;}
     setBusy(true);setErr('');
@@ -580,17 +582,60 @@ function LoginScreen(){
     setBusy(false);
     if(error)setErr('Could not sign in — check your email/username and password');
   };
+  const sendReset=async()=>{
+    const raw=id.trim();
+    if(!raw){setErr('Enter your email or username first');return;}
+    setErr('');
+    if(!raw.includes('@')||raw.toLowerCase().endsWith('@teamflow.demo')){setForgot('noemail');return;}
+    setBusy(true);
+    await sb.auth.resetPasswordForEmail(raw,{redirectTo:window.location.href.split('#')[0]});
+    setBusy(false);
+    setForgot('sent');
+  };
   return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--bg)'}}>
     <div style={{width:360,maxWidth:'92vw',background:'var(--card)',border:'1px solid var(--line)',borderRadius:14,boxShadow:'var(--sh-lg)',padding:'28px 26px'}}>
       <div className="brand" style={{padding:0,marginBottom:18}}><span className="logo"><I n="logo"/></span><span className="bt">TeamFlow</span></div>
       <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,margin:'0 0 6px'}}>Email or username</label>
-      <input className="qc-input" style={{width:'100%',marginBottom:12}} value={id} onChange={e=>setId(e.target.value)}
+      <input className="qc-input" style={{width:'100%',marginBottom:12}} value={id} onChange={e=>{setId(e.target.value);setForgot(false);}}
         onKeyDown={e=>e.key==='Enter'&&go()} placeholder="priya@teamflow.demo or vikram" autoFocus/>
       <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,margin:'0 0 6px'}}>Password</label>
       <input type="password" className="qc-input" style={{width:'100%',marginBottom:14}} value={pw} onChange={e=>setPw(e.target.value)}
         onKeyDown={e=>e.key==='Enter'&&go()} placeholder="••••••••"/>
       {err?<div style={{color:'var(--red)',fontSize:12.5,marginBottom:12}}>{err}</div>:null}
       <button className="btn primary" style={{width:'100%',justifyContent:'center'}} disabled={busy} onClick={go}>{busy?'Signing in…':'Sign in'}</button>
+      {forgot==='sent'?<div className="whysm" style={{marginTop:12}}>Check your email for a reset link.</div>
+        :forgot==='noemail'?<div className="whysm" style={{marginTop:12}}>This account doesn't have an email on file — ask your Administrator or Management to reset your password from the console.</div>
+        :<button className="btn ghost" style={{width:'100%',justifyContent:'center',marginTop:10}} disabled={busy} onClick={sendReset}>Forgot password?</button>}
+    </div>
+  </div>;
+}
+function ResetPasswordScreen(){
+  const [pw,setPw]=useState('');const [pw2,setPw2]=useState('');const [err,setErr]=useState('');const [busy,setBusy]=useState(false);const [done,setDone]=useState(false);
+  const save=async()=>{
+    if(pw.length<8){setErr('Password must be at least 8 characters');return;}
+    if(pw!==pw2){setErr("Passwords don't match");return;}
+    setBusy(true);setErr('');
+    const {error}=await sb.auth.updateUser({password:pw});
+    setBusy(false);
+    if(error){setErr(error.message);return;}
+    await sb.auth.signOut();
+    setDone(true);
+  };
+  return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--bg)'}}>
+    <div style={{width:360,maxWidth:'92vw',background:'var(--card)',border:'1px solid var(--line)',borderRadius:14,boxShadow:'var(--sh-lg)',padding:'28px 26px'}}>
+      <div className="brand" style={{padding:0,marginBottom:18}}><span className="logo"><I n="logo"/></span><span className="bt">TeamFlow</span></div>
+      {done?<>
+        <div className="whysm" style={{marginBottom:14}}>Password updated. Sign in with your new password.</div>
+        <button className="btn primary" style={{width:'100%',justifyContent:'center'}} onClick={()=>window.location.href=window.location.href.split('#')[0]}>Back to sign in</button>
+      </>:<>
+        <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,margin:'0 0 6px'}}>New password</label>
+        <input type="password" className="qc-input" style={{width:'100%',marginBottom:12}} value={pw} onChange={e=>setPw(e.target.value)} autoFocus/>
+        <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,margin:'0 0 6px'}}>Confirm password</label>
+        <input type="password" className="qc-input" style={{width:'100%',marginBottom:14}} value={pw2} onChange={e=>setPw2(e.target.value)}
+          onKeyDown={e=>e.key==='Enter'&&save()}/>
+        {err?<div style={{color:'var(--red)',fontSize:12.5,marginBottom:12}}>{err}</div>:null}
+        <button className="btn primary" style={{width:'100%',justifyContent:'center'}} disabled={busy} onClick={save}>{busy?'Saving…':'Set new password'}</button>
+      </>}
     </div>
   </div>;
 }
@@ -609,12 +654,14 @@ function App(){
   useEffect(()=>{drawerIdxRef.current=drawerIdx;},[drawerIdx]);
   const [modal,setModal]=useState(false);
   const [empModal,setEmpModal]=useState(false);
+  const [resetTarget,setResetTarget]=useState(null); // staff object being password-reset, or null
   const searchRef=useRef();
   const [loaded,setLoaded]=useState(false);
   const [session,setSession]=useState(undefined); // undefined=checking · null=signed out · object=signed in
+  const [recovery,setRecovery]=useState(false); // true once Supabase reports this session came from a reset-password email link
   useEffect(()=>{
     sb.auth.getSession().then(({data})=>setSession(data.session));
-    const {data:sub}=sb.auth.onAuthStateChange((_e,sess)=>setSession(sess));
+    const {data:sub}=sb.auth.onAuthStateChange((e,sess)=>{if(e==='PASSWORD_RECOVERY')setRecovery(true);setSession(sess);});
     return ()=>sub.subscription.unsubscribe();
   },[]);
   useEffect(()=>{
@@ -657,6 +704,7 @@ function App(){
   },[]);
 
   if(session===undefined)return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--muted)',fontSize:14}}>Loading…</div>;
+  if(recovery)return <ResetPasswordScreen/>;
   if(session===null)return <LoginScreen/>;
   if(!loaded)return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--muted)',fontSize:14}}>Loading TeamFlow…</div>;
 
@@ -773,7 +821,7 @@ function App(){
 
   const ctx={role,view,setView,say,R,scope,shorts,viewer,mine,canApprove,canAssignIssue,bossChain,
     quickDone,remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,
-    setDrawerIdx,setModal,setEmpModal,exportCSV,printReport,qReqs,qExts,attentionList};
+    setDrawerIdx,setModal,setEmpModal,setResetTarget,exportCSV,printReport,qReqs,qExts,attentionList};
 
   return <div className="app">
     <aside className="sidebar">
@@ -828,6 +876,7 @@ function App(){
     {drawerIdx>=0&&<><div className="scrim" onClick={()=>setDrawerIdx(-1)}/><Drawer ctx={ctx} idx={drawerIdx}/></>}
     {modal&&<QuickCapture ctx={ctx} close={()=>setModal(false)}/>}
     {empModal&&<EmpModal ctx={ctx} close={()=>setEmpModal(false)}/>}
+    {resetTarget&&<ResetPwModal ctx={ctx} staff={resetTarget} close={()=>setResetTarget(null)}/>}
     {toast&&<div className="toast"><I n="check"/>{toast}</div>}
   </div>;
 }
@@ -1302,7 +1351,10 @@ function PeopleView({ctx}){
             <td><span className={'tag '+(ROLE_TAG[p.role]||'gray')}>{p.role}</span></td><td>{p.dept}</td>
             <td style={{color:'var(--muted)'}}>{p.boss?p.boss.split(' ')[0]:'—'}</td>
             <td><span className="loadbar"><i style={{width:(l/maxL*100)+'%',background:c}}/></span><b>{l}</b> open</td>
-            {canM?<td>{p.n!==ctx.viewer.n?<button className="iconbtn" title={'Remove '+p.n} onClick={()=>removeEmp(p.s)}><I n="x" s={15}/></button>:null}</td>:null}
+            {canM?<td style={{display:'flex',gap:4}}>
+              {p.authId?<button className="iconbtn" title={'Reset '+p.n.split(' ')[0]+"'s password"} onClick={()=>ctx.setResetTarget(p)}><I n="key" s={15}/></button>:null}
+              {p.n!==ctx.viewer.n?<button className="iconbtn" title={'Remove '+p.n} onClick={()=>removeEmp(p.s)}><I n="x" s={15}/></button>:null}
+            </td>:null}
           </tr>;}):<tr><td colSpan={6}><Empty t="No one matches" s="Try a different name or clear the role filter."/></td></tr>}</tbody></table>
       </div>
       <div className="panel"><h3>Reporting hierarchy — your span</h3><div className="tree"><TreeNode name={ctx.viewer.n}/></div></div>
@@ -1379,6 +1431,55 @@ function EmpModal({ctx,close}){
       <div className="qc-actions">
         <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
         <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={save}><I n="check"/>{busy?'Creating…':'Add & create login'}</button>
+      </div>
+    </div>
+  </div>;
+}
+function ResetPwModal({ctx,staff,close}){
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState('');
+  const [result,setResult]=useState(null); // {name, login, username, password}
+  const go=async()=>{
+    setBusy(true);setErr('');
+    const {data:{session}}=await sb.auth.getSession();
+    let resp,j;
+    try{
+      resp=await fetch('https://fumggrcamegejihenkhb.supabase.co/functions/v1/reset-staff-password',{
+        method:'POST',
+        headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token,
+          apikey:'sb_publishable_bEqR06srB99BHHdvLQy14g_-pLZPWwJ'},
+        body:JSON.stringify({staffId:staff.id})});
+      j=await resp.json();
+    }catch(e){setBusy(false);setErr('Could not reach the server — check your connection');return;}
+    setBusy(false);
+    if(!resp.ok){setErr(j.error||'Could not reset password');return;}
+    setResult(j);
+  };
+  if(result)return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
+    <div className="modal" style={{width:440}}>
+      <div className="qc-head"><h3>Password reset</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
+      <div className="mf">
+        <div className="whysm" style={{marginTop:0,marginBottom:14}}>Share this with {result.name.split(' ')[0]} — the password won't be shown again.</div>
+        <label>{result.username?'Username':'Email'}</label>
+        <input readOnly value={result.username||result.login} onFocus={e=>e.target.select()}/>
+        <label>New password</label>
+        <input readOnly value={result.password} onFocus={e=>e.target.select()}/>
+      </div>
+      <div className="qc-actions">
+        <button className="btn primary" style={{flex:1,justifyContent:'center'}} onClick={close}><I n="check"/>Done</button>
+      </div>
+    </div>
+  </div>;
+  return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
+    <div className="modal" style={{width:420}}>
+      <div className="qc-head"><h3>Reset password</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
+      <div className="mf">
+        <div className="whysm" style={{marginTop:0}}>Generate a new password for {staff.n}? Their current password stops working immediately — you'll need to share the new one with them.</div>
+        {err?<div style={{color:'var(--red)',fontSize:12.5,marginTop:10}}>{err}</div>:null}
+      </div>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={go}><I n="key" s={15}/>{busy?'Resetting…':'Reset password'}</button>
       </div>
     </div>
   </div>;
