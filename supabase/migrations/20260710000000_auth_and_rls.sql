@@ -34,9 +34,16 @@ alter table task_log enable row level security;
 alter table requests enable row level security;
 alter table notices enable row level security;
 
--- staff: see/manage people in your own scope (needed for org chart, assignee pickers, etc.)
+-- staff: SELECT is your whole vertical line (yourself, your reports, AND your bosses up to the
+-- root) — is_in_scope() checked in both directions. Seeing your own chain of command's names is
+-- not a confidentiality concern the way their tasks/requests would be, and the client genuinely
+-- needs it (boss-name lookups, the "instructed by"/"waiting for X" dropdowns). Writes stay
+-- downward-only: you can manage your reports, not edit your own boss's record.
+-- Caught by testing an actual scoped-down login (Vikram): the original downward-only SELECT
+-- policy hid his own boss's row, which crashed the client's boss_id -> name lookup and left him
+-- unable to log in at all.
 create policy staff_select on staff for select
-  using (is_in_scope(auth_staff_id(), id));
+  using (is_in_scope(auth_staff_id(), id) or is_in_scope(id, auth_staff_id()));
 create policy staff_write on staff for insert with check (auth_staff_id() is not null);
 create policy staff_update on staff for update
   using (is_in_scope(auth_staff_id(), id)) with check (is_in_scope(auth_staff_id(), id));

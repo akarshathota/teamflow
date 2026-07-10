@@ -352,7 +352,7 @@ const LABEL_TO_BUCKET=Object.fromEntries(Object.entries(BUCKETS).map(([k,v])=>[v
 function rowsToStaff(rows){
   const byId=Object.fromEntries(rows.map(r=>[r.id,r]));
   return rows.map(r=>({n:r.name,s:r.short_name,role:r.role,dept:r.department,
-    boss:r.boss_id?byId[r.boss_id].name:null,av:r.initials,id:r.id}));
+    boss:r.boss_id?byId[r.boss_id].name:null,av:r.initials,id:r.id,authId:r.auth_user_id}));
 }
 function rowToTask(row,assignRows,logRows){
   const mine=assignRows.filter(a=>a.task_id===row.id);
@@ -442,6 +442,7 @@ async function saveStaffRow(p){
 async function deleteStaffRow(p){if(p.id)await sb.from('staff').delete().eq('id',p.id);}
 
 const ROLE_VIEWER={admin:"Priya Nair",mgmt:"Rajesh Menon",srm:"Anita Desai",jrm:"Vikram Rao"};
+const DB_ROLE_TO_KEY={Administrator:'admin',Management:'mgmt',Manager:'srm','Team Member':'jrm'};
 const BOSS_LABEL={"Priya Nair":"Priya (Admin)","Rajesh Menon":"Rajesh (Management)","Anita Desai":"Anita (Manager)","Vikram Rao":"Vikram (Team Member)"};
 const SCOPE_WORD={admin:"all teams",mgmt:"org-wide",srm:"your teams",jrm:"your team"};
 
@@ -627,11 +628,37 @@ const PATHS={
 };
 const I=({n,s,c})=><svg className="i" viewBox="0 0 24 24" style={{width:s,height:s,color:c}}>{PATHS[n]}</svg>;
 
+/* ============ login ============ */
+function LoginScreen(){
+  const [id,setId]=useState('');const [pw,setPw]=useState('');const [err,setErr]=useState('');const [busy,setBusy]=useState(false);
+  const go=async()=>{
+    if(!id.trim()||!pw){setErr('Enter your email/username and password');return;}
+    setBusy(true);setErr('');
+    const email=id.includes('@')?id.trim():id.trim()+'@teamflow.demo';
+    const {error}=await sb.auth.signInWithPassword({email,password:pw});
+    setBusy(false);
+    if(error)setErr('Could not sign in — check your email/username and password');
+  };
+  return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--bg)'}}>
+    <div style={{width:360,maxWidth:'92vw',background:'var(--card)',border:'1px solid var(--line)',borderRadius:14,boxShadow:'var(--sh-lg)',padding:'28px 26px'}}>
+      <div className="brand" style={{padding:0,marginBottom:18}}><span className="logo"><I n="logo"/></span><span className="bt">TeamFlow</span></div>
+      <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,margin:'0 0 6px'}}>Email or username</label>
+      <input className="qc-input" style={{width:'100%',marginBottom:12}} value={id} onChange={e=>setId(e.target.value)}
+        onKeyDown={e=>e.key==='Enter'&&go()} placeholder="priya@teamflow.demo or vikram" autoFocus/>
+      <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,margin:'0 0 6px'}}>Password</label>
+      <input type="password" className="qc-input" style={{width:'100%',marginBottom:14}} value={pw} onChange={e=>setPw(e.target.value)}
+        onKeyDown={e=>e.key==='Enter'&&go()} placeholder="••••••••"/>
+      {err?<div style={{color:'var(--red)',fontSize:12.5,marginBottom:12}}>{err}</div>:null}
+      <button className="btn primary" style={{width:'100%',justifyContent:'center'}} disabled={busy} onClick={go}>{busy?'Signing in…':'Sign in'}</button>
+    </div>
+  </div>;
+}
+
 /* ============ app ============ */
 function App(){
   const [,setTick]=useState(0);
   const R=useCallback(()=>setTick(t=>t+1),[]);
-  const [role,setRoleState]=useState('admin');
+  const [previewRole,setPreviewRole]=useState(null); // admin-only "preview as" override
   const [view,setView]=useState('dashboard');
   const [toast,setToastState]=useState(null);
   const toastT=useRef();
@@ -641,7 +668,44 @@ function App(){
   const [empModal,setEmpModal]=useState(false);
   const searchRef=useRef();
   const [loaded,setLoaded]=useState(false);
-  useEffect(()=>{loadAll().then(()=>setLoaded(true)).catch(e=>{console.error(e);setLoaded(true);say('Could not load data from Supabase — check your connection');});},[]);
+  const [session,setSession]=useState(undefined); // undefined=checking · null=signed out · object=signed in
+  useEffect(()=>{
+    sb.auth.getSession().then(({data})=>setSession(data.session));
+    const {data:sub}=sb.auth.onAuthStateChange((_e,sess)=>setSession(sess));
+    return ()=>sub.subscription.unsubscribe();
+  },[]);
+  useEffect(()=>{
+    if(!session)return;
+    loadAll().then(()=>setLoaded(true)).catch(e=>{console.error(e);setLoaded(true);say('Could not load data from Supabase — check your connection');});
+  },[session]);
+  useEffect(()=>{
+    const h=e=>{
+      const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+      if(e.key==='Escape'){setModal(false);setEmpModal(false);setDrawerIdx(-1);document.activeElement.blur();return;}
+      if(typing)return;
+      if(e.key==='/'){e.preventDefault();searchRef.current&&searchRef.current.focus();return;}
+      if(e.key==='n'||e.key==='N'){e.preventDefault();setModal(true);return;}
+      const vs=['dashboard','tasks','calendar','people','reports'];
+      if(/^[1-5]$/.test(e.key))setView(vs[+e.key-1]);
+    };
+    document.addEventListener('keydown',h);
+    return ()=>document.removeEventListener('keydown',h);
+  },[]);
+
+  if(session===undefined)return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--muted)',fontSize:14}}>Loading…</div>;
+  if(session===null)return <LoginScreen/>;
+  if(!loaded)return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--muted)',fontSize:14}}>Loading TeamFlow…</div>;
+
+  const myStaff=STAFF.find(p=>p.authId===session.user.id);
+  if(!myStaff)return <div style={{display:'flex',flexDirection:'column',gap:14,alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--muted)',fontSize:14}}>
+    <div>Your account isn't linked to a staff record. Contact your administrator.</div>
+    <button className="btn ghost" onClick={()=>sb.auth.signOut()}>Sign out</button></div>;
+  const myRoleKey=DB_ROLE_TO_KEY[myStaff.role];
+  if(!myRoleKey)return <div style={{display:'flex',flexDirection:'column',gap:14,alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--muted)',fontSize:14}}>
+    <div>This account doesn't have console access — open the TeamFlow mobile app instead.</div>
+    <button className="btn ghost" onClick={()=>sb.auth.signOut()}>Sign out</button></div>;
+  const role=(myRoleKey==='admin'&&previewRole)?previewRole:myRoleKey;
+  const setRole=r=>{setPreviewRole(r);setDrawerIdx(-1);};
 
   const viewer=byName(ROLE_VIEWER[role])||{n:'',s:'',role:'',dept:'',boss:null,av:''};
   const scope=[viewer].concat(descendants(viewer.n));
@@ -674,7 +738,6 @@ function App(){
   }
 
   /* actions */
-  const setRole=r=>{setRoleState(r);setDrawerIdx(-1);};
   const quickDone=i=>{const t=tasks[i];
     if(t.status==='done'){setDrawerIdx(i);say('To reopen, set a new due date in the task panel');return;}
     const nd=completeTask(t);
@@ -744,26 +807,9 @@ function App(){
     setTimeout(()=>{pr.style.display='none';document.title=ot;},300);
   }
 
-  /* keyboard */
-  useEffect(()=>{
-    const h=e=>{
-      const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
-      if(e.key==='Escape'){setModal(false);setEmpModal(false);setDrawerIdx(-1);document.activeElement.blur();return;}
-      if(typing)return;
-      if(e.key==='/'){e.preventDefault();searchRef.current&&searchRef.current.focus();return;}
-      if(e.key==='n'||e.key==='N'){e.preventDefault();setModal(true);return;}
-      const vs=['dashboard','tasks','calendar','people','reports'];
-      if(/^[1-5]$/.test(e.key))setView(vs[+e.key-1]);
-    };
-    document.addEventListener('keydown',h);
-    return ()=>document.removeEventListener('keydown',h);
-  },[]);
-
   const ctx={role,view,setView,say,R,scope,shorts,viewer,mine,canApprove,canAssignIssue,bossChain,
     quickDone,remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,
     setDrawerIdx,setModal,setEmpModal,exportCSV,printReport,qReqs,qExts,attentionList};
-
-  if(!loaded)return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--muted)',fontSize:14}}>Loading TeamFlow…</div>;
 
   return <div className="app">
     <aside className="sidebar">
@@ -772,13 +818,19 @@ function App(){
         <button key={v} className={'navitem'+(view===v?' on':'')} onClick={()=>setView(v)}>
           <I n={ic}/><span className="lb">{l}</span><span className="kbd">{k}</span></button>)}
       <div className="side-foot">
-        <div className="side-lab">Viewing as</div>
-        <select className="roleSel" value={role} onChange={e=>setRole(e.target.value)}>
-          <option value="admin">Administrator · Priya</option>
-          <option value="mgmt">Management · Rajesh</option>
-          <option value="srm">Manager · Anita</option>
-          <option value="jrm">Team Member · Vikram</option>
-        </select>
+        {myRoleKey==='admin'?<>
+          <div className="side-lab">Preview as</div>
+          <select className="roleSel" value={role} onChange={e=>setRole(e.target.value)}>
+            <option value="admin">Administrator · Priya</option>
+            <option value="mgmt">Management · Rajesh</option>
+            <option value="srm">Manager · Anita</option>
+            <option value="jrm">Team Member · Vikram</option>
+          </select>
+        </>:<>
+          <div className="side-lab">Signed in as</div>
+          <div className="roleSel" style={{cursor:'default'}}>{myStaff.n}</div>
+        </>}
+        <button className="btn ghost" style={{width:'100%',justifyContent:'center',marginTop:8}} onClick={()=>sb.auth.signOut()}>Sign out</button>
         <div className="companion">React build · companion to the TeamFlow mobile app. Press <b>N</b> for a new task, <b>/</b> to search.</div>
       </div>
     </aside>
