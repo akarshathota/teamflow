@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>TeamFlow Mobile — React</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,18 +15,20 @@
 <link rel="stylesheet" href="./shared.css">
 <style>
   body{margin:0;font-family:'IBM Plex Sans',-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);
-    background:#e9e7df;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 14px;
-    -webkit-font-smoothing:antialiased}
+    background:var(--bg);-webkit-font-smoothing:antialiased}
   h3,.brandfont{font-family:'Bricolage Grotesque','IBM Plex Sans',sans-serif}
   svg.i{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;display:block;flex:0 0 auto}
-  .caption{font-size:12px;color:#6d6a5f;margin-top:16px;text-align:center;max-width:390px;line-height:1.5}
+  .caption{display:none}
   .caption b{color:#45423a}
 
-  .phone{width:392px;max-width:96vw;height:806px;background:#23262a;border-radius:46px;padding:12px;box-shadow:0 30px 80px rgba(27,30,33,.35);position:relative;flex:0 0 auto}
-  .notch{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:128px;height:28px;background:#23262a;border-radius:0 0 18px 18px;z-index:40}
-  .screen{background:var(--bg);width:100%;height:100%;border-radius:36px;overflow:hidden;position:relative;display:flex;flex-direction:column}
+  /* mobile-first: on a real phone the app fills the actual viewport, no decorative bezel.
+     The "phone in a box" mockup look (fixed size, dark frame, fake notch) only applies on
+     desktop-width viewports — see the @media block at the end of this stylesheet. */
+  .phone{width:100vw;height:100dvh;background:var(--bg);position:relative}
+  .notch{display:none}
+  .screen{background:var(--bg);width:100%;height:100%;overflow:hidden;position:relative;display:flex;flex-direction:column}
 
-  .top{padding:44px 18px 14px;background:var(--card);border-bottom:1px solid var(--line);z-index:5}
+  .top{padding:calc(14px + env(safe-area-inset-top)) 18px 14px;background:var(--card);border-bottom:1px solid var(--line);z-index:5}
   .top .row{display:flex;align-items:center;justify-content:space-between}
   .hello{font-size:13px;color:var(--muted);line-height:1.45}
   .hello b{color:var(--ink);font-weight:700}
@@ -85,13 +87,13 @@
   .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
 
   .nav{position:absolute;bottom:0;left:0;right:0;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);
-    border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:8px 6px 20px;z-index:30}
+    border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:8px 6px calc(8px + env(safe-area-inset-bottom));z-index:30}
   .nav button{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:4px;
     font-size:10.5px;color:var(--muted);cursor:pointer;flex:1;font-weight:600;padding:2px 0;min-height:50px}
   .nav button.on{color:var(--accent-ink)}
   .nav .ic{width:50px;height:29px;display:flex;align-items:center;justify-content:center;border-radius:9px}
   .nav button.on .ic{background:var(--accent-soft)}
-  .fab{position:absolute;bottom:78px;right:16px;width:60px;height:60px;border-radius:18px 18px 18px 5px;
+  .fab{position:absolute;bottom:calc(78px + env(safe-area-inset-bottom));right:16px;width:60px;height:60px;border-radius:18px 18px 18px 5px;
     background:var(--accent);color:#fff;border:none;box-shadow:0 12px 26px rgba(14,122,111,.4);cursor:pointer;z-index:35;
     display:flex;align-items:center;justify-content:center}
   .fab:active{transform:scale(.93)}
@@ -181,6 +183,19 @@
   .empty{text-align:center;color:var(--muted);font-size:13.5px;padding:28px 10px}
   .toast{position:absolute;bottom:150px;left:50%;transform:translateX(-50%);background:#22262a;color:#fff;
     padding:12px 17px;border-radius:10px;font-size:13px;font-weight:600;z-index:60;max-width:92%;width:max-content;text-align:center;line-height:1.45;animation:up .2s ease}
+
+  /* desktop-width viewports (i.e. not a real phone): restore the decorative "phone in a box"
+     mockup look this was originally built with, instead of a full-bleed app. */
+  @media (min-width:600px){
+    body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 14px}
+    .caption{display:block;font-size:12px;color:#6d6a5f;margin-top:16px;text-align:center;max-width:390px;line-height:1.5}
+    .phone{width:392px;max-width:96vw;height:806px;background:#23262a;border-radius:46px;padding:12px;box-shadow:0 30px 80px rgba(27,30,33,.35);flex:0 0 auto}
+    .notch{display:block}
+    .screen{border-radius:36px}
+    .top{padding:44px 18px 14px}
+    .nav{padding:8px 6px 20px}
+    .fab{bottom:78px}
+  }
 </style>
 </head>
 <body>
