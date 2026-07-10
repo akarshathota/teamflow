@@ -626,11 +626,17 @@ function App(){
   /* When Preview As is engaged this is a hypothetical simulation with no real backing person, so
      keep the canonical demo persona for that role. Otherwise show whoever's actually logged in —
      ROLES[role].name/av used to be a fixed persona per role, which showed every admin/mgmt
-     account as "Priya"/"Rajesh" regardless of who signed in. */
+     account as "Priya"/"Rajesh" regardless of who signed in. Same fix for `team`: ROLES.worker.team
+     was hardcoded to ["Hari"], so any other Teacher's real account would've seen Hari's tasks
+     instead of their own — safe to just use [myPerson.s] since no Teacher has direct reports in
+     this org. srm/jrm keep their role-config team (still position-hardcoded like admin/mgmt used
+     to be — fine for now since Anita/Vikram are still the only real accounts at those tiers, but
+     the same class of bug as Akarsh's if a second Manager/Team Member is ever added). */
   const previewing=role!==myRoleKey;
   const r=previewing?ROLES[role]:{...ROLES[role],name:myPerson.n,
-    self:myPerson.n.split(' ')[0]||myPerson.n,
-    av:myPerson.n.split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase()};
+    self:myPerson.s,
+    av:myPerson.n.split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase(),
+    team:role==='worker'?[myPerson.s]:ROLES[role].team};
   const scope=r.team;
   const mine=tasks.map((t,i)=>({t,i})).filter(o=>assigneesM(o.t).some(a=>scope.includes(a)));
   const openN=mine.filter(o=>!o.t.done).length;
