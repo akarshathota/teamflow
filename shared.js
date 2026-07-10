@@ -15,8 +15,10 @@ const BUCKET_COLORS={academic:'#39638f',maintenance:'#b06e12',construction:'#8a6
 const LABEL_TO_BUCKET=Object.fromEntries(Object.entries(BUCKETS).map(([k,v])=>[v,k]));
 const bucketColor=b=>BUCKET_COLORS[b]||'#5d6672';
 /* mobile's superset — includes Teacher, which console never looks up (it has no console-facing
-   Teacher role), so sharing the superset is harmless rather than trimming it per app */
-const DB_ROLE_TO_KEY={Administrator:'admin',Management:'mgmt',Manager:'srm','Team Member':'jrm',Teacher:'worker'};
+   Teacher role), so sharing the superset is harmless rather than trimming it per app.
+   'Team Lead' sits between Team Member (jrm) and Teacher (worker) in the reporting chain — added
+   for the org-chart People & roles view; behaves like jrm everywhere a role-key gate exists today. */
+const DB_ROLE_TO_KEY={Administrator:'admin',Management:'mgmt',Manager:'srm','Team Lead':'lead','Team Member':'jrm',Teacher:'worker'};
 
 const sb=window.supabase.createClient(
   "https://fumggrcamegejihenkhb.supabase.co",

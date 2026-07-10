@@ -150,6 +150,7 @@
   .tag.amber{background:var(--amber-soft);color:var(--amber)}
   .tag.red{background:var(--red-soft);color:var(--red)}
   .tag.teal{background:var(--accent-soft);color:var(--accent-ink)}
+  .tag.purple{background:#eceafc;color:#5b5ea6}
   .duecell{font-size:12.5px;font-weight:600;color:var(--ink2);display:flex;align-items:center;gap:6px;flex:0 0 auto;white-space:nowrap}
   .duecell.over{color:var(--red);font-weight:700}
   .duecell svg{width:14px;height:14px}
@@ -232,10 +233,65 @@
   tbody tr:hover td{background:#fbfaf7}
   .loadbar{width:74px;height:7px;border-radius:4px;background:#efeee7;overflow:hidden;display:inline-block;vertical-align:middle;margin-right:8px}
   .loadbar i{display:block;height:100%;border-radius:4px}
-  .tree{font-size:13px}
-  .tnode{padding:7px 11px;border-radius:8px;margin:4px 0;background:#fbfaf7;border:1px solid var(--line);display:inline-flex;align-items:center;gap:9px}
-  .tchild{margin-left:24px;border-left:2px solid var(--line);padding-left:14px}
   .leg{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;font-weight:600;color:var(--ink2)}
+
+  /* ===== org chart (People & roles) ===== */
+  .org-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .org-toolbar .spacer{flex:1}
+  .org-toolbar .remove-btn{background:var(--red-soft);border-color:#e6b6bd;color:var(--red)}
+  .org-toolbar .remove-btn:hover{background:var(--red);color:#fff}
+  .zoom-bar{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+  .zoom-bar button{width:28px;height:28px;border:1.5px solid var(--line);background:var(--card);border-radius:7px;
+    font-family:inherit;font-size:15px;font-weight:700;color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .zoom-bar button:hover{border-color:var(--accent-border,var(--accent));background:var(--accent-soft)}
+  .zoom-bar .pct{font-size:12px;font-weight:700;color:var(--muted);width:42px;text-align:center}
+  .zoom-bar .zreset{width:auto;padding:0 10px;font-size:11.5px}
+  .chart-scroll{overflow:auto;max-height:65vh;padding:50px 6px 6px}
+  .orgtree,.orgtree ul{list-style:none;margin:0;padding:0}
+  .orgtree{padding-top:0;text-align:center}
+  .orgtree ul{padding-top:26px;position:relative;display:flex;justify-content:center}
+  .orgtree li{display:inline-block;text-align:center;position:relative;padding:26px 10px 0 10px;vertical-align:top}
+  .orgtree li::before,.orgtree li::after{content:'';position:absolute;top:0;right:50%;border-top:2px solid var(--line);width:50%;height:26px}
+  .orgtree li::after{right:auto;left:50%;border-left:2px solid var(--line)}
+  .orgtree li:only-child::after,.orgtree li:only-child::before{display:none}
+  .orgtree li:only-child{padding-top:0}
+  .orgtree li:first-child::before,.orgtree li:last-child::after{border:0 none}
+  .orgtree li:last-child::before{border-right:2px solid var(--line);border-radius:0 6px 0 0}
+  .orgtree li:first-child::after{border-radius:6px 0 0 0}
+  .orgtree>li{padding-top:0}
+  .orgtree>li::before,.orgtree>li::after{display:none}
+  .onode{display:inline-flex;flex-direction:column;align-items:center;gap:4px;background:var(--card);
+    border:1.5px solid var(--line);border-radius:11px;padding:12px 16px;min-width:128px;box-shadow:var(--sh-sm);cursor:pointer}
+  .onode:hover{border-color:var(--accent);box-shadow:var(--sh-md)}
+  .onode .orole{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+  .onode .oname{font-size:13.5px;font-weight:700;color:var(--ink)}
+  .onode .odept{font-size:11px;color:var(--muted)}
+  .onode .otempflag{font-size:9.5px;font-weight:800;color:#8a6a10;background:#fff3d6;border:1px solid #e6c877;
+    border-radius:5px;padding:2px 7px;margin-top:2px}
+  .onode .otaphint{font-size:9px;color:var(--muted);margin-top:1px}
+  .onode-wrap{position:relative;display:inline-block}
+  .onode-wrap.temp .onode{border-color:#e6c877;border-style:dashed}
+  .onode.admin{background:#23262a;border-color:#23262a}
+  .onode.admin .orole,.onode.admin .oname{color:#fff}
+  .onode.mgmt{background:var(--accent-soft);border-color:var(--accent);gap:2px}
+  .org-mgmt-member{display:flex;flex-direction:column;align-items:center;padding:3px 0}
+  .org-mgmt-member+.org-mgmt-member{border-top:1px dashed var(--accent);padding-top:5px;margin-top:1px}
+  .org-edit-dept{cursor:pointer;margin-left:6px;font-size:14px;color:var(--red);vertical-align:middle;display:inline-block;transform:scaleX(-1)}
+  .org-edit-dept:hover{color:#a51c2c;transform:scaleX(-1) scale(1.15)}
+  .org-checklist{display:flex;flex-direction:column;gap:9px;margin:12px 20px;max-height:220px;overflow-y:auto}
+  .org-check-row{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink);cursor:pointer}
+  .org-check-row input{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
+  .org-role-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 20px}
+  .org-role-grid button{border:1.5px solid var(--line);background:var(--card);border-radius:9px;padding:14px 8px;font-family:inherit;
+    font-size:13px;font-weight:700;color:var(--ink);cursor:pointer}
+  .org-role-grid button:hover{border-color:var(--accent);background:var(--accent-soft)}
+  .org-action-grid{display:flex;gap:10px;margin:12px 20px}
+  .org-action-grid button{flex:1;border:1.5px solid var(--line);background:var(--card);border-radius:9px;padding:16px 8px;font-family:inherit;
+    font-size:13.5px;font-weight:700;color:var(--ink);cursor:pointer;display:flex;flex-direction:column;gap:4px;align-items:center}
+  .org-action-grid button:hover:not(:disabled){border-color:var(--accent);background:var(--accent-soft)}
+  .org-action-grid button:disabled{opacity:.45;cursor:not-allowed}
+  .org-action-grid small{font-weight:500;color:var(--muted);font-size:10.5px}
+  .org-info-box{background:#f1f0e9;border-radius:8px;padding:10px 12px;font-size:12px;color:var(--ink2);margin:12px 20px;line-height:1.5}
   .leg:last-child{border-bottom:none}
   .leg .dot2{width:11px;height:11px;border-radius:3px;flex:0 0 auto}
   .leg b{margin-left:auto;color:var(--ink)}
@@ -338,7 +394,12 @@ const TYPES={work:"Work",purchase:"Purchase",repair:"Repair",maint:"Maintenance"
 const PRIOS={high:{l:"High",c:"var(--red)"},med:{l:"Medium",c:"var(--amber)"},low:{l:"Low",c:"#9aa2a8"}};
 const DEPTS=['Academics','Maintenance','Construction','HR','Accounts','Administration','Transport','IT','Housekeeping','Operations'];
 const AV_COLORS=['#0e7a6f','#39638f','#1a7a48','#b06e12','#c43a53','#0e7a8f','#a34d78','#5b5ea6'];
-const ROLE_TAG={'Administrator':'teal','Management':'blue','Manager':'green','Team Member':'amber','Teacher':'gray'};
+const ROLE_TAG={'Administrator':'teal','Management':'blue','Manager':'green','Team Lead':'purple','Team Member':'amber','Teacher':'gray'};
+/* display labels for the org-chart view only — the DB role strings themselves (and every other
+   view's rendering of them) stay exactly as they are; this is presentation-layer relabeling so the
+   chart reads as the Admin Control -> Management -> Sr. Manager -> Jr Manager -> Team Lead -> Staff
+   tiers everyone agreed on, without a schema/UI-wide rename of "Manager"/"Team Member"/"Teacher". */
+const TIER_LABEL={'Administrator':'Admin Control','Management':'Management','Manager':'Sr. Manager','Team Lead':'Team Lead','Team Member':'Jr Manager','Teacher':'Staff'};
 const MAINT_HEAD="Vikram Rao";
 
 let STAFF=[];
@@ -348,7 +409,8 @@ let requests=[];
 function rowsToStaff(rows){
   const byId=Object.fromEntries(rows.map(r=>[r.id,r]));
   return rows.map(r=>({n:r.name,s:r.short_name,role:r.role,dept:r.department,
-    boss:r.boss_id?byId[r.boss_id].name:null,av:r.initials,id:r.id,authId:r.auth_user_id}));
+    boss:r.boss_id?byId[r.boss_id].name:null,bossId:r.boss_id,av:r.initials,id:r.id,authId:r.auth_user_id,
+    tempCovering:r.temp_covering,tempSnap:r.temp_cover_snapshot}));
 }
 function rowToTask(row,assignRows,logRows){
   const mine=assignRows.filter(a=>a.task_id===row.id);
@@ -435,11 +497,24 @@ async function saveStaffRow(p){
     department:p.dept,boss_id:boss?boss.id:null}).select().single();
   p.id=data.id;
 }
-async function deleteStaffRow(p){if(p.id)await sb.from('staff').delete().eq('id',p.id);}
+/* deletes a staff row AND its linked auth account together via the delete-staff-account edge
+   function — a plain client-side staff delete leaves the auth login orphaned, which can later
+   collide with a new hire's auto-generated {username}@teamflow.demo address */
+async function deleteStaffAccount(staffId){
+  const {data:{session}}=await sb.auth.getSession();
+  const resp=await fetch('https://fumggrcamegejihenkhb.supabase.co/functions/v1/delete-staff-account',{
+    method:'POST',
+    headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token,
+      apikey:'sb_publishable_bEqR06srB99BHHdvLQy14g_-pLZPWwJ'},
+    body:JSON.stringify({staffId})});
+  const j=await resp.json();
+  if(!resp.ok)throw new Error(j.error||'Could not remove staff account');
+  return j;
+}
 
 const ROLE_VIEWER={admin:"Akarsh",mgmt:"Rajesh Menon",srm:"Anita Desai",jrm:"Vikram Rao"};
 const BOSS_LABEL={"Akarsh":"Akarsh (Admin)","Rajesh Menon":"Rajesh (Management)","Anita Desai":"Anita (Manager)","Vikram Rao":"Vikram (Team Member)"};
-const SCOPE_WORD={admin:"all teams",mgmt:"org-wide",srm:"your teams",jrm:"your team"};
+const SCOPE_WORD={admin:"all teams",mgmt:"org-wide",srm:"your teams",jrm:"your team",lead:"your team"};
 
 /* ============ helpers ============ */
 const byShort=s=>STAFF.find(x=>x.s===s);
@@ -1427,54 +1502,464 @@ function CalendarView({ctx}){
 }
 
 /* ============ people ============ */
-function TreeNode({name}){
-  const p=byName(name);const kids=STAFF.filter(x=>x.boss===name);
-  return <div>
-    <div className="tnode"><span className="avex" style={{background:avColor(p.n),color:'#fff'}}>{p.av}</span><b>{p.n}</b><span className={'tag '+(ROLE_TAG[p.role]||'gray')}>{p.role}</span></div>
-    {kids.length?<div className="tchild">{kids.map(k=><TreeNode key={k.n} name={k.n}/>)}</div>:null}
-  </div>;
+/* ============ org chart (People & roles) ============ */
+const byId=id=>STAFF.find(p=>p.id===id);
+const directReports=name=>STAFF.filter(p=>p.boss===name);
+const orgDepts=()=>STAFF.filter(p=>p.role==='Manager'); // Sr. Manager rows = department heads
+const mgmtMembers=()=>STAFF.filter(p=>p.role==='Management');
+function orgDeepestOfType(rootName,dbRole){
+  let last=null;
+  (function walk(name){directReports(name).forEach(c=>{if(c.role===dbRole)last=c;walk(c.n);});})(rootName);
+  return last;
 }
-function PeopleView({ctx}){
-  const [q,setQ]=useState('');const [fr,setFr]=useState('all');
-  const canM=ctx.role==='admin'||ctx.role==='mgmt';
-  const load=workloadMap();
-  const list=ctx.scope.filter(p=>(fr==='all'||p.role===fr)&&(!q||p.n.toLowerCase().includes(q.toLowerCase())||p.dept.toLowerCase().includes(q.toLowerCase())));
-  const maxL=Math.max(1,...ctx.scope.map(p=>load[p.s]||0));
-  const removeEmp=s=>{const p=byShort(s);if(!p)return;
-    const op=tasks.filter(t=>hasWho(t,s)&&t.status!=='done').length;
-    if(op){ctx.say('Reassign '+p.n.split(' ')[0]+"'s "+op+' open task'+(op>1?'s':'')+' first');return;}
-    if(Object.values(ROLE_VIEWER).includes(p.n)){ctx.say(p.n.split(' ')[0]+" backs a demo role view and can't be removed");return;}
-    if(STAFF.some(x=>x.boss===p.n)){ctx.say('Move '+p.n.split(' ')[0]+"'s direct reports to another manager first");return;}
-    if(!window.confirm('Remove '+p.n+' from TeamFlow?'))return;
-    STAFF.splice(STAFF.indexOf(p),1);ctx.R();
-    deleteStaffRow(p).catch(console.error);
-    ctx.say(p.n+' removed');};
-  return <div className="view">
-    <div className="filters">
-      <input className="fsel" style={{width:230}} placeholder="Search name or department…" value={q} onChange={e=>setQ(e.target.value)}/>
-      <select className="fsel" value={fr} onChange={e=>setFr(e.target.value)}><option value="all">All roles</option>
-        {Object.keys(ROLE_TAG).map(r=><option key={r}>{r}</option>)}</select>
-      <div className="spacer"/>
-      {canM?<button className="btn primary" onClick={()=>ctx.setEmpModal(true)}><I n="plus"/>Add employee</button>:null}
-    </div>
-    <div className="grid2">
-      <div className="panel" style={{padding:'6px 6px 4px'}}>
-        <table><thead><tr><th>Name</th><th>Role</th><th>Department</th><th>Reports to</th><th>Workload</th>{canM?<th/>:null}</tr></thead>
-        <tbody>{list.length?list.map(p=>{const l=load[p.s]||0;const c=l>=3?'var(--red)':l===2?'var(--amber)':'var(--green)';
-          return <tr key={p.n}><td><span className="avex" style={{marginRight:8,background:avColor(p.n),color:'#fff'}}>{p.av}</span><b>{p.n}</b></td>
-            <td><span className={'tag '+(ROLE_TAG[p.role]||'gray')}>{p.role}</span></td><td>{p.dept}</td>
-            <td style={{color:'var(--muted)'}}>{p.boss?p.boss.split(' ')[0]:'—'}</td>
-            <td><span className="loadbar"><i style={{width:(l/maxL*100)+'%',background:c}}/></span><b>{l}</b> open</td>
-            {canM?<td style={{display:'flex',gap:4}}>
-              {p.authId?<button className="iconbtn" title={'Reset '+p.n.split(' ')[0]+"'s password"} onClick={()=>ctx.setResetTarget(p)}><I n="key" s={15}/></button>:null}
-              {p.n!==ctx.viewer.n?<button className="iconbtn" title={'Remove '+p.n} onClick={()=>removeEmp(p.s)}><I n="x" s={15}/></button>:null}
-            </td>:null}
-          </tr>;}):<tr><td colSpan={6}><Empty t="No one matches" s="Try a different name or clear the role filter."/></td></tr>}</tbody></table>
+function personLabel(p){
+  const tier=TIER_LABEL[p.role]||p.role;
+  if(p.role==='Manager')return tier+' — '+p.dept+' ('+p.n+')';
+  if(p.role==='Management')return tier+' — '+p.n;
+  return tier+' — '+p.n+' ('+p.dept+')';
+}
+async function createStaffAccount({name,role,department,boss,phone,email}){
+  const {data:{session}}=await sb.auth.getSession();
+  const resp=await fetch('https://fumggrcamegejihenkhb.supabase.co/functions/v1/create-staff-account',{
+    method:'POST',
+    headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token,
+      apikey:'sb_publishable_bEqR06srB99BHHdvLQy14g_-pLZPWwJ'},
+    body:JSON.stringify({name,role,department,boss:boss||null,phone:phone||null,email:email||null})});
+  const j=await resp.json();
+  if(!resp.ok)throw new Error(j.error||'Could not create account');
+  return j;
+}
+async function updateStaffFields(id,fields){
+  const {error}=await sb.from('staff').update(fields).eq('id',id);
+  if(error)throw error;
+}
+/* exports every NOT-DONE task assigned to this person or anyone below them — one row per task,
+   with status/due date/files/activity log, not just a headcount */
+function exportPersonTasksCsv(root){
+  const people=[root,...descendants(root.n)];
+  const shorts=people.map(p=>p.s);
+  const byShortName=Object.fromEntries(people.map(p=>[p.s,p]));
+  const rows=[['Role','Name','Department','Task','Status','Due date','Files attached','Activity log']];
+  tasks.filter(t=>t.status!=='done'&&assignees(t).some(a=>shorts.includes(a))).forEach(t=>{
+    assignees(t).filter(a=>shorts.includes(a)).forEach(a=>{
+      const p=byShortName[a];
+      rows.push([p.role,p.n,p.dept,t.t,(ST[t.status]||{l:t.status}).l,t.date||'',
+        (t.files||[]).map(f=>f.name).join('; ')||'—',
+        (t.log||[]).map(l=>l.when+' — '+l.by+': '+l.text).join(' | ')||'—']);
+    });
+  });
+  csvDownload(root.n.toLowerCase().replace(/\s+/g,'-')+'-pending-tasks-export.csv',rows);
+}
+
+function OrgNode({person,onNodeClick}){
+  const kids=STAFF.filter(x=>x.boss===person.n);
+  return <li>
+    <div className={'onode-wrap'+(person.tempCovering?' temp':'')}>
+      <div className="onode" onClick={()=>onNodeClick(person)}>
+        <div className="orole">{TIER_LABEL[person.role]||person.role}</div>
+        <div className="oname">{person.n}</div>
+        {person.role==='Manager'?<div className="odept">{person.dept}
+          <span className="org-edit-dept" title="Rename department" onClick={e=>{e.stopPropagation();onNodeClick(person,'rename-dept');}}>✎</span>
+        </div>:null}
+        {person.tempCovering?<><div className="otempflag">Temporary</div><div className="otaphint">Click to revert</div></>:null}
       </div>
-      <div className="panel"><h3>Reporting hierarchy — your span</h3><div className="tree"><TreeNode name={ctx.treeRoot}/></div></div>
+    </div>
+    {kids.length?<ul>{kids.map(k=><OrgNode key={k.id} person={k} onNodeClick={onNodeClick}/>)}</ul>:null}
+  </li>;
+}
+
+function OrgChart({onNodeClick}){
+  const admin=STAFF.find(p=>p.role==='Administrator');
+  if(!admin)return <Empty t="No Admin Control account yet" s=""/>;
+  const mgmt=mgmtMembers();
+  const depts=orgDepts();
+  return <ul className="orgtree"><li>
+    <div className="onode-wrap"><div className="onode admin"><div className="orole">Admin Control</div><div className="oname">{admin.n}</div></div></div>
+    {mgmt.length?<ul><li>
+      <div className="onode-wrap"><div className="onode mgmt">
+        <div className="orole">Management</div>
+        {mgmt.map(m=><div className="org-mgmt-member" key={m.id} onClick={()=>onNodeClick(m)}>
+          <div className="oname">{m.n}</div>
+          {m.tempCovering?<><div className="otempflag">Temporary</div><div className="otaphint">Click to revert</div></>:null}
+        </div>)}
+      </div></div>
+      {depts.length?<ul>{depts.map(d=><OrgNode key={d.id} person={d} onNodeClick={onNodeClick}/>)}</ul>:null}
+    </li></ul>:null}
+  </li></ul>;
+}
+
+/* single modal driving every People & roles action — Add x5, Remove/Replace/Promote/Revert,
+   rename department, and the plain person-detail popup — mirrors the mockup's state machine,
+   with real Supabase writes in place of in-memory mutation */
+/* module-scope so its identity is stable across OrgActionModal re-renders — defining this inline
+   inside OrgActionModal made React remount the whole modal (losing input focus) on every
+   keystroke, since a fresh function reference each render is a "different component" to React */
+function ModalShell({title,sub,children,close,err}){
+  return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
+    <div className="modal" style={{width:460}}>
+      <div className="qc-head"><h3>{title}</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
+      {sub?<div className="whysm" style={{margin:'0 20px'}}>{sub}</div>:null}
+      {children}
+      {err?<div style={{color:'var(--red)',fontSize:12.5,margin:'0 20px 10px'}}>{err}</div>:null}
     </div>
   </div>;
 }
+function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
+  const [f,setF]=useState({});
+  const [err,setErr]=useState('');
+  const [busy,setBusy]=useState(false);
+  const [result,setResult]=useState(null); // {name,login,username,password} after a real account create
+  const say=ctx.say;
+
+  if(result)return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
+    <div className="modal" style={{width:440}}>
+      <div className="qc-head"><h3>Account created</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
+      <div className="mf">
+        <div className="whysm" style={{marginTop:0,marginBottom:14}}>Share these with {result.name.split(' ')[0]} — the password won't be shown again.</div>
+        <label>{result.username?'Username':'Email'}</label>
+        <input readOnly value={result.username||result.login} onFocus={e=>e.target.select()}/>
+        <label>Password</label>
+        <input readOnly value={result.password} onFocus={e=>e.target.select()}/>
+      </div>
+      <div className="qc-actions"><button className="btn primary" style={{flex:1,justifyContent:'center'}} onClick={close}><I n="check"/>Done</button></div>
+    </div>
+  </div>;
+
+  /* ---------- Add flows ---------- */
+  if(step==='add-mgmt'){
+    return <ModalShell close={close} err={err} title="Add a Management member" sub="Joins Management alongside anyone already there — every Management member oversees every department jointly.">
+      <div className="mf">
+        <label>Name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Neha Kapoor" autoFocus/>
+        <label>Email (their real login)</label><input value={f.email||''} onChange={e=>setF({...f,email:e.target.value})} placeholder="name@school.org"/>
+      </div>
+      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+      <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+        const name=(f.name||'').trim();
+        if(!name){setErr('Enter a name.');return;}
+        if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((f.email||'').trim())){setErr('Enter a valid email — Management needs a real login.');return;}
+        setBusy(true);setErr('');
+        try{
+          const admin=STAFF.find(p=>p.role==='Administrator');
+          const j=await createStaffAccount({name,role:'Management',department:(mgmtMembers()[0]||{}).dept||'Administration',boss:admin.n,email:f.email.trim()});
+          STAFF.push({n:j.name,s:j.short_name,role:'Management',dept:(mgmtMembers()[0]||{}).dept||'Administration',boss:admin.n,bossId:admin.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
+          ctx.R();say('Added '+name+' to Management');setBusy(false);setResult(j);
+        }catch(e){setBusy(false);setErr(e.message);}
+      }}>{busy?'Adding…':'Add'}</button>
+    </ModalShell>;
+  }
+  if(step==='add-dept'){
+    return <ModalShell close={close} err={err} title="Add a department" sub="Creates a new Sr. Manager department under Management — overseen jointly by every Management member.">
+      <div className="mf">
+        <label>Department name</label><input value={f.dept||''} onChange={e=>setF({...f,dept:e.target.value})} placeholder="e.g. Facilities" autoFocus/>
+        <label>Sr. Manager name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Priya Nair"/>
+      </div>
+      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+      <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+        const dept=(f.dept||'').trim(),name=(f.name||'').trim();
+        if(!dept||!name){setErr('Enter both a department name and a Sr. Manager name.');return;}
+        if(orgDepts().some(d=>d.dept.toLowerCase()===dept.toLowerCase())){setErr('A department with that name already exists.');return;}
+        setBusy(true);setErr('');
+        try{
+          const boss=mgmtMembers()[0];
+          const j=await createStaffAccount({name,role:'Manager',department:dept,boss:boss.n});
+          STAFF.push({n:j.name,s:j.short_name,role:'Manager',dept,boss:boss.n,bossId:boss.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
+          ctx.R();say('Added department "'+dept+'" with Sr. Manager '+name);setBusy(false);setResult(j);
+        }catch(e){setBusy(false);setErr(e.message);}
+      }}>{busy?'Adding…':'Add'}</button>
+    </ModalShell>;
+  }
+  if(step==='add-jrm'||step==='add-lead'||step==='add-staff'){
+    const titles={'add-jrm':'Add Jr. Manager','add-lead':'Add Team Lead','add-staff':'Add Staff'};
+    const subs={'add-jrm':"Attaches directly under that department's Sr. Manager.",
+      'add-lead':"Attaches under that department's most recent Jr Manager — or directly under the Sr. Manager if it has none yet.",
+      'add-staff':'Attaches under the most specific existing manager in that department (Team Lead, else Jr Manager, else the Sr. Manager).'};
+    const depts=orgDepts();
+    return <ModalShell close={close} err={err} title={titles[step]} sub={subs[step]}>
+      <div className="mf">
+        <label>Name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Deepa Iyer" autoFocus/>
+        <label>Department</label>
+        <select value={f.deptId||(depts[0]||{}).id||''} onChange={e=>setF({...f,deptId:e.target.value})}>
+          {depts.map(d=><option key={d.id} value={d.id}>{d.dept}{d.n?' — '+d.n:''}</option>)}
+        </select>
+      </div>
+      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+      <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+        const name=(f.name||'').trim();
+        const deptId=f.deptId||(depts[0]||{}).id;
+        const deptHead=depts.find(d=>d.id===deptId);
+        if(!name){setErr('Enter a name.');return;}
+        if(!deptHead){setErr('Pick a department.');return;}
+        const dbRole=step==='add-jrm'?'Team Member':step==='add-lead'?'Team Lead':'Teacher';
+        const attachPoint=step==='add-jrm'?deptHead
+          :step==='add-lead'?(orgDeepestOfType(deptHead.n,'Team Member')||deptHead)
+          :(orgDeepestOfType(deptHead.n,'Team Lead')||orgDeepestOfType(deptHead.n,'Team Member')||deptHead);
+        if(step==='add-jrm'||step==='add-lead'){
+          const existing=orgDeepestOfType(deptHead.n,dbRole);
+          const candidates=directReports(attachPoint.n);
+          if(!existing&&candidates.length){
+            setOaCtx({dbRole,name,deptHead,attachPoint,candidates});
+            setStep('add-reassign');
+            return;
+          }
+        }
+        setBusy(true);setErr('');
+        try{
+          const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,boss:attachPoint.n});
+          STAFF.push({n:j.name,s:j.short_name,role:dbRole,dept:deptHead.dept,boss:attachPoint.n,bossId:attachPoint.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
+          ctx.R();say('Added '+TIER_LABEL[dbRole]+' '+name+' under '+deptHead.dept);setBusy(false);setResult(j);
+        }catch(e){setBusy(false);setErr(e.message);}
+      }}>{busy?'Adding…':'Add'}</button>
+    </ModalShell>;
+  }
+  if(step==='add-reassign'){
+    const {dbRole,name,deptHead,attachPoint,candidates}=oaCtx;
+    const [checked,setChecked]=[f.checked||Object.fromEntries(candidates.map(c=>[c.id,true])),
+      sel=>setF({...f,checked:sel})];
+    return <ModalShell close={close} err={err} title={'Who reports to the new '+TIER_LABEL[dbRole]+'?'}
+      sub={'This is the first '+TIER_LABEL[dbRole]+' in '+deptHead.dept+' — pick who moves from reporting to '+(TIER_LABEL[attachPoint.role]||attachPoint.role)+' to reporting to them instead.'}>
+      <div className="org-checklist">{candidates.map(c=><label className="org-check-row" key={c.id}>
+        <input type="checkbox" checked={checked[c.id]!==false} onChange={e=>setChecked({...checked,[c.id]:e.target.checked})}/>
+        {TIER_LABEL[c.role]||c.role} — {c.n}
+      </label>)}</div>
+      <button className="btn soft" style={{flex:1}} onClick={close}>Back</button>
+      <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+        setBusy(true);setErr('');
+        try{
+          const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,boss:attachPoint.n});
+          const newPerson={n:j.name,s:j.short_name,role:dbRole,dept:deptHead.dept,boss:attachPoint.n,bossId:attachPoint.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null};
+          STAFF.push(newPerson);
+          const moved=candidates.filter(c=>checked[c.id]!==false);
+          for(const c of moved){await updateStaffFields(c.id,{boss_id:j.id});const local=byId(c.id);if(local){local.boss=j.name;local.bossId=j.id;}}
+          ctx.R();
+          say('Added '+TIER_LABEL[dbRole]+' '+name+' under '+deptHead.dept+(moved.length?' — '+moved.length+' report'+(moved.length===1?'':'s')+' now reporting to them':''));
+          setBusy(false);setResult(j);
+        }catch(e){setBusy(false);setErr(e.message);}
+      }}>{busy?'Adding…':'Add'}</button>
+    </ModalShell>;
+  }
+
+  /* ---------- Remove / Replace / Promote / Revert ---------- */
+  if(step==='remove-role'){
+    return <ModalShell close={close} err={err} title="Remove someone" sub="Who do you want to remove?">
+      <div className="org-role-grid">
+        <button onClick={()=>{setOaCtx({dbRole:'Management'});setStep('remove-person');}}>Management</button>
+        <button onClick={()=>{setOaCtx({dbRole:'Manager'});setStep('remove-person');}}>Sr. Manager</button>
+        <button onClick={()=>{setOaCtx({dbRole:'Team Member'});setStep('remove-person');}}>Jr. Manager</button>
+        <button onClick={()=>{setOaCtx({dbRole:'Team Lead'});setStep('remove-person');}}>Team Lead</button>
+        <button style={{gridColumn:'1/-1'}} onClick={()=>{setOaCtx({dbRole:'Teacher'});setStep('remove-person');}}>Staff</button>
+      </div>
+      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+    </ModalShell>;
+  }
+  if(step==='remove-person'){
+    const {dbRole}=oaCtx;
+    const entries=STAFF.filter(p=>p.role===dbRole);
+    return <ModalShell close={close} err={err} title={'Remove — '+TIER_LABEL[dbRole]} sub={entries.length?'Which one?':'There are none of these to remove right now.'}>
+      {entries.length?<div className="mf"><label>{TIER_LABEL[dbRole]}</label>
+        <select value={f.targetId||entries[0].id} onChange={e=>setF({...f,targetId:e.target.value})}>
+          {entries.map(e=><option key={e.id} value={e.id}>{personLabel(e)}</option>)}
+        </select></div>:null}
+      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+      {entries.length?<button className="btn primary" style={{flex:2,justifyContent:'center'}} onClick={()=>{
+        const target=byId(f.targetId||entries[0].id);
+        exportPersonTasksCsv(target);
+        setOaCtx({...oaCtx,target});
+        setStep('remove-action');
+      }}>Continue</button>:null}
+    </ModalShell>;
+  }
+  if(step==='remove-action'){
+    const {target}=oaCtx;
+    const openCount=tasks.filter(t=>t.status!=='done'&&assignees(t).includes(target.s)).length;
+    const candidateCount=STAFF.filter(p=>p.role!=='Administrator'&&p.id!==target.id).length;
+    return <ModalShell close={close} err={err} title="Replace or promote?">
+      <div className="org-info-box">Exported {(TIER_LABEL[target.role]||target.role).toLowerCase()} data for "{target.n}" as a CSV — one row per pending task, with status, due date, attached files, and full activity log.
+        {openCount?<> They have <b>{openCount} pending task{openCount===1?'':'s'}</b> — reassign those separately if they don't move with whoever fills this position.</>:null}</div>
+      <div className="org-action-grid">
+        <button onClick={()=>setStep('remove-replace-name')}>Replace<small>Bring in someone new</small></button>
+        <button disabled={!candidateCount} onClick={()=>setStep('remove-promote-pick')}>Promote<small>{candidateCount?'Anyone in the org':'No one to promote'}</small></button>
+      </div>
+      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+    </ModalShell>;
+  }
+  if(step==='remove-replace-name'){
+    const {target}=oaCtx;
+    const isAdminTier=target.role==='Administrator'||target.role==='Management';
+    return <ModalShell close={close} err={err} title={'Replace '+target.n} sub="Enter the name of the person filling this position.">
+      <div className="mf">
+        <label>New {TIER_LABEL[target.role]} name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Deepa Iyer" autoFocus/>
+        {isAdminTier?<><label>Email (their real login)</label><input value={f.email||''} onChange={e=>setF({...f,email:e.target.value})} placeholder="name@school.org"/></>:null}
+      </div>
+      <button className="btn soft" style={{flex:1}} onClick={()=>setStep('remove-action')}>Back</button>
+      <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+        const name=(f.name||'').trim();
+        if(!name){setErr('Enter a name for the replacement.');return;}
+        if(isAdminTier&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((f.email||'').trim())){setErr('Enter a valid email for this role.');return;}
+        setBusy(true);setErr('');
+        try{
+          const j=await createStaffAccount({name,role:target.role,department:target.dept,boss:target.boss,email:isAdminTier?f.email.trim():undefined});
+          const reports=directReports(target.n);
+          for(const r of reports){await updateStaffFields(r.id,{boss_id:j.id});const local=byId(r.id);if(local){local.boss=name;local.bossId=j.id;}}
+          await deleteStaffAccount(target.id);
+          STAFF.splice(STAFF.indexOf(target),1);
+          STAFF.push({n:j.name,s:j.short_name,role:target.role,dept:target.dept,boss:target.boss,bossId:target.bossId,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
+          ctx.R();say(name+' now fills the '+TIER_LABEL[target.role]+' position'+(target.dept?' ('+target.dept+')':''));setBusy(false);setResult(j);
+        }catch(e){setBusy(false);setErr(e.message);}
+      }}>{busy?'Replacing…':'Confirm replace'}</button>
+    </ModalShell>;
+  }
+  if(step==='remove-promote-pick'){
+    const {target}=oaCtx;
+    const candidates=STAFF.filter(p=>p.role!=='Administrator'&&p.id!==target.id);
+    return <ModalShell close={close} err={err} title="Promote who?" sub="Anyone in the organization — the one you pick keeps their own team and absorbs whoever else reported to this position.">
+      <div className="mf"><label>Promote</label>
+        <select value={f.promotedId||candidates[0].id} onChange={e=>setF({...f,promotedId:e.target.value})}>
+          {candidates.map(c=><option key={c.id} value={c.id}>{personLabel(c)}</option>)}
+        </select></div>
+      <button className="btn soft" style={{flex:1}} onClick={()=>setStep('remove-action')}>Back</button>
+      <button className="btn primary" style={{flex:2,justifyContent:'center'}} onClick={()=>{
+        setOaCtx({...oaCtx,promotedId:f.promotedId||candidates[0].id});
+        setStep('remove-promote-mode');
+      }}>Continue</button>
+    </ModalShell>;
+  }
+  if(step==='remove-promote-mode'){
+    return <ModalShell close={close} err={err} title="Temporary or permanent?">
+      <div className="org-action-grid">
+        <button disabled={busy} onClick={()=>doPromote(true)}>Temporary<small>Covers the role — you can revert them later</small></button>
+        <button disabled={busy} onClick={()=>doPromote(false)}>Permanent<small>Fills the role for good</small></button>
+      </div>
+      <button className="btn soft" style={{flex:1}} onClick={()=>setStep('remove-promote-pick')}>Back</button>
+    </ModalShell>;
+  }
+  if(step==='revert-name'){
+    const {person}=oaCtx;
+    const snap=person.tempSnap;
+    const newHireRole=person.role,newHireDept=person.dept;
+    const isAdminTier=newHireRole==='Administrator'||newHireRole==='Management';
+    return <ModalShell close={close} err={err} title={'Revert '+person.n} sub={person.n+' goes back to '+TIER_LABEL[snap.home_role]+(snap.home_department?' ('+snap.home_department+')':'')+'. Who fills '+TIER_LABEL[newHireRole]+' permanently now?'}>
+      <div className="mf">
+        <label>New {TIER_LABEL[newHireRole]} name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Priya Nair" autoFocus/>
+        {isAdminTier?<><label>Email (their real login)</label><input value={f.email||''} onChange={e=>setF({...f,email:e.target.value})} placeholder="name@school.org"/></>:null}
+      </div>
+      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+      <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+        const name=(f.name||'').trim();
+        if(!name){setErr('Enter a name for the permanent replacement.');return;}
+        if(isAdminTier&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((f.email||'').trim())){setErr('Enter a valid email for this role.');return;}
+        setBusy(true);setErr('');
+        try{
+          const bossOfNewHire=byId(person.bossId);
+          const j=await createStaffAccount({name,role:newHireRole,department:newHireDept,boss:bossOfNewHire?bossOfNewHire.n:null,email:isAdminTier?f.email.trim():undefined});
+          const homeTeam=snap.home_team_ids||[];
+          const inherited=directReports(person.n).filter(c=>!homeTeam.includes(c.id));
+          for(const c of inherited){await updateStaffFields(c.id,{boss_id:j.id});const local=byId(c.id);if(local){local.boss=name;local.bossId=j.id;}}
+          // snap.home_boss_id can point at the very position just vacated (person was promoted
+          // from within its own team) — that row no longer exists, so fall back to the new hire
+          // taking over that position instead of leaving a dangling boss_id.
+          const homeBossStillExists=byId(snap.home_boss_id);
+          const resolvedHomeBossId=homeBossStillExists?snap.home_boss_id:j.id;
+          const resolvedHomeBossName=homeBossStillExists?homeBossStillExists.n:name;
+          await updateStaffFields(person.id,{role:snap.home_role,department:snap.home_department,boss_id:resolvedHomeBossId,temp_covering:false,temp_cover_snapshot:null});
+          const localPerson=byId(person.id);
+          Object.assign(localPerson,{role:snap.home_role,dept:snap.home_department,boss:resolvedHomeBossName,bossId:resolvedHomeBossId,tempCovering:false,tempSnap:null});
+          STAFF.push({n:j.name,s:j.short_name,role:newHireRole,dept:newHireDept,boss:bossOfNewHire?bossOfNewHire.n:null,bossId:bossOfNewHire?bossOfNewHire.id:null,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
+          ctx.R();say(name+' now fills '+TIER_LABEL[newHireRole]+' — '+person.n+' is back to '+TIER_LABEL[snap.home_role]);setBusy(false);setResult(j);
+        }catch(e){setBusy(false);setErr(e.message);}
+      }}>{busy?'Reverting…':'Confirm revert'}</button>
+    </ModalShell>;
+  }
+  if(step==='rename-dept'){
+    const {person}=oaCtx;
+    return <ModalShell close={close} err={err} title="Rename department" sub="Updates the department name for everyone in it.">
+      <div className="mf"><label>Department name</label><input value={f.dept!==undefined?f.dept:person.dept} onChange={e=>setF({...f,dept:e.target.value})} autoFocus/></div>
+      <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+      <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+        const newName=(f.dept!==undefined?f.dept:person.dept).trim();
+        if(!newName){setErr('Enter a department name.');return;}
+        if(newName!==person.dept&&orgDepts().some(d=>d.dept.toLowerCase()===newName.toLowerCase())){setErr('A department with that name already exists.');return;}
+        setBusy(true);setErr('');
+        try{
+          const oldName=person.dept;
+          const group=[person,...descendants(person.n)];
+          for(const p of group){await updateStaffFields(p.id,{department:newName});p.dept=newName;}
+          ctx.R();say(oldName===newName?'No change made':'Renamed "'+oldName+'" to "'+newName+'"');
+          setBusy(false);close();
+        }catch(e){setBusy(false);setErr(e.message);}
+      }}>{busy?'Saving…':'Save'}</button>
+    </ModalShell>;
+  }
+  if(step==='person-detail'){
+    const {person}=oaCtx;
+    return <ModalShell close={close} err={err} title={person.n} sub={(TIER_LABEL[person.role]||person.role)+(person.dept?' · '+person.dept:'')}>
+      <div className="mf" style={{display:'flex',flexDirection:'column',gap:8}}>
+        {person.authId?<button className="btn soft" onClick={()=>{close();ctx.setResetTarget(person);}}><I n="key" s={15}/>Reset password</button>:null}
+        {person.tempCovering?<button className="btn soft" onClick={()=>{setOaCtx({person});setStep('revert-name');}}>Revert to their original role</button>:null}
+      </div>
+      <button className="btn soft" style={{flex:1}} onClick={close}>Close</button>
+    </ModalShell>;
+  }
+  return null;
+
+  async function doPromote(temporary){
+    const {target,promotedId}=oaCtx;
+    const promoted=byId(promotedId);
+    setBusy(true);setErr('');
+    try{
+      const homeTeamIds=directReports(promoted.n).map(c=>c.id);
+      const homeSnapshot={home_role:promoted.role,home_department:promoted.dept,home_boss_id:promoted.bossId,home_team_ids:homeTeamIds};
+      const others=directReports(target.n).filter(c=>c.id!==promoted.id);
+      const fields={role:target.role,department:target.dept,boss_id:target.bossId};
+      if(temporary){fields.temp_covering=true;fields.temp_cover_snapshot=homeSnapshot;}
+      await updateStaffFields(promoted.id,fields);
+      for(const o of others){await updateStaffFields(o.id,{boss_id:promoted.id});const local=byId(o.id);if(local){local.boss=promoted.n;local.bossId=promoted.id;}}
+      await deleteStaffAccount(target.id);
+      STAFF.splice(STAFF.indexOf(target),1);
+      Object.assign(promoted,{role:target.role,dept:target.dept,boss:target.boss,bossId:target.bossId,
+        tempCovering:temporary,tempSnap:temporary?homeSnapshot:null});
+      ctx.R();
+      say((promoted.n)+(temporary?' temporarily covering ':' promoted to ')+TIER_LABEL[target.role]+(target.dept?' ('+target.dept+')':''));
+      setBusy(false);close();
+    }catch(e){setBusy(false);setErr(e.message);}
+  }
+}
+
+function PeopleView({ctx}){
+  const [zoom,setZoom]=useState(1);
+  const [step,setStep]=useState(null);
+  const [oaCtx,setOaCtx]=useState({});
+  const canM=ctx.role==='admin'||ctx.role==='mgmt';
+  const open=(s,c)=>{setOaCtx(c||{});setStep(s);};
+  const close=()=>{setStep(null);setOaCtx({});};
+  const onNodeClick=(person,forceStep)=>{
+    if(!canM)return;
+    if(forceStep==='rename-dept'){open('rename-dept',{person});return;}
+    open('person-detail',{person});
+  };
+  return <div className="view">
+    {canM?<div className="org-toolbar">
+      <button className="btn soft" onClick={()=>open('add-mgmt')}>+ Add Management</button>
+      <button className="btn soft" onClick={()=>open('add-dept')}>+ Add a department</button>
+      <button className="btn soft" onClick={()=>open('add-jrm')}>+ Add Jr. Manager</button>
+      <button className="btn soft" onClick={()=>open('add-lead')}>+ Add Team Lead</button>
+      <button className="btn soft" onClick={()=>open('add-staff')}>+ Add Staff</button>
+      <button className="btn ghost" onClick={()=>ctx.setEmpModal(true)}><I n="plus"/>Add employee</button>
+      <div className="spacer"/>
+      <button className="btn soft" style={{background:'var(--red-soft)',color:'var(--red)'}} onClick={()=>open('remove-role')}>Remove</button>
+    </div>:null}
+    <div className="panel">
+      <div className="zoom-bar">
+        <button onClick={()=>setZoom(z=>Math.max(0.5,+(z-0.1).toFixed(2)))} title="Zoom out">−</button>
+        <div className="pct">{Math.round(zoom*100)}%</div>
+        <button onClick={()=>setZoom(z=>Math.min(1.5,+(z+0.1).toFixed(2)))} title="Zoom in">+</button>
+        <button className="zreset" onClick={()=>setZoom(1)}>Reset</button>
+      </div>
+      <div className="chart-scroll"><div style={{zoom}}><OrgChart onNodeClick={onNodeClick}/></div></div>
+    </div>
+    {step?<OrgActionModal ctx={ctx} step={step} setStep={s=>setStep(s)} oaCtx={oaCtx} setOaCtx={setOaCtx} close={close}/>:null}
+  </div>;
+}
+
 function EmpModal({ctx,close}){
   const [f,setF]=useState({n:'',role:'Teacher',dept:'Academics',boss:'Anita Desai',phone:'',email:''});
   const [busy,setBusy]=useState(false);
@@ -1684,7 +2169,7 @@ function QuickCapture({ctx,close}){
   const [boss,setBoss]=useState('');const [note,setNote]=useState('');
   const [files,setFiles]=useState([]);
   const [rec,setRec]=useState(false);
-  const canMulti=ctx.role!=='jrm';
+  const canMulti=ctx.role!=='jrm'&&ctx.role!=='lead';
   const parsed=kind==='task'&&txt.trim().length>=6;
 
   function parse(text){

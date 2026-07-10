@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TeamFlow — People &amp; roles hierarchy mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./shared.css">
+<style>
+  body{margin:0;font-family:'IBM Plex Sans',-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);
+    background:#f1f0e9;-webkit-font-smoothing:antialiased}
+  h1,.brandfont{font-family:'Bricolage Grotesque',sans-serif}
+  .page{max-width:1500px;margin:0 auto;padding:26px 24px 80px}
+  .review-bar{background:#23262a;color:#fff;border-radius:10px;padding:12px 16px;margin-bottom:22px;font-size:13px}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 18px}
+
+  .demo-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+  .demo-bar button{border:1.5px solid var(--accent-border);background:var(--accent-soft);color:var(--accent-ink);
+    font-family:inherit;font-size:12.5px;font-weight:700;padding:8px 13px;border-radius:8px;cursor:pointer}
+  .demo-bar button:hover{background:var(--accent);color:#fff}
+  .demo-bar .reset{background:none;border-color:var(--line);color:var(--muted)}
+  .demo-bar .reset:hover{background:#efeee7;color:var(--ink)}
+  .demo-bar .spacer{flex:1}
+  .demo-bar .remove-btn{background:var(--red-soft);border-color:#e6b6bd;color:var(--red)}
+  .demo-bar .remove-btn:hover{background:var(--red);color:#fff}
+
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px 24px;box-shadow:var(--sh-sm)}
+
+  .zoom-bar{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+  .zoom-bar button{width:28px;height:28px;border:1.5px solid var(--line);background:var(--card);border-radius:7px;
+    font-family:inherit;font-size:15px;font-weight:700;color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .zoom-bar button:hover{border-color:var(--accent-border);background:var(--accent-soft)}
+  .zoom-bar .pct{font-size:12px;font-weight:700;color:var(--muted);width:42px;text-align:center}
+  .zoom-bar .zreset{width:auto;padding:0 10px;font-size:11.5px}
+
+  .chart-scroll{overflow:auto;max-height:65vh;padding:50px 6px 6px}
+
+  /* ===== classic pure-CSS org chart tree — works for any depth/branching, no changes needed as data grows ===== */
+  .orgtree, .orgtree ul{list-style:none;margin:0;padding:0}
+  .orgtree{padding-top:0;text-align:center}
+  .orgtree ul{padding-top:26px;position:relative;display:flex;justify-content:center}
+  .orgtree li{display:inline-block;text-align:center;position:relative;padding:26px 10px 0 10px;vertical-align:top}
+  .orgtree li::before,.orgtree li::after{content:'';position:absolute;top:0;right:50%;border-top:2px solid var(--line);width:50%;height:26px}
+  .orgtree li::after{right:auto;left:50%;border-left:2px solid var(--line)}
+  .orgtree li:only-child::after,.orgtree li:only-child::before{display:none}
+  .orgtree li:only-child{padding-top:0}
+  .orgtree li:first-child::before,.orgtree li:last-child::after{border:0 none}
+  .orgtree li:last-child::before{border-right:2px solid var(--line);border-radius:0 6px 0 0}
+  .orgtree li:first-child::after{border-radius:6px 0 0 0}
+  .orgtree>li{padding-top:0}
+  .orgtree>li::before,.orgtree>li::after{display:none}
+
+  .node{display:inline-flex;flex-direction:column;align-items:center;gap:4px;background:var(--card);
+    border:1.5px solid var(--line);border-radius:11px;padding:12px 16px;min-width:128px;box-shadow:var(--sh-sm);cursor:default}
+  .node:hover{border-color:var(--accent-border);box-shadow:var(--sh-md)}
+  .node .role{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+  .node .name{font-size:13.5px;font-weight:700;color:var(--ink)}
+  .node .dept{font-size:11px;color:var(--muted)}
+  .edit-dept{cursor:pointer;margin-left:6px;font-size:14px;color:var(--red);vertical-align:middle;display:inline-block;transform:scaleX(-1)}
+  .edit-dept:hover{color:#a51c2c;transform:scaleX(-1) scale(1.15)}
+  .node .tasks{font-size:10.5px;color:var(--accent-ink);font-weight:700;margin-top:2px}
+  .node .tempflag{font-size:9.5px;font-weight:800;color:#8a6a10;background:#fff3d6;border:1px solid #e6c877;
+    border-radius:5px;padding:2px 7px;margin-top:2px}
+  .node .taphint{font-size:9px;color:var(--muted);margin-top:1px}
+  .node .num{position:absolute;top:-8px;right:-8px;width:20px;height:20px;border-radius:50%;background:var(--accent);
+    color:#fff;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--card)}
+  .node-wrap{position:relative;display:inline-block}
+  .node-wrap.new-node .node{border-color:var(--green);box-shadow:0 0 0 3px var(--green-soft)}
+  .node-wrap.temp-node .node{cursor:pointer;border-color:#e6c877;border-style:dashed}
+
+  .node.admin{background:#23262a;border-color:#23262a}
+  .node.admin .role,.node.admin .name{color:#fff}
+  .node.admin .name{color:#e9e7df}
+  .node.mgmt{background:var(--accent-soft);border-color:var(--accent-border);gap:2px}
+  .node.staff{min-width:96px;padding:9px 12px}
+  .node.staff .name{font-size:12.5px}
+  .mgmt-member{display:flex;flex-direction:column;align-items:center;padding:3px 0}
+  .mgmt-member+.mgmt-member{border-top:1px dashed var(--accent-border);padding-top:5px;margin-top:1px}
+  .mgmt-member.temp-member{cursor:pointer}
+  .mgmt-member .tempflag{font-size:9.5px;font-weight:800;color:#8a6a10;background:#fff3d6;border:1px solid #e6c877;
+    border-radius:5px;padding:2px 7px;margin-top:2px}
+  .mgmt-member .taphint{font-size:9px;color:var(--muted);margin-top:1px}
+
+  .callout{position:relative}
+  .callout-tag{position:absolute;top:-38px;left:50%;transform:translateX(-50%);background:#fff3d6;color:#8a6a10;
+    border:1px solid #e6c877;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;white-space:nowrap}
+  .callout-tag::after{content:'';position:absolute;bottom:-5px;left:50%;transform:translateX(-50%) rotate(45deg);
+    width:9px;height:9px;background:#fff3d6;border-right:1px solid #e6c877;border-bottom:1px solid #e6c877}
+
+  .legend{display:flex;gap:18px;margin-top:26px;padding-top:16px;border-top:1px solid var(--line);flex-wrap:wrap}
+  .legend span{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .legend i{width:12px;height:12px;border-radius:4px;display:inline-block;border:1.5px solid var(--line)}
+
+  /* ===== modal (shared by add + remove flows) ===== */
+  .modal-overlay{position:fixed;inset:0;background:rgba(20,25,28,.45);display:none;align-items:center;justify-content:center;z-index:100}
+  .modal-overlay.open{display:flex}
+  .modal-card{background:var(--card);border-radius:14px;box-shadow:var(--sh-lg);padding:22px;width:380px;max-width:92vw}
+  .modal-card h3{margin:0 0 4px;font-size:16px}
+  .modal-card .sub2{margin:0 0 16px;color:var(--muted);font-size:12.5px;line-height:1.4}
+  .field-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 6px;display:block}
+  .field-input,.field-select{width:100%;border:1.5px solid var(--line);border-radius:8px;padding:9px 11px;font-family:inherit;font-size:13.5px;margin-bottom:14px;background:var(--card);color:var(--ink);box-sizing:border-box}
+  .field-input:focus,.field-select:focus{outline:none;border-color:var(--accent)}
+  .modal-err{color:var(--red);font-size:12px;margin:-6px 0 12px}
+  .modal-actions{display:flex;gap:8px;margin-top:4px}
+  .modal-actions button{flex:1;border:none;border-radius:8px;padding:10px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer}
+  .modal-actions .cancel{background:#efeee7;color:var(--ink2)}
+  .modal-actions .submit{background:var(--accent);color:#fff}
+  .modal-actions .submit:disabled{opacity:.5;cursor:not-allowed}
+  .role-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px}
+  .role-grid button{border:1.5px solid var(--line);background:var(--card);border-radius:9px;padding:14px 8px;font-family:inherit;
+    font-size:13px;font-weight:700;color:var(--ink);cursor:pointer}
+  .role-grid button:hover{border-color:var(--accent-border);background:var(--accent-soft)}
+  .action-grid{display:flex;gap:10px;margin-bottom:6px}
+  .action-grid button{flex:1;border:1.5px solid var(--line);background:var(--card);border-radius:9px;padding:16px 8px;font-family:inherit;
+    font-size:13.5px;font-weight:700;color:var(--ink);cursor:pointer;display:flex;flex-direction:column;gap:4px;align-items:center}
+  .action-grid button:hover:not(:disabled){border-color:var(--accent-border);background:var(--accent-soft)}
+  .action-grid button:disabled{opacity:.45;cursor:not-allowed}
+  .action-grid small{font-weight:500;color:var(--muted);font-size:10.5px}
+  .info-box{background:#f1f0e9;border-radius:8px;padding:10px 12px;font-size:12px;color:var(--ink2);margin-bottom:14px;line-height:1.5}
+  .checklist{display:flex;flex-direction:column;gap:9px;margin-bottom:16px;max-height:220px;overflow-y:auto}
+  .check-row{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink);cursor:pointer}
+  .check-row input{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
+
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:#23262a;color:#fff;padding:11px 18px;
+    border-radius:9px;font-size:13px;font-weight:600;box-shadow:var(--sh-lg);z-index:110;opacity:0;pointer-events:none;transition:opacity .2s;max-width:80vw;text-align:center}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="review-bar">
+    <b>Review mockup</b> — the tree is built by walking a data structure recursively (same idea as
+    walking real <code>staff.boss_id</code> rows), so it scales to any depth/branching without
+    redesign. Each node also carries mock pending tasks (status, due date, attached files, activity
+    log) so the Remove flow's export and task-transfer steps have something concrete to show — not
+    real task data.
+  </div>
+
+  <h1>People &amp; roles</h1>
+  <p class="sub">Org-chart hierarchy view — Admin Control → Management → Sr. Manager (department heads) → Jr Manager → Team Lead → Staff, depth varies per department.</p>
+
+  <div class="demo-bar">
+    <button onclick="openModal('add-mgmt')">+ Add Management</button>
+    <button onclick="openModal('add-dept')">+ Add a department</button>
+    <button onclick="openModal('add-jrm')">+ Add Jr. Manager</button>
+    <button onclick="openModal('add-lead')">+ Add Team Lead</button>
+    <button onclick="openModal('add-staff')">+ Add Staff</button>
+    <button class="reset" onclick="resetData()">Reset to original</button>
+    <div class="spacer"></div>
+    <button class="remove-btn" onclick="openModal('remove-role')">Remove</button>
+  </div>
+
+  <div class="panel">
+    <div class="zoom-bar">
+      <button onclick="setZoom(-0.1)" title="Zoom out">−</button>
+      <div class="pct" id="zoomPct">100%</div>
+      <button onclick="setZoom(0.1)" title="Zoom in">+</button>
+      <button class="zreset" onclick="resetZoom()">Reset</button>
+    </div>
+    <div class="chart-scroll">
+      <ul class="orgtree" id="tree"></ul>
+    </div>
+
+    <div class="legend">
+      <span><i style="background:#23262a"></i>Admin Control — onboarding only, not in the task chain of command</span>
+      <span><i style="background:var(--accent-soft);border-color:var(--accent-border)"></i>Management</span>
+      <span><i style="background:var(--card)"></i>Sr. Manager / Jr Manager / Team Lead</span>
+      <span><i style="background:var(--card)"></i>Staff — numbered in creation order, just like your sketch</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal-card">
+    <h3 id="modalTitle"></h3>
+    <div class="sub2" id="modalSub"></div>
+    <div id="modalBody"></div>
+    <div class="modal-err" id="modalErr" style="display:none"></div>
+    <div class="modal-actions" id="modalActions">
+      <button class="cancel" onclick="closeModal()">Cancel</button>
+      <button class="submit" id="modalSubmitBtn" onclick="submitModal()">Add</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+let staffCounter=12;
+let deptCounter=3;
+let nextNodeId=1;
+
+/* ===== mock task data — a review-mockup stand-in for real per-task rows, just detailed enough
+   (status, due date, attached files, activity log) to make the export concrete to review ===== */
+const TASK_TITLES=['Fix leaking faucet in restroom','Submit monthly attendance report','Order new lab equipment',
+  'Repair classroom projector','Update parent contact list','Schedule fire drill','Review vendor invoice',
+  'Prepare exam hall seating chart','Restock first-aid kits','Coordinate bus route change',
+  'Follow up on pending fee payments','Organize sports day equipment'];
+const TASK_STATUS=['Not started','In progress','Blocked','Waiting on approval'];
+const TASK_FILES=[['leak-photo.jpg'],['invoice.pdf'],['quote.pdf','site-photo.jpg'],[],['signed-form.pdf'],['photo1.jpg','photo2.jpg']];
+function genTasks(count,seed){
+  const out=[];
+  for(let i=0;i<count;i++){
+    const k=seed+i;
+    const status=TASK_STATUS[k%TASK_STATUS.length];
+    out.push({
+      title:TASK_TITLES[k%TASK_TITLES.length],
+      status,
+      due:'2026-07-'+String(10+(k%18)).padStart(2,'0'),
+      files:TASK_FILES[k%TASK_FILES.length].slice(),
+      activity:[
+        {date:'2026-06-'+String(20+(k%9)).padStart(2,'0'),who:'Akarsh',action:'Created task'},
+        {date:'2026-07-'+String(1+(k%9)).padStart(2,'0'),who:'—',action:'Status set to '+status},
+      ],
+    });
+  }
+  return out;
+}
+function taskCount(n){ return (n&&n.tasks?n.tasks.length:0); }
+
+function freshData(){
+  const data={
+    role:'Admin Control', name:'Akarsh', tag:'admin', callout:'Only adds people to the organization',
+    children:[
+      { role:'Management', tag:'mgmt',
+        members:[{name:'Rajesh Menon',role:'Management'},{name:'Neha Kapoor',role:'Management'}],
+        children:[
+          { role:'Sr. Manager', name:'Anita Desai', dept:'Department 1', num:1, tasks:genTasks(2,1),
+            children:[
+              {role:'Staff', name:'Meena Rao', tag:'staff', num:1, tasks:genTasks(1,2)},
+              {role:'Staff', name:'Kavya Nair', tag:'staff', num:2, tasks:genTasks(0,3)},
+              {role:'Staff', name:'Ravi Kumar', tag:'staff', num:3, tasks:genTasks(2,4)},
+            ]},
+          { role:'Sr. Manager', name:'—', dept:'Department 2', num:2, tasks:genTasks(0,5),
+            children:[
+              { role:'Jr Manager', name:'—', tasks:genTasks(1,6),
+                children:[
+                  {role:'Staff', name:'—', tag:'staff', num:4, tasks:genTasks(1,7)},
+                  {role:'Staff', name:'—', tag:'staff', num:5, tasks:genTasks(0,8)},
+                ]},
+              { role:'Jr Manager', name:'—', tasks:genTasks(1,9),
+                children:[
+                  {role:'Staff', name:'—', tag:'staff', num:6, tasks:genTasks(2,10)},
+                  {role:'Staff', name:'—', tag:'staff', num:7, tasks:genTasks(1,11)},
+                ]},
+            ]},
+          { role:'Sr. Manager', name:'Vikram Rao', dept:'Department 3', num:3, tasks:genTasks(3,12),
+            children:[
+              { role:'Jr Manager', name:'—', tasks:genTasks(1,13),
+                children:[
+                  { role:'Team Lead', name:'Team Lead 1', tasks:genTasks(2,14),
+                    children:[
+                      {role:'Staff', name:'—', tag:'staff', num:8, tasks:genTasks(1,15)},
+                      {role:'Staff', name:'—', tag:'staff', num:9, tasks:genTasks(0,16)},
+                      {role:'Staff', name:'—', tag:'staff', num:10, tasks:genTasks(1,17)},
+                    ]},
+                  { role:'Team Lead', name:'Team Lead 2', tasks:genTasks(1,18),
+                    children:[
+                      {role:'Staff', name:'—', tag:'staff', num:11, tasks:genTasks(2,19)},
+                      {role:'Staff', name:'—', tag:'staff', num:12, tasks:genTasks(0,20)},
+                    ]},
+                ]},
+            ]},
+        ]},
+    ]
+  };
+  nextNodeId=1;
+  (function assignIds(n){
+    n._id=nextNodeId++;
+    if(n.members)n.members.forEach(m=>{m._id=nextNodeId++;});
+    (n.children||[]).forEach(assignIds);
+  })(data);
+  return data;
+}
+let orgData=freshData();
+
+/* ===== tree helpers ===== */
+function mgmtNode(){ return orgData.children[0]; } // the single Management tier — its members jointly oversee every department below
+function allDepts(){ return mgmtNode().children; }
+function findDeptByName(name){ return allDepts().find(d=>d.dept===name); }
+function deepestOfType(deptNode,type){
+  let last=null;
+  (function walk(n){(n.children||[]).forEach(c=>{if(c.role===type)last=c;walk(c);});})(deptNode);
+  return last;
+}
+function clearNewFlags(node){node._new=false;(node.members||[]).forEach(m=>m._new=false);(node.children||[]).forEach(clearNewFlags);}
+/* walks the whole org collecting every node of a given role, tracking which department it
+   belongs to and its direct parent (needed to splice it out on removal) */
+function collectNodesOfRole(role){
+  const out=[];
+  if(role==='Management'){
+    mgmtNode().members.forEach(m=>out.push({node:m,dept:null,parent:mgmtNode()}));
+    return out;
+  }
+  if(role==='Sr. Manager'){
+    mgmtNode().children.forEach(d=>out.push({node:d,dept:d.dept,parent:mgmtNode()}));
+    return out;
+  }
+  allDepts().forEach(dept=>{
+    (function walk(n){
+      (n.children||[]).forEach(c=>{
+        if(c.role===role)out.push({node:c,dept:dept.dept,parent:n});
+        walk(c);
+      });
+    })(dept);
+  });
+  return out;
+}
+/* every promotable person org-wide (any role, any department), excluding the node being removed —
+   promotion can pull from anywhere, not just the vacated position's own team */
+function collectAllPromotable(excludeId){
+  let out=[];
+  ['Management','Sr. Manager','Jr Manager','Team Lead','Staff'].forEach(r=>{out=out.concat(collectNodesOfRole(r));});
+  return out.filter(e=>e.node._id!==excludeId);
+}
+function describeEntry(role,e){
+  const named=e.node.name&&e.node.name!=='—';
+  if(role==='Management')return e.node.name;
+  if(role==='Sr. Manager')return e.dept+(named?' — '+e.node.name:'');
+  if(role==='Team Lead')return e.node.name+' — '+e.dept;
+  if(role==='Jr Manager')return 'Jr Manager in '+e.dept+(named?' ('+e.node.name+')':'');
+  return 'Staff '+e.node.num+(named?' — '+e.node.name:'')+' ('+e.dept+')';
+}
+function promoteLabel(e){
+  const n=e.node, named=n.name&&n.name!=='—';
+  if(n.role==='Management')return 'Management — '+n.name;
+  if(n.role==='Sr. Manager')return 'Sr. Manager — '+e.dept+(named?' ('+n.name+')':'');
+  if(n.role==='Jr Manager')return 'Jr. Manager — '+e.dept+(named?' ('+n.name+')':'');
+  if(n.role==='Team Lead')return 'Team Lead — '+(named?n.name+', ':'')+e.dept;
+  return 'Staff '+n.num+(named?' — '+n.name:'')+' — '+e.dept;
+}
+function findNodeAndParent(id,root=orgData,parent=null){
+  if(root._id===id)return {node:root,parent};
+  for(const c of (root.children||[])){
+    const r=findNodeAndParent(id,c,root);
+    if(r)return r;
+  }
+  return null;
+}
+/* one row per pending task (not per person) — this is what makes the export "detailed":
+   status, due date, attached files, and the full activity log, not just a headcount */
+function flattenTasks(node){
+  const rows=[];
+  (function walk(n){
+    (n.tasks||[]).forEach(t=>{
+      rows.push({
+        role:n.role, name:n.name||'', dept:n.dept||'',
+        title:t.title, status:t.status, due:t.due,
+        files:(t.files||[]).length?t.files.join('; '):'—',
+        activity:(t.activity||[]).map(a=>a.date+' — '+a.who+': '+a.action).join(' | '),
+      });
+    });
+    (n.children||[]).forEach(walk);
+  })(node);
+  return rows;
+}
+function csvDownload(name,rows){
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const blob=new Blob([rows.map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+
+/* ===== render ===== */
+function renderNode(n){
+  if(n.role==='Management'){
+    const memberHtml=n.members.map(m=>{
+      const click=m.tempPromotion?` onclick="handleMemberClick(${m._id})"`:'';
+      return `<div class="mgmt-member${m.tempPromotion?' temp-member':''}${m._new?' new-node':''}"${click}>
+        <div class="name">${m.name}</div>
+        ${m.tempPromotion?'<div class="tempflag">Temporary</div><div class="taphint">Click to revert</div>':''}
+      </div>`;
+    }).join('');
+    const nodeHtml=`<div class="node-wrap"><div class="node mgmt"><div class="role">Management</div>${memberHtml}</div></div>`;
+    if(n.children&&n.children.length)return `<li>${nodeHtml}<ul>${n.children.map(renderNode).join('')}</ul></li>`;
+    return `<li>${nodeHtml}</li>`;
+  }
+  const inner=(n.role?`<div class="role">${n.role}</div>`:'')
+    +(n.name?`<div class="name">${n.name}</div>`:'')
+    +(n.dept?`<div class="dept">${n.dept}<span class="edit-dept" title="Rename department" onclick="event.stopPropagation();openEditDept(${n._id})">✎</span></div>`:'')
+    +(n.tag!=='admin'&&n.tasks!=null?`<div class="tasks">${taskCount(n)} pending</div>`:'')
+    +(n.tempPromotion?`<div class="tempflag">Temporary</div><div class="taphint">Click to revert</div>`:'');
+  const badge=n.num!=null?`<div class="num">${n.num}</div>`:'';
+  const calloutTag=n.callout?`<div class="callout-tag">${n.callout}</div>`:'';
+  const wrapClass=(n.callout?' callout':'')+(n._new?' new-node':'')+(n.tempPromotion?' temp-node':'');
+  const click=n.tempPromotion?` onclick="handleNodeClick(${n._id})"`:'';
+  const nodeHtml=`<div class="node-wrap${wrapClass}"${click}>${calloutTag}${badge}<div class="node${n.tag?' '+n.tag:''}">${inner}</div></div>`;
+  if(n.children&&n.children.length)return `<li>${nodeHtml}<ul>${n.children.map(renderNode).join('')}</ul></li>`;
+  return `<li>${nodeHtml}</li>`;
+}
+function render(){document.getElementById('tree').innerHTML=renderNode(orgData);}
+
+/* ===== zoom — uses the CSS `zoom` property (not transform:scale) so the scroll area's
+   layout size actually shrinks/grows with it, not just its visual appearance */
+let zoomLevel=1;
+function applyZoom(){
+  document.getElementById('tree').style.zoom=zoomLevel;
+  document.getElementById('zoomPct').textContent=Math.round(zoomLevel*100)+'%';
+}
+function setZoom(delta){zoomLevel=Math.max(0.5,Math.min(1.5,+(zoomLevel+delta).toFixed(2)));applyZoom();}
+function resetZoom(){zoomLevel=1;applyZoom();}
+function handleNodeClick(id){
+  const loc=findNodeAndParent(id);
+  if(!loc||!loc.node.tempPromotion)return;
+  revertCtx={nodeId:id};
+  openModal('revert-name');
+}
+function handleMemberClick(id){
+  const m=mgmtNode().members.find(x=>x._id===id);
+  if(!m||!m.tempPromotion)return;
+  revertCtx={nodeId:id,isManagementMember:true};
+  openModal('revert-name');
+}
+function openEditDept(id){
+  editDeptCtx={nodeId:id};
+  openModal('edit-dept');
+}
+
+/* ===== toast ===== */
+let toastT;
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),3600);
+}
+
+/* ===== modal state machine ===== */
+let modalStep=null;
+let removeCtx={}; // {role, node, parent, dept, promotedId}
+let revertCtx={}; // {nodeId}
+let editDeptCtx={}; // {nodeId}
+let addCtx={}; // {type:'jrm'|'lead', dept, parent}
+
+function setActions(cancelLabel,submitLabel,submitDisabled){
+  document.querySelector('#modalActions .cancel').textContent=cancelLabel;
+  const sb=document.getElementById('modalSubmitBtn');
+  sb.textContent=submitLabel;sb.style.display=submitLabel?'':'none';sb.disabled=!!submitDisabled;
+}
+
+function openModal(step){
+  modalStep=step;
+  document.getElementById('modalErr').style.display='none';
+  renderModalStep();
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal(){document.getElementById('modal').classList.remove('open');removeCtx={};revertCtx={};editDeptCtx={};addCtx={};}
+document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();});
+
+function renderModalStep(){
+  const body=document.getElementById('modalBody');
+  const depts=allDepts();
+
+  if(modalStep==='add-mgmt'){
+    document.getElementById('modalTitle').textContent='Add a Management member';
+    document.getElementById('modalSub').textContent='Joins Management alongside anyone already there — every Management member oversees every department jointly.';
+    body.innerHTML=`<label class="field-label">Name</label>
+      <input class="field-input" id="f-mgmtname" placeholder="e.g. Neha Kapoor" autofocus>`;
+    setActions('Cancel','Add',false);
+    return;
+  }
+  if(modalStep==='add-dept'){
+    document.getElementById('modalTitle').textContent='Add a department';
+    document.getElementById('modalSub').textContent='Creates a new Sr. Manager department under Management — overseen jointly by every Management member.';
+    body.innerHTML=`<label class="field-label">Department name</label>
+      <input class="field-input" id="f-deptname" placeholder="e.g. Facilities" autofocus>
+      <label class="field-label">Sr. Manager name</label>
+      <input class="field-input" id="f-srname" placeholder="e.g. Priya Nair">`;
+    setActions('Cancel','Add',false);
+    return;
+  }
+  if(modalStep==='edit-dept'){
+    const loc=findNodeAndParent(editDeptCtx.nodeId);
+    const node=loc.node;
+    document.getElementById('modalTitle').textContent='Rename department';
+    document.getElementById('modalSub').textContent='Updates the department name everywhere it appears in the chart.';
+    body.innerHTML=`<label class="field-label">Department name</label>
+      <input class="field-input" id="f-edit-deptname" value="${node.dept}" autofocus>`;
+    setActions('Cancel','Save',false);
+    return;
+  }
+  if(modalStep==='add-jrm'||modalStep==='add-lead'||modalStep==='add-staff'){
+    const titles={'add-jrm':'Add Jr. Manager','add-lead':'Add Team Lead','add-staff':'Add Staff'};
+    const subs={
+      'add-jrm':'Attaches directly under that department\'s Sr. Manager.',
+      'add-lead':'Attaches under that department\'s most recent Jr Manager — or directly under the Sr. Manager if it has none yet.',
+      'add-staff':'Attaches under the most specific existing manager in that department (Team Lead, else Jr Manager, else the Sr. Manager).',
+    };
+    document.getElementById('modalTitle').textContent=titles[modalStep];
+    document.getElementById('modalSub').textContent=subs[modalStep];
+    body.innerHTML=`<label class="field-label">Department</label>
+      <select class="field-select" id="f-dept">${depts.map(d=>`<option value="${d.dept}">${d.dept}${d.name&&d.name!=='—'?' — '+d.name:''}</option>`).join('')}</select>`;
+    setActions('Cancel','Add',false);
+    return;
+  }
+  if(modalStep==='add-reassign'){
+    const {type,dept,parent}=addCtx;
+    const attachPoint=type==='jrm'?dept:parent;
+    const roleLabel=type==='jrm'?'Jr Manager':'Team Lead';
+    const candidates=attachPoint.children;
+    document.getElementById('modalTitle').textContent='Who reports to the new '+roleLabel+'?';
+    document.getElementById('modalSub').textContent='This is the first '+roleLabel+' in '+dept.dept+' — pick who moves from reporting to '+attachPoint.role+' to reporting to them instead.';
+    body.innerHTML=`<div class="checklist">${candidates.map(c=>`<label class="check-row"><input type="checkbox" value="${c._id}" checked> ${c.role}${c.name&&c.name!=='—'?' — '+c.name:''}</label>`).join('')}</div>`;
+    setActions('Back','Add',false);
+    return;
+  }
+
+  /* ===== remove flow ===== */
+  if(modalStep==='remove-role'){
+    document.getElementById('modalTitle').textContent='Remove someone';
+    document.getElementById('modalSub').textContent='Who do you want to remove?';
+    body.innerHTML=`<div class="role-grid">
+      <button onclick="pickRemoveRole('Management')">Management</button>
+      <button onclick="pickRemoveRole('Sr. Manager')">Sr. Manager</button>
+      <button onclick="pickRemoveRole('Jr Manager')">Jr. Manager</button>
+      <button onclick="pickRemoveRole('Team Lead')">Team Lead</button>
+      <button style="grid-column:1/-1" onclick="pickRemoveRole('Staff')">Staff</button>
+    </div>`;
+    setActions('Cancel','',false);
+    return;
+  }
+  if(modalStep==='remove-person'){
+    const entries=collectNodesOfRole(removeCtx.role);
+    document.getElementById('modalTitle').textContent='Remove — '+removeCtx.role;
+    document.getElementById('modalSub').textContent=entries.length?'Which one?':'There are none of these to remove right now.';
+    if(!entries.length){body.innerHTML='';setActions('Cancel','',false);return;}
+    body.innerHTML=`<label class="field-label">${removeCtx.role}</label>
+      <select class="field-select" id="f-person">${entries.map(e=>`<option value="${e.node._id}">${describeEntry(removeCtx.role,e)}</option>`).join('')}</select>`;
+    setActions('Cancel','Continue',false);
+    return;
+  }
+  if(modalStep==='remove-action'){
+    const {node}=removeCtx;
+    const candidateCount=collectAllPromotable(node._id).length;
+    document.getElementById('modalTitle').textContent='Replace or promote?';
+    document.getElementById('modalSub').textContent='';
+    body.innerHTML=`<div class="info-box">Exported ${removeCtx.node.role.toLowerCase()} data for "${removeCtx.node.name!=='—'?removeCtx.node.name:removeCtx.dept}" as a CSV — one row per pending task, with status, due date, attached files, and full activity log.
+      ${taskCount(node)?' They have <b>'+taskCount(node)+' pending task'+(taskCount(node)===1?'':'s')+'</b> that will transfer to whoever fills this position.':''}</div>
+      <div class="action-grid">
+        <button onclick="chooseAction('replace')">Replace<small>Bring in someone new</small></button>
+        <button onclick="chooseAction('promote')" ${candidateCount?'':'disabled title="No one else in the organization yet"'}>Promote<small>${candidateCount?'Anyone in the org':'No one to promote'}</small></button>
+      </div>`;
+    setActions('Cancel','',false);
+    return;
+  }
+  if(modalStep==='remove-replace-name'){
+    document.getElementById('modalTitle').textContent='Replace '+(removeCtx.node.name!=='—'?removeCtx.node.name:removeCtx.role);
+    document.getElementById('modalSub').textContent='Enter the name of the person filling this position.';
+    body.innerHTML=`<label class="field-label">New ${removeCtx.role} name</label>
+      <input class="field-input" id="f-replace-name" placeholder="e.g. Deepa Iyer" autofocus>`;
+    setActions('Back','Confirm replace',false);
+    return;
+  }
+  if(modalStep==='remove-promote-pick'){
+    const candidates=collectAllPromotable(removeCtx.node._id);
+    document.getElementById('modalTitle').textContent='Promote who?';
+    document.getElementById('modalSub').textContent='Anyone in the organization — the one you pick keeps their own team and absorbs whoever else reported to this position.';
+    body.innerHTML=`<label class="field-label">Promote</label>
+      <select class="field-select" id="f-promote">${candidates.map(e=>`<option value="${e.node._id}">${promoteLabel(e)}</option>`).join('')}</select>`;
+    setActions('Back','Continue',false);
+    return;
+  }
+  if(modalStep==='remove-promote-mode'){
+    document.getElementById('modalTitle').textContent='Temporary or permanent?';
+    document.getElementById('modalSub').textContent='';
+    body.innerHTML=`<div class="action-grid">
+        <button onclick="choosePromoteMode('temporary')">Temporary<small>Covers the role — you can revert them later</small></button>
+        <button onclick="choosePromoteMode('permanent')">Permanent<small>Fills the role for good</small></button>
+      </div>`;
+    setActions('Back','',false);
+    return;
+  }
+  if(modalStep==='revert-name'){
+    if(revertCtx.isManagementMember){
+      const m=mgmtNode().members.find(x=>x._id===revertCtx.nodeId);
+      const snap=m._revertSnapshot;
+      document.getElementById('modalTitle').textContent='Revert '+snap.name;
+      document.getElementById('modalSub').textContent=snap.name+' goes back to '+snap.role+(snap.dept?' ('+snap.dept+')':'')+'. Who fills Management permanently now?';
+      body.innerHTML=`<label class="field-label">New Management name</label>
+        <input class="field-input" id="f-revert-name" placeholder="e.g. Priya Nair" autofocus>`;
+      setActions('Cancel','Confirm revert',false);
+      return;
+    }
+    const loc=findNodeAndParent(revertCtx.nodeId);
+    const node=loc.node, snap=node._revertSnapshot;
+    document.getElementById('modalTitle').textContent='Revert '+snap.name;
+    document.getElementById('modalSub').textContent=snap.name+' goes back to '+snap.role+(snap.dept?' ('+snap.dept+')':'')+'. Who fills '+node.role+(node.dept?' ('+node.dept+')':'')+' permanently now?';
+    body.innerHTML=`<label class="field-label">New ${node.role} name</label>
+      <input class="field-input" id="f-revert-name" placeholder="e.g. Priya Nair" autofocus>`;
+    setActions('Cancel','Confirm revert',false);
+    return;
+  }
+}
+
+function pickRemoveRole(role){
+  removeCtx={role};
+  modalStep='remove-person';
+  document.getElementById('modalErr').style.display='none';
+  renderModalStep();
+}
+
+function chooseAction(action){
+  modalStep = action==='replace' ? 'remove-replace-name' : 'remove-promote-pick';
+  document.getElementById('modalErr').style.display='none';
+  renderModalStep();
+}
+
+function choosePromoteMode(mode){
+  if(removeCtx.node.role==='Management')performPromoteIntoManagement(removeCtx.promotedId, mode==='temporary');
+  else performPromote(removeCtx.promotedId, mode==='temporary');
+  closeModal();render();
+}
+
+function exportNodeCsv(node,dept){
+  const rows=[['Role','Name','Department','Task','Status','Due date','Files attached','Activity log']].concat(
+    flattenTasks(node).map(r=>[r.role,r.name,r.dept||dept,r.title,r.status,r.due,r.files,r.activity])
+  );
+  csvDownload((node.name!=='—'?node.name:node.role).toLowerCase().replace(/\s+/g,'-')+'-pending-tasks-export.csv',rows);
+}
+
+function submitModal(){
+  const errEl=document.getElementById('modalErr');
+  errEl.style.display='none';
+
+  if(modalStep==='add-mgmt'){
+    const name=document.getElementById('f-mgmtname').value.trim();
+    if(!name){errEl.textContent='Enter a name.';errEl.style.display='block';return;}
+    clearNewFlags(orgData);
+    mgmtNode().members.push({_id:nextNodeId++,name,role:'Management',_new:true});
+    showToast('Added '+name+' to Management');
+    closeModal();render();return;
+  }
+  if(modalStep==='add-dept'){
+    const deptName=document.getElementById('f-deptname').value.trim();
+    const srName=document.getElementById('f-srname').value.trim();
+    if(!deptName||!srName){errEl.textContent='Enter both a department name and a Sr. Manager name.';errEl.style.display='block';return;}
+    if(findDeptByName(deptName)){errEl.textContent='A department with that name already exists.';errEl.style.display='block';return;}
+    clearNewFlags(orgData);
+    deptCounter++;
+    mgmtNode().children.push({_id:nextNodeId++,role:'Sr. Manager',name:srName,dept:deptName,num:deptCounter,tasks:[],_new:true,children:[]});
+    showToast('Added department "'+deptName+'" with Sr. Manager '+srName);
+    closeModal();render();return;
+  }
+  if(modalStep==='edit-dept'){
+    const newName=document.getElementById('f-edit-deptname').value.trim();
+    if(!newName){errEl.textContent='Enter a department name.';errEl.style.display='block';return;}
+    const loc=findNodeAndParent(editDeptCtx.nodeId);
+    const node=loc.node;
+    if(newName!==node.dept&&findDeptByName(newName)){errEl.textContent='A department with that name already exists.';errEl.style.display='block';return;}
+    const oldName=node.dept;
+    node.dept=newName;
+    showToast(oldName===newName?'No change made':'Renamed "'+oldName+'" to "'+newName+'"');
+    closeModal();render();return;
+  }
+  if(modalStep==='add-jrm'){
+    const deptName=document.getElementById('f-dept').value;
+    const dept=findDeptByName(deptName);
+    const existing=deepestOfType(dept,'Jr Manager');
+    if(!existing&&dept.children.length){
+      addCtx={type:'jrm',dept};
+      modalStep='add-reassign';
+      renderModalStep();
+      return;
+    }
+    clearNewFlags(orgData);
+    dept.children.push({_id:nextNodeId++,role:'Jr Manager',name:'—',tasks:[],_new:true,children:[]});
+    showToast('Added a Jr Manager under '+deptName);
+    closeModal();render();return;
+  }
+  if(modalStep==='add-lead'){
+    const deptName=document.getElementById('f-dept').value;
+    const dept=findDeptByName(deptName);
+    const jr=deepestOfType(dept,'Jr Manager');
+    const parent=jr||dept;
+    const existingLead=deepestOfType(dept,'Team Lead');
+    if(!existingLead&&parent.children.length){
+      addCtx={type:'lead',dept,parent};
+      modalStep='add-reassign';
+      renderModalStep();
+      return;
+    }
+    clearNewFlags(orgData);
+    parent.children.push({_id:nextNodeId++,role:'Team Lead',name:'—',tasks:[],_new:true,children:[]});
+    showToast(jr?'Added a Team Lead under '+deptName+'\'s Jr Manager':'No Jr Manager in '+deptName+' yet — added the Team Lead directly under its Sr. Manager');
+    closeModal();render();return;
+  }
+  if(modalStep==='add-reassign'){
+    const checkedIds=[...document.querySelectorAll('#modalBody input[type=checkbox]:checked')].map(el=>Number(el.value));
+    clearNewFlags(orgData);
+    const {type,dept,parent}=addCtx;
+    const attachPoint=type==='jrm'?dept:parent;
+    const roleLabel=type==='jrm'?'Jr Manager':'Team Lead';
+    const moved=attachPoint.children.filter(c=>checkedIds.includes(c._id));
+    const staying=attachPoint.children.filter(c=>!checkedIds.includes(c._id));
+    const newNode={_id:nextNodeId++,role:roleLabel,name:'—',tasks:[],_new:true,children:moved};
+    attachPoint.children=[...staying,newNode];
+    showToast('Added a '+roleLabel+' under '+dept.dept+(moved.length?' — '+moved.length+' report'+(moved.length===1?'':'s')+' now reporting to them':''));
+    closeModal();render();return;
+  }
+  if(modalStep==='add-staff'){
+    const deptName=document.getElementById('f-dept').value;
+    const dept=findDeptByName(deptName);
+    clearNewFlags(orgData);
+    const lead=deepestOfType(dept,'Team Lead');
+    const jr=deepestOfType(dept,'Jr Manager');
+    (lead||jr||dept).children.push({_id:nextNodeId++,role:'Staff',name:'—',tag:'staff',num:++staffCounter,tasks:[],_new:true});
+    showToast('Added Staff '+staffCounter+' under '+(lead?'Team Lead in '+deptName:jr?'Jr Manager in '+deptName:deptName+'\'s Sr. Manager'));
+    closeModal();render();return;
+  }
+
+  if(modalStep==='remove-person'){
+    const sel=document.getElementById('f-person');
+    if(!sel){closeModal();return;} // nothing to remove
+    const id=Number(sel.value);
+    const entry=collectNodesOfRole(removeCtx.role).find(e=>e.node._id===id);
+    removeCtx={role:removeCtx.role,node:entry.node,parent:entry.parent,dept:entry.dept};
+    exportNodeCsv(removeCtx.node,removeCtx.dept);
+    modalStep='remove-action';
+    renderModalStep();
+    return;
+  }
+  if(modalStep==='remove-replace-name'){
+    const newName=document.getElementById('f-replace-name').value.trim();
+    if(!newName){errEl.textContent='Enter a name for the replacement.';errEl.style.display='block';return;}
+    const {node,parent}=removeCtx;
+    clearNewFlags(orgData);
+    if(node.role==='Management'){
+      const mgmt=mgmtNode();
+      const idx=mgmt.members.findIndex(m=>m._id===node._id);
+      mgmt.members[idx]={_id:nextNodeId++,name:newName,role:'Management',_new:true};
+      showToast(newName+' now fills the Management position');
+      closeModal();render();return;
+    }
+    const replacement={...node,_id:nextNodeId++,name:newName,_new:true};
+    const idx=parent.children.indexOf(node);
+    parent.children[idx]=replacement;
+    showToast((taskCount(node)?taskCount(node)+' pending task'+(taskCount(node)===1?'':'s')+' transferred — ':'')+newName+' now fills the '+node.role+' position'+(node.dept?' ('+node.dept+')':''));
+    closeModal();render();return;
+  }
+  if(modalStep==='remove-promote-pick'){
+    removeCtx.promotedId=Number(document.getElementById('f-promote').value);
+    modalStep='remove-promote-mode';
+    renderModalStep();
+    return;
+  }
+  if(modalStep==='revert-name'){
+    const newName=document.getElementById('f-revert-name').value.trim();
+    if(!newName){errEl.textContent='Enter a name for the permanent replacement.';errEl.style.display='block';return;}
+    if(revertCtx.isManagementMember)performRevertManagement(revertCtx.nodeId,newName);
+    else performRevert(revertCtx.nodeId,newName);
+    closeModal();render();return;
+  }
+}
+
+/* promoted may currently sit anywhere in the org — pull them out of their current spot,
+   have them absorb the vacated role (keeping their own team, plus whoever else reported
+   to the vacated position), and optionally mark it reversible later */
+function performPromote(promotedId,temporary){
+  const {node,parent}=removeCtx;
+  const xLoc=findNodeAndParent(promotedId);
+  const promoted=xLoc.node;
+  if(xLoc.parent)xLoc.parent.children=xLoc.parent.children.filter(c=>c._id!==promotedId);
+  const others=(node.children||[]).filter(c=>c._id!==promotedId);
+  clearNewFlags(orgData);
+  const merged={...promoted,role:node.role,dept:node.dept,num:node.num,tag:node.tag,
+    tasks:[...(promoted.tasks||[]),...(node.tasks||[])],
+    children:[...(promoted.children||[]),...others],_new:true};
+  if(temporary){
+    merged.tempPromotion=true;
+    merged._revertSnapshot={role:promoted.role,dept:promoted.dept||null,num:promoted.num,tag:promoted.tag,
+      children:promoted.children||[],tasks:promoted.tasks||[],name:promoted.name};
+  }else{
+    delete merged.tempPromotion;delete merged._revertSnapshot;
+  }
+  const idx=parent.children.indexOf(node);
+  parent.children[idx]=merged;
+  const who=promoted.name!=='—'?promoted.name:'they';
+  showToast((taskCount(node)?taskCount(node)+' pending task'+(taskCount(node)===1?'':'s')+' transferred — ':'')
+    +who+(temporary?' temporarily covering ':' promoted to ')+node.role+(node.dept?' ('+node.dept+')':''));
+}
+
+/* Management has no per-person subtree — everyone on it jointly oversees the same department
+   list — so promoting someone in just adds their name to the members list. If they had their
+   own subordinates, those get handed directly to their old manager rather than left dangling. */
+function performPromoteIntoManagement(promotedId,temporary){
+  const mgmt=mgmtNode();
+  const xLoc=findNodeAndParent(promotedId);
+  const promoted=xLoc.node;
+  const orphaned=promoted.children||[];
+  if(xLoc.parent)xLoc.parent.children=xLoc.parent.children.filter(c=>c._id!==promotedId).concat(orphaned);
+  clearNewFlags(orgData);
+  const midx=mgmt.members.findIndex(m=>m._id===removeCtx.node._id);
+  const newMember={_id:promoted._id,name:promoted.name,role:'Management',_new:true};
+  if(temporary){
+    newMember.tempPromotion=true;
+    newMember._revertSnapshot={role:promoted.role,dept:promoted.dept||null,num:promoted.num,tag:promoted.tag,
+      children:orphaned,tasks:promoted.tasks||[],name:promoted.name,oldParentId:xLoc.parent?xLoc.parent._id:null};
+  }
+  mgmt.members[midx]=newMember;
+  showToast(promoted.name+(temporary?' temporarily covering Management':' promoted to Management')
+    +(orphaned.length?' — their former team now reports directly to their old manager':''));
+}
+
+/* reverses a temporary Management cover: removes them from the members list and rebuilds their
+   original node (role, team, tasks) back under whichever manager had absorbed their old team */
+function performRevertManagement(memberId,newName){
+  const mgmt=mgmtNode();
+  const idx=mgmt.members.findIndex(m=>m._id===memberId);
+  const snap=mgmt.members[idx]._revertSnapshot;
+  clearNewFlags(orgData);
+  mgmt.members[idx]={_id:nextNodeId++,name:newName,role:'Management',_new:true};
+  if(snap.oldParentId){
+    const oldParentLoc=findNodeAndParent(snap.oldParentId);
+    if(oldParentLoc){
+      const oldParent=oldParentLoc.node;
+      const kept=(oldParent.children||[]).filter(c=>!snap.children.includes(c));
+      const revertedNode={_id:memberId,role:snap.role,dept:snap.dept,num:snap.num,tag:snap.tag,
+        name:snap.name,tasks:snap.tasks,children:snap.children,_new:true};
+      oldParent.children=[...kept,revertedNode];
+    }
+  }
+  showToast(newName+' now fills Management — '+snap.name+' is back to '+snap.role+(snap.dept?' ('+snap.dept+')':''));
+}
+
+/* undoes a temporary promotion: the covering person goes back to exactly their pre-promotion
+   role/team, and a brand-new permanent hire takes the vacated role along with its current team */
+function performRevert(nodeId,newName){
+  const {node,parent}=findNodeAndParent(nodeId);
+  const snap=node._revertSnapshot;
+  clearNewFlags(orgData);
+  // node.children currently = [...X's own original children, ...whoever else the vacated role
+  // absorbed at promotion time] — split those back apart by reference so the "others" aren't lost
+  const others=(node.children||[]).filter(c=>!snap.children.includes(c));
+  const revertedX={_id:node._id,role:snap.role,dept:snap.dept,num:snap.num,tag:snap.tag,
+    name:snap.name,tasks:snap.tasks,children:snap.children,_new:true};
+  const newReplacement={_id:nextNodeId++,role:node.role,dept:node.dept,num:node.num,tag:node.tag,
+    name:newName,tasks:node.tasks,children:[revertedX,...others],_new:true};
+  const idx=parent.children.indexOf(node);
+  parent.children[idx]=newReplacement;
+  showToast((taskCount(node)?taskCount(node)+' pending task'+(taskCount(node)===1?'':'s')+' transferred to '+newName+' — ':'')
+    +snap.name+' is back to '+snap.role+(snap.dept?' ('+snap.dept+')':''));
+}
+
+function resetData(){orgData=freshData();staffCounter=12;deptCounter=3;render();}
+
+render();
+</script>
+</body>
+</html>
