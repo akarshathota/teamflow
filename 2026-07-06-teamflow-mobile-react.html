@@ -11,19 +11,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="./shared.js"></script>
+<link rel="stylesheet" href="./shared.css">
 <style>
-  :root{
-    --bg:#f6f5f0; --card:#ffffff; --ink:#1b1e21; --ink2:#43494f; --muted:#71797f;
-    --line:#e7e5dc; --accent:#0e7a6f; --accent-ink:#0a5c54; --accent-soft:#e2f1ee; --accent-border:#bcdcd6;
-    --red:#c43a53; --red-soft:#f9e9ed; --amber:#9a6a10; --amber-soft:#f6efdb;
-    --green:#1a7a48; --green-soft:#e4f2e9; --blue:#39638f; --blue-soft:#e8eef5;
-  }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   body{margin:0;font-family:'IBM Plex Sans',-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);
     background:#e9e7df;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 14px;
     -webkit-font-smoothing:antialiased}
   h3,.brandfont{font-family:'Bricolage Grotesque','IBM Plex Sans',sans-serif}
-  button{font-family:inherit}
   svg.i{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;display:block;flex:0 0 auto}
   .caption{font-size:12px;color:#6d6a5f;margin-top:16px;text-align:center;max-width:390px;line-height:1.5}
   .caption b{color:#45423a}
@@ -66,7 +60,6 @@
   .tag2.gray{background:#efeee7;color:#5d6367}
   .notepv{font-size:12.5px;color:var(--ink2);background:#f7f6f1;border-radius:7px;padding:7px 10px;margin-top:7px;line-height:1.4;font-style:italic}
   .attrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
-  .thumb{width:46px;height:46px;border-radius:7px;object-fit:cover;border:1px solid var(--line)}
   .filechip{font-size:11.5px;font-weight:600;color:var(--ink2);background:#efeee7;padding:6px 10px;border-radius:6px;display:inline-flex;align-items:center;gap:4px}
   .cardbtns{display:flex;gap:8px;margin-top:12px}
   .btn{flex:1;border:none;border-radius:9px;padding:12px;font-size:13.5px;font-weight:700;cursor:pointer;min-height:44px;display:flex;align-items:center;justify-content:center;gap:6px}
@@ -188,7 +181,6 @@
   .empty{text-align:center;color:var(--muted);font-size:13.5px;padding:28px 10px}
   .toast{position:absolute;bottom:150px;left:50%;transform:translateX(-50%);background:#22262a;color:#fff;
     padding:12px 17px;border-radius:10px;font-size:13px;font-weight:600;z-index:60;max-width:92%;width:max-content;text-align:center;line-height:1.45;animation:up .2s ease}
-  #err-overlay{position:fixed;inset:auto 12px 12px 12px;background:#fff3f3;border:2px solid #c43a53;border-radius:10px;padding:14px;font:12px/1.5 monospace;color:#7a1f30;z-index:999;display:none;white-space:pre-wrap}
 </style>
 </head>
 <body>
@@ -207,11 +199,7 @@ window.onerror=function(msg,src,line){
 const {useState,useEffect,useRef,useCallback} = React;
 
 /* ============ data ============ */
-const TODAY=new Date(2026,6,6);
 const TYPES={work:{l:"Work",e:"🛠"},purchase:{l:"Purchase",e:"🛒"},repair:{l:"Repair",e:"🔧"},maint:{l:"Maintenance",e:"🧰"},other:{l:"Other",e:"📋"}};
-const RECURS={daily:"Daily",weekly:"Weekly",monthly:"Monthly",yearly:"Yearly"};
-const BUCKETS={academic:"Academic",maintenance:"Maintenance",construction:"Construction",hr:"HR",accounts:"Accounts",administration:"Administration",transport:"Transport",it:"IT & Systems"};
-const BUCKET_COLORS={academic:'#39638f',maintenance:'#b06e12',construction:'#8a6a52',hr:'#a34d78',accounts:'#1a7a48',administration:'#5d6672',transport:'#0e7a8f',it:'#5b5ea6'};
 /* cosmetic-only: the assignment-suggestion heuristic and job-title display text.
    Not persisted anywhere — the DB only tracks org role/department, not this level of detail. */
 const SKILLS={Hari:{types:["repair","maint"],buckets:["maintenance","construction","it"]},
@@ -261,7 +249,6 @@ const ROLES={
     tabs:["alltasks","calendar","notices"],admin:false,billing:false,canPost:false,brief:""}
 };
 const CHAIN=[{rank:0,label:"Priya (Admin)"},{rank:1,label:"Rajesh (Management)"},{rank:2,label:"Anita (Manager)"},{rank:3,label:"Vikram (Team Member)"}];
-const DB_ROLE_TO_KEY={Administrator:'admin',Management:'mgmt',Manager:'srm','Team Member':'jrm',Teacher:'worker'};
 const bossesFor=role=>CHAIN.filter(c=>c.rank<ROLES[role].rank).map(c=>c.label);
 /* same approval model as the console: admin/mgmt approve anything, otherwise only the person's direct boss */
 const FIRST=n=>String(n).split(' ')[0];
@@ -269,12 +256,6 @@ const BOSS_ROLE={Meena:'srm',Kavya:'srm',Ravi:'srm',Vikram:'srm',Hari:'jrm',Sure
 const canApproveFrom=(role,from)=>role==='admin'||role==='mgmt'||BOSS_ROLE[FIRST(from)]===role;
 const canAssignIssues=role=>role==='admin'||role==='mgmt'||role==='jrm'; /* jrm = Vikram, maintenance head */
 
-/* ============ supabase ============ */
-const sb=window.supabase.createClient(
-  "https://fumggrcamegejihenkhb.supabase.co",
-  "sb_publishable_bEqR06srB99BHHdvLQy14g_-pLZPWwJ"
-);
-const LABEL_TO_BUCKET=Object.fromEntries(Object.entries(BUCKETS).map(([k,v])=>[v,k]));
 /* every staff row, incl. Priya/Rajesh/Anita-the-manager — for resolving requesters/approvers.
    MEMBERS (Teachers + the maintenance Team Member) is just the assignable operational subset. */
 let ALL_PEOPLE=[];
@@ -372,27 +353,14 @@ async function saveRequestRow(q,kind){
 }
 async function deleteRequestRow(q){if(q.id)await sb.from('requests').delete().eq('id',q.id);}
 async function postNotice(n){await sb.from('notices').insert({title:n.t,body:n.b});}
-/* uploads to the private 'attachments' bucket and returns a long-lived signed URL (10y — this
-   app never rotates it, so anything longer just pushes the same ceiling further out) */
-async function uploadFile(file,folder){
-  const path=folder+'/'+Date.now()+'-'+Math.random().toString(36).slice(2)+'-'+file.name.replace(/[^\w.\-]/g,'_');
-  const {error}=await sb.storage.from('attachments').upload(path,file);
-  if(error)throw error;
-  const {data,error:signErr}=await sb.storage.from('attachments').createSignedUrl(path,315360000);
-  if(signErr)throw signErr;
-  return {name:file.name,url:data.signedUrl,path};
-}
 
 /* ============ helpers ============ */
-const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const sameDay=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
 const findMember=n=>MEMBERS.find(m=>m.n.toLowerCase()===String(n).toLowerCase());
 const assigneesM=t=>[t.who].concat(t.coWho||[]);
 const hasWhoM=(t,n)=>assigneesM(t).includes(n);
-const bucketColor=b=>BUCKET_COLORS[b]||'#5d6672';
 const gist=t=>{const w=t.split(' ');return w.length<=3?t:w.slice(0,3).join(' ')+'…';};
 const fmtD=d=>new Date(d+'T00:00:00').toLocaleDateString('en',{day:'numeric',month:'short'});
-const fmtTime=t=>{if(!t)return '';const p=t.split(':'),h=+p[0],ap=h>=12?'PM':'AM';return (h%12||12)+':'+p[1]+' '+ap;};
 const labelToTime=l=>{const m=(l||'').match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);if(!m)return '';let h=+m[1]%12;if(m[3].toUpperCase()==='PM')h+=12;return String(h).padStart(2,'0')+':'+m[2];};
 const dueLabel=(d,t)=>{if(!d)return '—';const tm=new Date(TODAY);tm.setDate(tm.getDate()+1);
   const day=d===iso(TODAY)?'Today':d===iso(tm)?'Tomorrow':fmtD(d);
@@ -420,11 +388,6 @@ function spawnNextRecur(t){
     due:'Due '+fmtD(nd),date:nd,bucket:t.bucket,type:t.type,done:false,recur:t.recur,recurOn:t.recurOn,
     selfAssigned:t.selfAssigned,instructedBy:t.instructedBy});
   return nd;}
-/* persist a spawnNextRecur() result: the task itself, plus the freshly-pushed next occurrence if recurring */
-function persistComplete(t,nd){
-  saveTask(t).catch(console.error);
-  if(nd)saveTask(tasks[tasks.length-1]).catch(console.error);
-}
 function suggestAssignee(type,bucket){
   const load=workload();const OVER=3;
   let pool=MEMBERS.filter(m=>m.types.includes(type));let basis='type';
@@ -443,11 +406,6 @@ function suggestFixer(text){const t=(text||'').toLowerCase();
   if(/tap|leak|water|pipe|plumb|toilet|drain/.test(t))return{n:'Suresh',why:'plumbing work'};
   if(/clean|dust|sweep|garbage|dirty/.test(t))return{n:'Latha',why:'housekeeping'};
   const s=suggestAssignee('repair','maintenance');return{n:s.n,why:'lightest workload'};}
-function guessType(t){t=t.toLowerCase();
-  if(/\b(order|buy|purchase|procure|stock|supplies)\b/.test(t))return 'purchase';
-  if(/\b(repair|fix|broken|replace|not working|fault)\b/.test(t))return 'repair';
-  if(/\b(clean|service|maintain|maintenance|inspect|paint)\b/.test(t))return 'maint';
-  return 'work';}
 function guessBucket(t){t=t.toLowerCase();
   if(/\b(exam|class|academic|timetable|teacher|lesson|syllabus|library)\b/.test(t))return 'academic';
   if(/\b(projector|wifi|network|computer|smart ?board|cctv|printer|software|panel|wiring)\b/.test(t))return 'it';
@@ -470,31 +428,6 @@ function whenToDate(when){const w=(when||'').toLowerCase();const d=new Date(TODA
   else if(w.includes('friday')||w.includes('this week')){const df=(5-d.getDay()+7)%7||7;d.setDate(d.getDate()+df);}
   else if(w.includes('next week'))d.setDate(d.getDate()+7);
   else d.setDate(d.getDate()+1);
-  return iso(d);}
-function guessRecur(t){t=t.toLowerCase();
-  if(/\b(every ?day|daily)\b/.test(t))return 'daily';
-  if(/\b(every week|weekly)\b/.test(t))return 'weekly';
-  if(/\b(every month|monthly)\b/.test(t))return 'monthly';
-  if(/\b(every year|yearly|annually)\b/.test(t))return 'yearly';
-  return null;}
-const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const ord=n=>{const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);};
-const recurLabel=(recur,on)=>{if(!recur)return '';
-  if(recur==='weekly'&&on!=null)return 'Weekly · '+DOW[on];
-  if(recur==='monthly'&&on!=null)return 'Monthly · '+ord(on);
-  if(recur==='yearly'&&on)return 'Yearly · '+on.d+' '+MONTHS[on.m];
-  return RECURS[recur];};
-const defaultRecurOn=(recur,dateStr)=>{const d=new Date((dateStr||iso(TODAY))+'T00:00:00');
-  return recur==='weekly'?d.getDay():recur==='monthly'?d.getDate():recur==='yearly'?{d:d.getDate(),m:d.getMonth()}:null;};
-function nextAnchor(recur,on,fromStr){const d=new Date((fromStr||iso(TODAY))+'T00:00:00');
-  if(recur==='weekly'&&on!=null){d.setDate(d.getDate()+((on-d.getDay()+7)%7));return iso(d);}
-  if(recur==='monthly'&&on!=null){let y=d.getFullYear(),m=d.getMonth();if(d.getDate()>on)m++;
-    const dim=new Date(y,m+1,0).getDate();return iso(new Date(y,m,Math.min(on,dim)));}
-  if(recur==='yearly'&&on){let y=d.getFullYear();
-    let t=new Date(y,on.m,Math.min(on.d,new Date(y,on.m+1,0).getDate()));
-    if(t<d)t=new Date(y+1,on.m,Math.min(on.d,new Date(y+1,on.m+1,0).getDate()));
-    return iso(t);}
   return iso(d);}
 function parseText(txt){
   const low=txt.toLowerCase();

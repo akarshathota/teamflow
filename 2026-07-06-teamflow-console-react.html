@@ -11,25 +11,19 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="./shared.js"></script>
+<link rel="stylesheet" href="./shared.css">
 <style>
   :root{
-    --bg:#f6f5f0; --card:#ffffff; --ink:#1b1e21; --ink2:#43494f; --muted:#71797f;
-    --line:#e7e5dc; --line2:#d9d6cb;
-    --accent:#0e7a6f; --accent-ink:#0a5c54; --accent-soft:#e2f1ee; --accent-border:#bcdcd6;
-    --red:#c43a53; --red-soft:#f9e9ed;
-    --amber:#9a6a10; --amber-soft:#f6efdb;
-    --green:#1a7a48; --green-soft:#e4f2e9;
-    --blue:#39638f; --blue-soft:#e8eef5;
+    --line2:#d9d6cb;
     --sh-sm:0 1px 2px rgba(27,30,33,.06);
     --sh-md:0 4px 14px rgba(27,30,33,.08);
     --sh-lg:0 24px 60px rgba(27,30,33,.22);
   }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{height:100%}
   body{margin:0;font-family:'IBM Plex Sans',-apple-system,"Segoe UI",Roboto,sans-serif;
     background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;font-size:14px}
   h1,h2,h3,.brand{font-family:'Bricolage Grotesque','IBM Plex Sans',sans-serif}
-  button{font-family:inherit}
   svg.i{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto;display:block}
   :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
 
@@ -252,7 +246,6 @@
   .qc-attach{display:flex;gap:8px;flex-wrap:wrap;padding:12px 20px 0}
   .qc-attach label{flex:1;justify-content:center;cursor:pointer;min-width:110px}
   .filelist{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;width:100%}
-  .thumb{width:46px;height:46px;border-radius:7px;object-fit:cover;border:1px solid var(--line)}
   .filechip{font-size:11.5px;font-weight:600;color:var(--ink2);background:#efeee7;padding:6px 10px;border-radius:6px;display:inline-flex;align-items:center;gap:5px}
   .qc-parsed{margin:14px 20px 0;border:1px solid var(--accent-border);background:#fbfdfc;border-radius:10px;padding:14px 16px}
   .qc-parsed .aihead{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:800;color:var(--accent-ink);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px}
@@ -306,7 +299,6 @@
     #print-report{display:block!important}
     body{background:#fff}
   }
-  #err-overlay{position:fixed;inset:auto 12px 12px 12px;background:#fff3f3;border:2px solid #c43a53;border-radius:10px;padding:14px;font:12px/1.5 monospace;color:#7a1f30;z-index:999;display:none;white-space:pre-wrap}
 </style>
 </head>
 <body>
@@ -327,12 +319,8 @@ window.onerror=function(msg,src,line){
 const {useState,useEffect,useRef,useCallback} = React;
 
 /* ============ data ============ */
-const TODAY=new Date(2026,6,6); // 6 Jul 2026
 const TYPES={work:"Work",purchase:"Purchase",repair:"Repair",maint:"Maintenance",other:"Other"};
 const PRIOS={high:{l:"High",c:"var(--red)"},med:{l:"Medium",c:"var(--amber)"},low:{l:"Low",c:"#9aa2a8"}};
-const RECURS={daily:"Daily",weekly:"Weekly",monthly:"Monthly",yearly:"Yearly"};
-const BUCKETS={academic:"Academic",maintenance:"Maintenance",construction:"Construction",hr:"HR",accounts:"Accounts",administration:"Administration",transport:"Transport",it:"IT & Systems"};
-const BUCKET_COLORS={academic:'#39638f',maintenance:'#b06e12',construction:'#8a6a52',hr:'#a34d78',accounts:'#1a7a48',administration:'#5d6672',transport:'#0e7a8f',it:'#5b5ea6'};
 const DEPTS=['Academics','Maintenance','Construction','HR','Accounts','Administration','Transport','IT','Housekeeping','Operations'];
 const AV_COLORS=['#0e7a6f','#39638f','#1a7a48','#b06e12','#c43a53','#0e7a8f','#a34d78','#5b5ea6'];
 const ROLE_TAG={'Administrator':'teal','Management':'blue','Manager':'green','Team Member':'amber','Teacher':'gray'};
@@ -341,13 +329,6 @@ const MAINT_HEAD="Vikram Rao";
 let STAFF=[];
 let tasks=[];
 let requests=[];
-
-/* ============ supabase ============ */
-const sb=window.supabase.createClient(
-  "https://fumggrcamegejihenkhb.supabase.co",
-  "sb_publishable_bEqR06srB99BHHdvLQy14g_-pLZPWwJ"
-);
-const LABEL_TO_BUCKET=Object.fromEntries(Object.entries(BUCKETS).map(([k,v])=>[v,k]));
 
 function rowsToStaff(rows){
   const byId=Object.fromEntries(rows.map(r=>[r.id,r]));
@@ -440,19 +421,8 @@ async function saveStaffRow(p){
   p.id=data.id;
 }
 async function deleteStaffRow(p){if(p.id)await sb.from('staff').delete().eq('id',p.id);}
-/* uploads to the private 'attachments' bucket and returns a long-lived signed URL (10y — this
-   app never rotates it, so anything longer just pushes the same ceiling further out) */
-async function uploadFile(file,folder){
-  const path=folder+'/'+Date.now()+'-'+Math.random().toString(36).slice(2)+'-'+file.name.replace(/[^\w.\-]/g,'_');
-  const {error}=await sb.storage.from('attachments').upload(path,file);
-  if(error)throw error;
-  const {data,error:signErr}=await sb.storage.from('attachments').createSignedUrl(path,315360000);
-  if(signErr)throw signErr;
-  return {name:file.name,url:data.signedUrl,path};
-}
 
 const ROLE_VIEWER={admin:"Priya Nair",mgmt:"Rajesh Menon",srm:"Anita Desai",jrm:"Vikram Rao"};
-const DB_ROLE_TO_KEY={Administrator:'admin',Management:'mgmt',Manager:'srm','Team Member':'jrm'};
 const BOSS_LABEL={"Priya Nair":"Priya (Admin)","Rajesh Menon":"Rajesh (Management)","Anita Desai":"Anita (Manager)","Vikram Rao":"Vikram (Team Member)"};
 const SCOPE_WORD={admin:"all teams",mgmt:"org-wide",srm:"your teams",jrm:"your team"};
 
@@ -464,13 +434,11 @@ const hasWho=(t,s)=>assignees(t).includes(s);
 const inScope=(t,sh)=>assignees(t).some(a=>sh.includes(a));
 function descendants(name){let out=[],q=STAFF.filter(p=>p.boss===name);
   while(q.length){const p=q.shift();out.push(p);q=q.concat(STAFF.filter(x=>x.boss===p.n));}return out;}
-const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const ST={open:{l:"Open",c:"gray"},inprogress:{l:"In progress",c:"blue"},partial:{l:"Partial",c:"amber"},done:{l:"Done",c:"green"}};
 const isOverdue=t=>t.status!=='done'&&t.date&&t.date<iso(TODAY);
 const isToday=t=>t.status!=='done'&&t.date===iso(TODAY);
 const overdueDays=t=>Math.round((new Date(iso(TODAY))-new Date(t.date))/864e5);
 const fmtDate=d=>{if(!d)return '—';const x=new Date(d+'T00:00:00');return x.toLocaleDateString('en',{day:'numeric',month:'short'});};
-const fmtTime=t=>{if(!t)return '';const p=t.split(':'),h=+p[0],ap=h>=12?'PM':'AM';return (h%12||12)+':'+p[1]+' '+ap;};
 function guessTime(t){t=t.toLowerCase();
   const m=t.match(/\b(?:by|at|before)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/);
   if(m){let h=+m[1]%12;if(m[3]==='pm')h+=12;return {time:String(h).padStart(2,'0')+':'+(m[2]||'00'),why:'you said a time'};}
@@ -480,7 +448,6 @@ function guessTime(t){t=t.toLowerCase();
   if(/\bend of (the )?day\b|\beod\b/.test(t))return{time:'17:00',why:'end of day — 5 PM'};
   return null;}
 const avColor=n=>{let h=0;for(const c of n)h=(h*31+c.charCodeAt(0))%997;return AV_COLORS[h%AV_COLORS.length];};
-const bucketColor=b=>BUCKET_COLORS[b]||'#5d6672';
 function workloadMap(){const m={};STAFF.forEach(p=>m[p.s]=tasks.filter(t=>hasWho(t,p.s)&&t.status!=='done').length);return m;}
 function suggestWho(type,scope){
   const load=workloadMap();
@@ -498,11 +465,6 @@ function suggestDue(type){const d=new Date(TODAY);
   if(type==='purchase'){d.setDate(d.getDate()+4);return{date:iso(d),why:'purchases typically allow a few days'};}
   if(type==='maint'){d.setDate(d.getDate()+7);return{date:iso(d),why:'maintenance can be scheduled ahead'};}
   d.setDate(d.getDate()+1);return{date:iso(d),why:'default next-day'};}
-function guessType(t){t=t.toLowerCase();
-  if(/\b(order|buy|purchase|procure|stock|supplies)\b/.test(t))return 'purchase';
-  if(/\b(repair|fix|broken|replace|not working|fault)\b/.test(t))return 'repair';
-  if(/\b(clean|service|maintain|maintenance|inspect|paint)\b/.test(t))return 'maint';
-  return 'work';}
 function guessBucket(t){t=t.toLowerCase();
   if(/\b(exam|class|academic|timetable|teacher|lesson|syllabus|library)\b/.test(t))return 'academic';
   if(/\b(projector|wifi|network|computer|smart ?board|cctv|printer|software)\b/.test(t))return 'it';
@@ -525,32 +487,6 @@ function cleanTask(text){
             .replace(END_PHRASE,'').replace(END_PHRASE,'')
             .replace(/[,.]\s*$/,'').trim();
   return t?t.charAt(0).toUpperCase()+t.slice(1):text;}
-function guessRecur(t){t=t.toLowerCase();
-  if(/\b(every ?day|daily)\b/.test(t))return 'daily';
-  if(/\b(every week|weekly)\b/.test(t))return 'weekly';
-  if(/\b(every month|monthly)\b/.test(t))return 'monthly';
-  if(/\b(every year|yearly|annually)\b/.test(t))return 'yearly';
-  return null;}
-const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const ord=n=>{const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);};
-const recurLabel=(recur,on)=>{if(!recur)return '';
-  if(recur==='weekly'&&on!=null)return 'Weekly · '+DOW[on];
-  if(recur==='monthly'&&on!=null)return 'Monthly · '+ord(on);
-  if(recur==='yearly'&&on)return 'Yearly · '+on.d+' '+MONTHS[on.m];
-  return RECURS[recur];};
-const defaultRecurOn=(recur,dateStr)=>{const d=new Date((dateStr||iso(TODAY))+'T00:00:00');
-  return recur==='weekly'?d.getDay():recur==='monthly'?d.getDate():recur==='yearly'?{d:d.getDate(),m:d.getMonth()}:null;};
-/* first date on/after `fromStr` matching the anchor */
-function nextAnchor(recur,on,fromStr){const d=new Date((fromStr||iso(TODAY))+'T00:00:00');
-  if(recur==='weekly'&&on!=null){d.setDate(d.getDate()+((on-d.getDay()+7)%7));return iso(d);}
-  if(recur==='monthly'&&on!=null){let y=d.getFullYear(),m=d.getMonth();if(d.getDate()>on)m++;
-    const dim=new Date(y,m+1,0).getDate();return iso(new Date(y,m,Math.min(on,dim)));}
-  if(recur==='yearly'&&on){let y=d.getFullYear();
-    let t=new Date(y,on.m,Math.min(on.d,new Date(y,on.m+1,0).getDate()));
-    if(t<d)t=new Date(y+1,on.m,Math.min(on.d,new Date(y+1,on.m+1,0).getDate()));
-    return iso(t);}
-  return iso(d);}
 function nextRecurDate(dateStr,recur,on){const d=new Date(dateStr+'T00:00:00');
   if(recur==='daily'){d.setDate(d.getDate()+1);return iso(d);}
   if(recur==='weekly'){if(on!=null){d.setDate(d.getDate()+1);return nextAnchor('weekly',on,iso(d));}d.setDate(d.getDate()+7);return iso(d);}
@@ -567,11 +503,6 @@ function completeTask(t){
   tasks.push({t:t.t,who:t.who,coWho:t.coWho?t.coWho.slice():undefined,type:t.type,bucket:t.bucket,
     prio:t.prio,date:nd,time:t.time||null,status:'open',note:'',recur:t.recur,recurOn:t.recurOn,selfAssigned:t.selfAssigned,instructedBy:t.instructedBy});
   return nd;}
-/* persist a completeTask() result: the task itself, plus the freshly-pushed next occurrence if recurring */
-function persistComplete(t,nd){
-  saveTask(t).catch(console.error);
-  if(nd)saveTask(tasks[tasks.length-1]).catch(console.error);
-}
 function suggestFixer(text){const t=(text||'').toLowerCase();
   if(/fan|light|electric|wiring|socket|projector|power/.test(t))return{s:'Hari',why:'handles electrical work'};
   if(/tap|leak|water|pipe|plumb|toilet|drain/.test(t))return{s:'Suresh',why:'handles plumbing work'};

@@ -1,0 +1,19 @@
+/* Shared between console and mobile — extracted 2026-07-13. Only the design tokens and rules
+   verified byte-identical across both files (via diff) live here. Most component classes that
+   look similar between the two apps (.tag/.tag2, .btn, calendar cells, etc.) are NOT here on
+   purpose — they were independently tuned per app (desktop-dense vs touch-friendly sizing), and
+   forcing a shared class would risk visibly changing one app to satisfy the other. */
+
+:root{
+  --bg:#f6f5f0; --card:#ffffff; --ink:#1b1e21; --ink2:#43494f; --muted:#71797f;
+  --line:#e7e5dc;
+  --accent:#0e7a6f; --accent-ink:#0a5c54; --accent-soft:#e2f1ee; --accent-border:#bcdcd6;
+  --red:#c43a53; --red-soft:#f9e9ed;
+  --amber:#9a6a10; --amber-soft:#f6efdb;
+  --green:#1a7a48; --green-soft:#e4f2e9;
+  --blue:#39638f; --blue-soft:#e8eef5;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+button{font-family:inherit}
+.thumb{width:46px;height:46px;border-radius:7px;object-fit:cover;border:1px solid var(--line)}
+#err-overlay{position:fixed;inset:auto 12px 12px 12px;background:#fff3f3;border:2px solid #c43a53;border-radius:10px;padding:14px;font:12px/1.5 monospace;color:#7a1f30;z-index:999;display:none;white-space:pre-wrap}
