@@ -268,6 +268,8 @@
   .onode .orole{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
   .onode .oname{font-size:13.5px;font-weight:700;color:var(--ink)}
   .onode .odept{font-size:11px;color:var(--muted)}
+  .onode .odept-add{cursor:pointer;color:var(--accent);font-weight:600}
+  .onode .odept-add:hover{text-decoration:underline}
   .onode .otempflag{font-size:9.5px;font-weight:800;color:#8a6a10;background:#fff3d6;border:1px solid #e6c877;
     border-radius:5px;padding:2px 7px;margin-top:2px}
   .onode .otaphint{font-size:9px;color:var(--muted);margin-top:1px}
@@ -1569,7 +1571,12 @@ function OrgNode({person,onNodeClick,canM}){
         {person.role==='Manager'?<div className="odept">{person.dept}
           {canM?<span className="org-edit-dept" title="Rename department" onClick={e=>{e.stopPropagation();onNodeClick(person,'rename-dept');}}>✎</span>:null}
         </div>:null}
-        {person.role==='Team Lead'&&person.subDept?<div className="odept">{person.subDept}</div>:null}
+        {person.role==='Team Lead'?(person.subDept?
+          <div className="odept">{person.subDept}
+            {canM?<span className="org-edit-dept" title="Edit sub-department" onClick={e=>{e.stopPropagation();onNodeClick(person,'rename-subdept');}}>✎</span>:null}
+          </div>
+          :(canM?<div className="odept odept-add" onClick={e=>{e.stopPropagation();onNodeClick(person,'rename-subdept');}}>+ Sub-department</div>:null)
+        ):null}
         {person.tempCovering?<><div className="otempflag">Temporary</div><div className="otaphint">Click to revert</div></>:null}
       </div>
     </div>
@@ -1931,6 +1938,27 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
       </div>
     </ModalShell>;
   }
+  if(step==='rename-subdept'){
+    const {person}=oaCtx;
+    return <ModalShell close={close} err={err} title="Sub-department name" sub={'What specific team does '+person.n+' run within '+person.dept+'? Leave blank to clear it.'}>
+      <div className="mf"><label>Sub-department name</label>
+        <input value={f.subDept!==undefined?f.subDept:(person.subDept||'')} onChange={e=>setF({...f,subDept:e.target.value})} placeholder="e.g. Network Support" autoFocus/>
+      </div>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+          const newVal=(f.subDept!==undefined?f.subDept:(person.subDept||'')).trim()||null;
+          setBusy(true);setErr('');
+          try{
+            await updateStaffFields(person.id,{sub_dept:newVal});
+            person.subDept=newVal||undefined;
+            ctx.R();say(newVal?'Sub-department set to "'+newVal+'"':'Sub-department cleared');
+            setBusy(false);close();
+          }catch(e){setBusy(false);setErr(e.message);}
+        }}>{busy?'Saving…':'Save'}</button>
+      </div>
+    </ModalShell>;
+  }
   if(step==='person-detail'){
     const {person}=oaCtx;
     return <ModalShell close={close} err={err} title={person.n} sub={(TIER_LABEL[person.role]||person.role)+(person.dept?' · '+person.dept:'')}>
@@ -1976,6 +2004,7 @@ function PeopleView({ctx}){
   const onNodeClick=(person,forceStep)=>{
     if(!canM)return;
     if(forceStep==='rename-dept'){open('rename-dept',{person});return;}
+    if(forceStep==='rename-subdept'){open('rename-subdept',{person});return;}
     open('person-detail',{person});
   };
   return <div className="view">
