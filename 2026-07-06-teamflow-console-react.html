@@ -1099,7 +1099,7 @@ function Dashboard({ctx,open,over,today,done}){
           <div className="h-row"><h3>Team workload</h3>
             <select className="fsel" style={{padding:'6px 10px',fontSize:12.5}} value={loadBucket} onChange={e=>setLoadBucket(e.target.value)}>
               <option value="all">All departments</option>
-              {Object.entries(BUCKETS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+              {realDeptKeys().map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}
             </select></div>
           <div className="scrollbox">
             {wRows.map(o=>{const c=o.l>=3?'var(--red)':o.l===2?'var(--amber)':'var(--green)';
@@ -1275,7 +1275,7 @@ function TasksView({ctx}){
         <div className="col-toprow">
           <select className="fsel" style={{flex:1}} value={fb} onChange={e=>setFb(e.target.value)}>
             <option value="all">All departments</option>
-            {Object.entries(BUCKETS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+            {realDeptKeys().map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}
           </select>
         </div>
         <div className="scrollbox col-scroll">
@@ -1305,7 +1305,7 @@ function TasksView({ctx}){
           </div>
           <select className="fsel" disabled={isManagerTier} value={effectiveDeptFb} onChange={e=>setDeptFb(e.target.value)}>
             <option value="all">All departments</option>
-            {Object.entries(BUCKETS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+            {realDeptKeys().map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}
           </select>
         </div>
         {isManagerTier?<div className="col-empty-note">Fixed to your team — only Management can filter by department here.</div>:null}
@@ -1478,7 +1478,7 @@ function CalendarView({ctx}){
       <div className="spacer"/>
       <select className="fsel" value={fb} onChange={e=>{setFb(e.target.value);setFw('all');}}>
         <option value="all">All departments</option>
-        {Object.entries(BUCKETS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
+        {realDeptKeys().map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}</select>
       <select className="fsel" value={fw} onChange={e=>setFw(e.target.value)}>
         <option value="all">{fb==='all'?'All employees':'All in '+BUCKETS[fb]}</option>
         {empOpts.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}</select>
@@ -2143,7 +2143,7 @@ function ReportsView({ctx}){
     <div className="filters">
       <select className="fsel" value={fb} onChange={e=>{setFb(e.target.value);setFw('all');}}>
         <option value="all">All departments</option>
-        {Object.entries(BUCKETS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
+        {realDeptKeys().map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}</select>
       <select className="fsel" value={fw} onChange={e=>setFw(e.target.value)}>
         <option value="all">{fb==='all'?'All staff':'All in '+BUCKETS[fb]}</option>
         {empOpts.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}</select>
