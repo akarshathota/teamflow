@@ -939,10 +939,9 @@ function App(){
         {myRoleKey==='admin'?<>
           <div className="side-lab">Preview as</div>
           <select className="roleSel" value={role} onChange={e=>setRole(e.target.value)}>
-            <option value="admin">Administrator · Akarsh</option>
-            <option value="mgmt">Management · Rajesh</option>
-            <option value="srm">Manager · Anita</option>
-            <option value="jrm">Team Member · Vikram</option>
+            {[['admin','Administrator'],['mgmt','Management'],['srm','Manager'],['jrm','Team Member']].map(([k,label])=>{
+              const person=k==='admin'?myStaff:STAFF.find(p=>DB_ROLE_TO_KEY[p.role]===k);
+              return <option key={k} value={k}>{label}{person?' · '+person.n.split(' ')[0]:''}</option>;})}
           </select>
         </>:<>
           <div className="side-lab">Signed in as</div>
