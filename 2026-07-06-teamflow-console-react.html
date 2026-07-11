@@ -397,7 +397,6 @@ const {useState,useEffect,useRef,useCallback} = React;
 const TYPES={work:"Work",purchase:"Purchase",repair:"Repair",maint:"Maintenance",other:"Other"};
 const PRIOS={high:{l:"High",c:"var(--red)"},med:{l:"Medium",c:"var(--amber)"},low:{l:"Low",c:"#9aa2a8"}};
 const AV_COLORS=['#0e7a6f','#39638f','#1a7a48','#b06e12','#c43a53','#0e7a8f','#a34d78','#5b5ea6'];
-const ROLE_TAG={'Administrator':'teal','Management':'blue','Manager':'green','Team Lead':'purple','Team Member':'amber','Teacher':'gray'};
 /* display labels for the org-chart view only — the DB role strings themselves (and every other
    view's rendering of them) stay exactly as they are; this is presentation-layer relabeling so the
    chart reads as the Admin Control -> Management -> Sr. Manager -> Jr Manager -> Team Lead -> Staff
@@ -736,7 +735,6 @@ function App(){
   const drawerIdxRef=useRef(-1);
   useEffect(()=>{drawerIdxRef.current=drawerIdx;},[drawerIdx]);
   const [modal,setModal]=useState(false);
-  const [empModal,setEmpModal]=useState(false);
   const [resetTarget,setResetTarget]=useState(null); // staff object being password-reset, or null
   const searchRef=useRef();
   const [loaded,setLoaded]=useState(false);
@@ -775,7 +773,7 @@ function App(){
   useEffect(()=>{
     const h=e=>{
       const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
-      if(e.key==='Escape'){setModal(false);setEmpModal(false);setDrawerIdx(-1);document.activeElement.blur();return;}
+      if(e.key==='Escape'){setModal(false);setDrawerIdx(-1);document.activeElement.blur();return;}
       if(typing)return;
       if(e.key==='/'){e.preventDefault();searchRef.current&&searchRef.current.focus();return;}
       if(e.key==='n'||e.key==='N'){e.preventDefault();setModal(true);return;}
@@ -917,7 +915,7 @@ function App(){
 
   const ctx={role,view,setView,say,R,scope,shorts,viewer,treeRoot,mine,canApprove,canAssignIssue,bossChain,
     quickDone,remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,
-    setDrawerIdx,setModal,setEmpModal,setResetTarget,exportCSV,printReport,qReqs,qExts,attentionList};
+    setDrawerIdx,setModal,setResetTarget,exportCSV,printReport,qReqs,qExts,attentionList};
 
   return <div className="app">
     <aside className="sidebar">
@@ -970,7 +968,6 @@ function App(){
     </div>
     {drawerIdx>=0&&<><div className="scrim" onClick={()=>setDrawerIdx(-1)}/><Drawer ctx={ctx} idx={drawerIdx}/></>}
     {modal&&<QuickCapture ctx={ctx} close={()=>setModal(false)}/>}
-    {empModal&&<EmpModal ctx={ctx} close={()=>setEmpModal(false)}/>}
     {resetTarget&&<ResetPwModal ctx={ctx} staff={resetTarget} close={()=>setResetTarget(null)}/>}
     {toast&&<div className="toast"><I n="check"/>{toast}</div>}
   </div>;
@@ -2051,7 +2048,6 @@ function PeopleView({ctx}){
       <button className="btn soft" onClick={()=>open('add-jrm')}>+ Add Jr. Manager</button>
       <button className="btn soft" onClick={()=>open('add-lead')}>+ Add Team Lead</button>
       <button className="btn soft" onClick={()=>open('add-staff')}>+ Add Staff</button>
-      <button className="btn ghost" onClick={()=>ctx.setEmpModal(true)}><I n="plus"/>Add employee</button>
       <div className="spacer"/>
       <button className="btn soft" style={{background:'var(--red-soft)',color:'var(--red)'}} onClick={()=>open('remove-role')}>Remove</button>
     </div>:null}
@@ -2068,82 +2064,6 @@ function PeopleView({ctx}){
   </div>;
 }
 
-function EmpModal({ctx,close}){
-  const [f,setF]=useState({n:'',role:'Teacher',dept:BUCKETS.academic,boss:(STAFF.find(p=>p.role!=='Teacher')||{}).n||'',phone:'',email:''});
-  const [busy,setBusy]=useState(false);
-  const [err,setErr]=useState('');
-  const [result,setResult]=useState(null); // {name, login, username, password}
-  const isAdminTier=f.role==='Administrator'||f.role==='Management';
-  const save=async()=>{
-    const n=f.n.trim();
-    if(!n){setErr('Enter the employee name');return;}
-    const existing=byName(n);
-    if(existing&&existing.authId){setErr('That name is already in the team');return;}
-    if(isAdminTier&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())){setErr('Enter a valid email for this role');return;}
-    setBusy(true);setErr('');
-    const {data:{session}}=await sb.auth.getSession();
-    let resp,j;
-    try{
-      resp=await fetch('https://fumggrcamegejihenkhb.supabase.co/functions/v1/create-staff-account',{
-        method:'POST',
-        headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token,
-          apikey:'sb_publishable_bEqR06srB99BHHdvLQy14g_-pLZPWwJ'},
-        body:JSON.stringify({name:n,role:f.role,department:f.dept,boss:f.boss||null,phone:f.phone||null,email:f.email||null})});
-      j=await resp.json();
-    }catch(e){setBusy(false);setErr('Could not reach the server — check your connection');return;}
-    setBusy(false);
-    if(!resp.ok){setErr(j.error||'Could not create account');return;}
-    if(existing){existing.role=f.role;existing.dept=f.dept;existing.boss=f.boss||null;}
-    else STAFF.push({n:j.name,s:j.short_name,role:f.role,dept:f.dept,boss:f.boss||null,
-      av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
-    ctx.R();
-    setResult(j);
-  };
-  if(result)return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
-    <div className="modal" style={{width:440}}>
-      <div className="qc-head"><h3>Account created</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
-      <div className="mf">
-        <div className="whysm" style={{marginTop:0,marginBottom:14}}>Share these with {result.name.split(' ')[0]} — the password won't be shown again.</div>
-        <label>{result.username?'Username':'Email'}</label>
-        <input readOnly value={result.username||result.login} onFocus={e=>e.target.select()}/>
-        <label>Password</label>
-        <input readOnly value={result.password} onFocus={e=>e.target.select()}/>
-      </div>
-      <div className="qc-actions">
-        <button className="btn primary" style={{flex:1,justifyContent:'center'}} onClick={close}><I n="check"/>Done</button>
-      </div>
-    </div>
-  </div>;
-  return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
-    <div className="modal" style={{width:480}}>
-      <div className="qc-head"><h3>Add employee</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
-      <div className="mf">
-        <label>Full name</label>
-        <input value={f.n} onChange={e=>setF({...f,n:e.target.value})} placeholder="e.g. Sunita Sharma" autoFocus/>
-        <div className="row2">
-          <div><label>Role</label><select value={f.role} onChange={e=>setF({...f,role:e.target.value})}>
-            {Object.keys(ROLE_TAG).map(r=><option key={r}>{r}</option>)}</select></div>
-          <div><label>Department</label><select value={f.dept} onChange={e=>setF({...f,dept:e.target.value})}>
-            {Object.values(BUCKETS).map(d=><option key={d}>{d}</option>)}</select></div>
-        </div>
-        <div className="row2">
-          <div><label>Reports to</label><select value={f.boss} onChange={e=>setF({...f,boss:e.target.value})}>
-            {STAFF.filter(p=>p.role!=='Teacher').map(p=><option key={p.n} value={p.n}>{p.n} · {p.role}</option>)}</select></div>
-          <div><label>Phone (optional)</label><input value={f.phone} onChange={e=>setF({...f,phone:e.target.value})} placeholder="+91 …"/></div>
-        </div>
-        {isAdminTier?<>
-          <label>Email (their real login)</label>
-          <input value={f.email} onChange={e=>setF({...f,email:e.target.value})} placeholder="name@school.org"/>
-        </>:<div className="whysm" style={{marginTop:12}}>They'll get a generated username and password — shown once here for you to share.</div>}
-        {err?<div style={{color:'var(--red)',fontSize:12.5,marginTop:10}}>{err}</div>:null}
-      </div>
-      <div className="qc-actions">
-        <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
-        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={save}><I n="check"/>{busy?'Creating…':'Add & create login'}</button>
-      </div>
-    </div>
-  </div>;
-}
 function ResetPwModal({ctx,staff,close}){
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState('');
