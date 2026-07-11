@@ -1558,8 +1558,21 @@ function exportPersonTasksCsv(root){
   csvDownload(root.n.toLowerCase().replace(/\s+/g,'-')+'-pending-tasks-export.csv',rows);
 }
 
-function OrgNode({person,onNodeClick,canM}){
-  const kids=STAFF.filter(x=>x.boss===person.n);
+/* chainSiblings: set only when this node is a Staff member mid-chain (see below) — the remaining
+   Staff still waiting to be nested under this one, so multiple Staff under one Team Lead render as
+   a straight vertical chain instead of a branching sibling row. Reuses the existing only-child
+   connector CSS as-is; no new styles needed. */
+function OrgNode({person,onNodeClick,canM,chainSiblings}){
+  const rawKids=STAFF.filter(x=>x.boss===person.n);
+  const staffChain=!chainSiblings&&rawKids.length>1&&rawKids.every(k=>k.role==='Teacher');
+  let below=null;
+  if(chainSiblings&&chainSiblings.length){
+    below=<ul><OrgNode person={chainSiblings[0]} onNodeClick={onNodeClick} canM={canM} chainSiblings={chainSiblings.slice(1)}/></ul>;
+  }else if(staffChain){
+    below=<ul><OrgNode key={rawKids[0].id} person={rawKids[0]} onNodeClick={onNodeClick} canM={canM} chainSiblings={rawKids.slice(1)}/></ul>;
+  }else if(rawKids.length){
+    below=<ul>{rawKids.map(k=><OrgNode key={k.id} person={k} onNodeClick={onNodeClick} canM={canM}/>)}</ul>;
+  }
   return <li>
     <div className={'onode-wrap'+(person.tempCovering?' temp':'')}>
       <div className={'onode'+(canM?'':' static')} onClick={()=>onNodeClick(person)}>
@@ -1577,7 +1590,7 @@ function OrgNode({person,onNodeClick,canM}){
         {person.tempCovering?<><div className="otempflag">Temporary</div><div className="otaphint">Click to revert</div></>:null}
       </div>
     </div>
-    {kids.length?<ul>{kids.map(k=><OrgNode key={k.id} person={k} onNodeClick={onNodeClick} canM={canM}/>)}</ul>:null}
+    {below}
   </li>;
 }
 
