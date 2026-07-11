@@ -263,6 +263,8 @@
   .onode{display:inline-flex;flex-direction:column;align-items:center;gap:4px;background:var(--card);
     border:1.5px solid var(--line);border-radius:11px;padding:12px 16px;min-width:128px;box-shadow:var(--sh-sm);cursor:pointer}
   .onode:hover{border-color:var(--accent);box-shadow:var(--sh-md)}
+  .onode.static{cursor:default}
+  .onode.static:hover{border-color:var(--line);box-shadow:var(--sh-sm)}
   .onode .orole{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
   .onode .oname{font-size:13.5px;font-weight:700;color:var(--ink)}
   .onode .odept{font-size:11px;color:var(--muted)}
@@ -1555,24 +1557,24 @@ function exportPersonTasksCsv(root){
   csvDownload(root.n.toLowerCase().replace(/\s+/g,'-')+'-pending-tasks-export.csv',rows);
 }
 
-function OrgNode({person,onNodeClick}){
+function OrgNode({person,onNodeClick,canM}){
   const kids=STAFF.filter(x=>x.boss===person.n);
   return <li>
     <div className={'onode-wrap'+(person.tempCovering?' temp':'')}>
-      <div className="onode" onClick={()=>onNodeClick(person)}>
+      <div className={'onode'+(canM?'':' static')} onClick={()=>onNodeClick(person)}>
         <div className="orole">{TIER_LABEL[person.role]||person.role}</div>
         <div className="oname">{person.n}</div>
         {person.role==='Manager'?<div className="odept">{person.dept}
-          <span className="org-edit-dept" title="Rename department" onClick={e=>{e.stopPropagation();onNodeClick(person,'rename-dept');}}>✎</span>
+          {canM?<span className="org-edit-dept" title="Rename department" onClick={e=>{e.stopPropagation();onNodeClick(person,'rename-dept');}}>✎</span>:null}
         </div>:null}
         {person.tempCovering?<><div className="otempflag">Temporary</div><div className="otaphint">Click to revert</div></>:null}
       </div>
     </div>
-    {kids.length?<ul>{kids.map(k=><OrgNode key={k.id} person={k} onNodeClick={onNodeClick}/>)}</ul>:null}
+    {kids.length?<ul>{kids.map(k=><OrgNode key={k.id} person={k} onNodeClick={onNodeClick} canM={canM}/>)}</ul>:null}
   </li>;
 }
 
-function OrgChart({onNodeClick}){
+function OrgChart({onNodeClick,canM}){
   const admin=STAFF.find(p=>p.role==='Administrator');
   if(!admin)return <Empty t="No Admin Control account yet" s=""/>;
   const mgmt=mgmtMembers();
@@ -1587,7 +1589,7 @@ function OrgChart({onNodeClick}){
           {m.tempCovering?<><div className="otempflag">Temporary</div><div className="otaphint">Click to revert</div></>:null}
         </div>)}
       </div></div>
-      {depts.length?<ul>{depts.map(d=><OrgNode key={d.id} person={d} onNodeClick={onNodeClick}/>)}</ul>:null}
+      {depts.length?<ul>{depts.map(d=><OrgNode key={d.id} person={d} onNodeClick={onNodeClick} canM={canM}/>)}</ul>:null}
     </li></ul>:null}
   </li></ul>;
 }
@@ -1986,7 +1988,7 @@ function PeopleView({ctx}){
         <button onClick={()=>setZoom(z=>Math.min(1.5,+(z+0.1).toFixed(2)))} title="Zoom in">+</button>
         <button className="zreset" onClick={()=>setZoom(1)}>Reset</button>
       </div>
-      <div className="chart-scroll"><div style={{zoom}}><OrgChart onNodeClick={onNodeClick}/></div></div>
+      <div className="chart-scroll"><div style={{zoom}}><OrgChart onNodeClick={onNodeClick} canM={canM}/></div></div>
     </div>
     {step?<OrgActionModal ctx={ctx} step={step} setStep={s=>setStep(s)} oaCtx={oaCtx} setOaCtx={setOaCtx} close={close}/>:null}
   </div>;
