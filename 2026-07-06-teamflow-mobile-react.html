@@ -931,8 +931,8 @@ function Cal({ctx,personal,allowFilter}){
     <div className="syncrow">
       <div className="synctitle">📲 Sync my calendar — stay updated automatically</div>
       <div className="syncbtns">
-        <button className="syncb" onClick={()=>ctx.say('Connecting Google Calendar — your due dates will stay in sync.')}>Google</button>
-        <button className="syncb" onClick={()=>ctx.say('Connecting Outlook — your due dates will stay in sync.')}>Outlook</button>
+        <button className="syncb" disabled style={{opacity:.5,cursor:'default'}} title="Coming soon">Google</button>
+        <button className="syncb" disabled style={{opacity:.5,cursor:'default'}} title="Coming soon">Outlook</button>
         <button className="syncb" onClick={ics}>Phone (.ics)</button>
       </div>
     </div>
