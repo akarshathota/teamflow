@@ -86,3 +86,10 @@ async function downloadFile(url,name){
     setTimeout(()=>URL.revokeObjectURL(href),1500);
   }catch(e){window.open(url,'_blank');}
 }
+/* best-effort — the file/task-log record removal is what matters to the user, so a failed
+   Storage cleanup (e.g. already gone) shouldn't block or error out the actual remove action */
+async function removeAttachment(path){
+  if(!path)return;
+  const {error}=await sb.storage.from('attachments').remove([path]);
+  if(error)console.error(error);
+}

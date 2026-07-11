@@ -666,12 +666,13 @@ const IMG_EXT=/\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 /* Every uploaded attachment always has a url (uploadFile always sets one) — branching on file
    type by extension, not url presence, is what actually distinguishes an image from a PDF/doc.
    Both the thumbnail/chip and the download icon are real links now so a boss can open or save it. */
-function FileChip({x}){
+function FileChip({x,onRemove}){
   return <span className="filechip-wrap">
     <a href={x.url} target="_blank" rel="noopener" title={x.name}>
       {IMG_EXT.test(x.name||'')?<img className="thumb" src={x.url}/>:<span className="filechip"><I n="clip"/>{x.name}</span>}
     </a>
     <button className="dlicon" title="Download" onClick={e=>{e.stopPropagation();downloadFile(x.url,x.name);}}><I n="dl"/></button>
+    {onRemove?<button className="dlicon" title="Remove" onClick={e=>{e.stopPropagation();onRemove();}}><I n="x" s={13}/></button>:null}
   </span>;
 }
 
@@ -1432,7 +1433,12 @@ function Drawer({ctx,idx}){
         saveTask(t).catch(console.error);logTask(t,ctx.viewer.n,txt).catch(console.error);
         ctx.R();ctx.say('Added to the job log');}}><I n="note"/>Add to log</button>
       <div className="dr-sec">Add proof of work — photos & files</div>
-      {t.files&&t.files.length?<div className="filelist" style={{marginTop:0,marginBottom:8}}>{t.files.map((x,ix)=><FileChip key={ix} x={x}/>)}</div>:null}
+      {t.files&&t.files.length?<div className="filelist" style={{marginTop:0,marginBottom:8}}>{t.files.map((x,ix)=><FileChip key={ix} x={x} onRemove={()=>{
+        t.files=t.files.filter((_,i)=>i!==ix);
+        saveTask(t).catch(console.error);
+        removeAttachment(x.path).catch(console.error);
+        ctx.R();
+      }}/>)}</div>:null}
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
         {[['camera','Camera',{accept:'image/*',capture:'environment'}],['image','Photos',{accept:'image/*',multiple:true}],['clip','Files',{multiple:true}]].map(([ic,l,at])=>
           <label key={l} className="btn ghost" style={{flex:1,justifyContent:'center',cursor:'pointer',minWidth:90}}>
@@ -2314,7 +2320,10 @@ function QuickCapture({ctx,close}){
       {kind==='issue'?<div className="qc-attach">
         {[['camera','Camera',{accept:'image/*',capture:'environment'}],['image','Photos',{accept:'image/*',multiple:true}],['clip','Files',{multiple:true}]].map(([ic,l,at])=>
           <label key={l} className="btn soft"><I n={ic}/>{l}<input type="file" style={{display:'none'}} onChange={filePicked} {...at}/></label>)}
-        {files.length?<div className="filelist">{files.map((x,ix)=><FileChip key={ix} x={x}/>)}</div>:null}
+        {files.length?<div className="filelist">{files.map((x,ix)=><FileChip key={ix} x={x} onRemove={()=>{
+          setFiles(files.filter((_,i)=>i!==ix));
+          removeAttachment(x.path).catch(console.error);
+        }}/>)}</div>:null}
       </div>:null}
       {kind!=='task'?<div className="qc-opts">
         <label>{kind==='issue'?'Extra details (optional)':'Why / for which class? (optional)'}</label>

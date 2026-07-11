@@ -506,12 +506,13 @@ const IMG_EXT=/\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 /* Every uploaded attachment always has a url (uploadFile always sets one) — branching on file
    type by extension, not url presence, is what actually distinguishes an image from a PDF/doc.
    Both the thumbnail/chip and the download link are real links now, not dead-end text/icons. */
-function FileChip({f}){
+function FileChip({f,onRemove}){
   return <span className="filechip-wrap">
     <a href={f.url} target="_blank" rel="noopener">
       {IMG_EXT.test(f.name||'')?<img className="thumb" src={f.url}/>:<span className="filechip">📄 {f.name}</span>}
     </a>
     <button className="dlicon" onClick={e=>{e.stopPropagation();downloadFile(f.url,f.name);}}>⬇</button>
+    {onRemove?<button className="dlicon" onClick={e=>{e.stopPropagation();onRemove();}}>✕</button>:null}
   </span>;
 }
 
@@ -1257,7 +1258,10 @@ function IssueSheet({ctx,close}){
       <label className="uploadbtn">🖼 Photos<input type="file" accept="image/*" multiple style={{display:'none'}} onChange={pickF}/></label>
       <label className="uploadbtn">📎 Files<input type="file" multiple style={{display:'none'}} onChange={pickF}/></label>
     </div>
-    {files.length?<div className="filelist">{files.map((f,ix)=><FileChip key={ix} f={f}/>)}</div>:null}
+    {files.length?<div className="filelist">{files.map((f,ix)=><FileChip key={ix} f={f} onRemove={()=>{
+      setFiles(files.filter((_,i)=>i!==ix));
+      removeAttachment(f.path).catch(console.error);
+    }}/>)}</div>:null}
     <button className="send" onClick={send}>Send to maintenance head ✓</button>
   </>;
 }
@@ -1339,7 +1343,10 @@ function UpdateSheet({ctx,idx,close}){
       <label className="uploadbtn">🖼 Photos<input type="file" accept="image/*" multiple style={{display:'none'}} onChange={pickF}/></label>
       <label className="uploadbtn">📎 Files<input type="file" accept="image/*,application/pdf,.doc,.docx" multiple style={{display:'none'}} onChange={pickF}/></label>
     </div>
-    {files.length?<div className="filelist">{files.map((f,ix)=><FileChip key={ix} f={f}/>)}</div>:null}
+    {files.length?<div className="filelist">{files.map((f,ix)=><FileChip key={ix} f={f} onRemove={()=>{
+      setFiles(files.filter((_,i)=>i!==ix));
+      removeAttachment(f.path).catch(console.error);
+    }}/>)}</div>:null}
     <button className="send" onClick={save}>{st==='done'?'Mark done ✓':'Save update'}</button>
   </>;
 }
