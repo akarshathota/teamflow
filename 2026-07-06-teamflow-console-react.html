@@ -1839,9 +1839,16 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           try{
             const reports=directReports(target.n);
             for(const r of reports){await updateStaffFields(r.id,{boss_id:absorber.id});const local=byId(r.id);if(local){local.boss=absorber.n;local.bossId=absorber.id;}}
+            const {error:taErr}=await sb.from('task_assignees').update({staff_id:absorber.id}).eq('staff_id',target.id);
+            if(taErr)throw taErr;
+            let movedTasks=0;
+            tasks.forEach(t=>{let changed=false;
+              if(t.who===target.s){t.who=absorber.s;changed=true;}
+              if(t.coWho&&t.coWho.includes(target.s)){t.coWho=t.coWho.map(s=>s===target.s?absorber.s:s);changed=true;}
+              if(changed)movedTasks++;});
             await deleteStaffAccount(target.id);
             STAFF.splice(STAFF.indexOf(target),1);
-            ctx.R();say('Merged '+target.n+"'s team into "+absorber.n+(reports.length?' — '+reports.length+' report'+(reports.length===1?'':'s')+' reassigned':''));
+            ctx.R();say('Merged '+target.n+"'s team into "+absorber.n+(reports.length?' — '+reports.length+' report'+(reports.length===1?'':'s')+' reassigned':'')+(movedTasks?' · '+movedTasks+' task'+(movedTasks===1?'':'s')+' moved':''));
             setBusy(false);close();
           }catch(e){setBusy(false);setErr(e.message);}
         }}>{busy?'Merging…':'Confirm merge'}</button>
