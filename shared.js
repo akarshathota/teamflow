@@ -75,3 +75,14 @@ async function uploadFile(file,folder){
   if(signErr)throw signErr;
   return {name:file.name,url:data.signedUrl,path};
 }
+/* the plain `download` attribute doesn't reliably force-save a cross-origin Storage URL — some
+   browsers just navigate the tab to it instead. Fetching the bytes and saving a same-origin blob
+   URL works everywhere; falls back to opening the file if the fetch itself fails (e.g. offline). */
+async function downloadFile(url,name){
+  try{
+    const blob=await (await fetch(url)).blob();
+    const href=URL.createObjectURL(blob);const a=document.createElement('a');
+    a.href=href;a.download=name;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(href),1500);
+  }catch(e){window.open(url,'_blank');}
+}

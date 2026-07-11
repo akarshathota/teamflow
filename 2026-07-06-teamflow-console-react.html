@@ -671,7 +671,7 @@ function FileChip({x}){
     <a href={x.url} target="_blank" rel="noopener" title={x.name}>
       {IMG_EXT.test(x.name||'')?<img className="thumb" src={x.url}/>:<span className="filechip"><I n="clip"/>{x.name}</span>}
     </a>
-    <a href={x.url} download={x.name} className="dlicon" title="Download" onClick={e=>e.stopPropagation()}><I n="dl"/></a>
+    <button className="dlicon" title="Download" onClick={e=>{e.stopPropagation();downloadFile(x.url,x.name);}}><I n="dl"/></button>
   </span>;
 }
 
