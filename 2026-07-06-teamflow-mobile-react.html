@@ -395,6 +395,9 @@ function guessTime(t){t=t.toLowerCase();
   if(/\bend of (the )?day\b|\beod\b/.test(t))return '17:00';
   return null;}
 function workload(){const l={};MEMBERS.forEach(m=>l[m.n]=tasks.filter(t=>!t.done&&hasWhoM(t,m.n)).length);return l;}
+/* task creation should only offer departments that actually have real staff in them, and the
+   Administrator's own department alone shouldn't count — same policy as console's realDeptKeys() */
+const realDeptKeys=()=>{const has=new Set(MEMBERS.filter(p=>p.role!=='Administrator').map(p=>p.dept));return Object.keys(BUCKETS).filter(k=>has.has(BUCKETS[k]));};
 /* for recurring tasks: schedule the next occurrence after completion, returns its date */
 function spawnNextRecur(t){
   if(!t.recur)return null;
@@ -1204,7 +1207,7 @@ function TaskSheet({ctx,close}){
       <button className="optst" onClick={()=>setShowOpts(!showOpts)}><span>⚙️ Options</span>
         <span style={{fontWeight:600,color:'var(--muted)',fontSize:12.5}}>Department: {BUCKETS[cur.bucket]||cur.bucket}{cur.bucketSugg?' (auto)':''}</span></button>
       {showOpts?<div className="field"><div className="k">Department</div><div className="v">
-        <div className="picker" style={{marginTop:0}}>{Object.keys(BUCKETS).map(b=><button key={b} className={'pickchip'+(b===cur.bucket?' cur':'')}
+        <div className="picker" style={{marginTop:0}}>{realDeptKeys().map(b=><button key={b} className={'pickchip'+(b===cur.bucket?' cur':'')}
           onClick={()=>setCur({...cur,bucket:b,bucketSugg:false})}>{BUCKETS[b]}</button>)}</div>
       </div></div>:null}
       <button className="send" onClick={doAssign}>Assign task ✓</button>
