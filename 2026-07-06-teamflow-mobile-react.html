@@ -1112,7 +1112,10 @@ function TaskSheet({ctx,close}){
     const m=findMember(list[0])||{i:list[0][0]};
     const nt={t:cur.task,who:list[0],init:m.i,coWho:(!self&&list.length>1)?list.slice(1):undefined,
       due:'Due '+dueLabel(cur.dateIso,cur.timeHM).replace(/^Today/,'today').replace(/^Tomorrow/,'tomorrow'),date:cur.dateIso,bucket:cur.bucket,type,done:false,recur:cur.recur||undefined,recurOn:cur.recur?cur.recurOn:undefined,
-      selfAssigned:self,instructedBy:instruct||null};
+      // instructedBy doubles as "who assigned this" (defaults to me, the creator) and the optional
+      // "relaying on behalf of X" override — without the default, tasks assigned to someone else
+      // never recorded who assigned them, so boss-filtered views stayed empty for the common case.
+      selfAssigned:self,instructedBy:self?null:(instruct||ctx.r.name)};
     tasks.unshift(nt);
     close();ctx.R();
     saveTask(nt).catch(console.error);

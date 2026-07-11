@@ -2258,9 +2258,13 @@ function QuickCapture({ctx,close}){
     let list=whos;
     if(mode==='self')list=[ctx.viewer.s];
     if(!list.length){ctx.say('Pick at least one person');return;}
+    // instructedBy doubles as "who assigned this" (defaults to me, the creator) and the optional
+    // "relaying on behalf of X" override via the boss-chain dropdown — without the default, tasks
+    // I assign to someone else never recorded who assigned them at all, so "Assigned to me by"
+    // stayed empty for the common case and only ever worked for the rare manual-relay one.
     const nt={t:cleanTask(clean),who:list[0],coWho:list.length>1?list.slice(1):undefined,
       type,bucket,prio,recur,recurOn:recur?recurOn:null,date:when||iso(TODAY),time:dueTime||null,status:'open',note:note.trim(),
-      selfAssigned:mode==='self',instructedBy:boss||null};
+      selfAssigned:mode==='self',instructedBy:mode==='self'?null:(boss||BOSS_LABEL[ctx.viewer.n]||ctx.viewer.n)};
     tasks.unshift(nt);
     close();ctx.R();
     saveTask(nt).catch(console.error);
