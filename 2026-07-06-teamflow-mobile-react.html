@@ -237,11 +237,6 @@ let tasks=[];
 let pendingReqs=[];
 let pendingIssues=[];
 let notices=[];
-const attnDemo=[
-  {nm:"Hari Charan", rs:"1 task overdue 4 days + late twice this week", c:"var(--red)", ini:"H"},
-  {nm:"Meena R.", rs:"5 open tasks — likely to slip 1 by Friday", c:"var(--amber)", ini:"M"},
-  {nm:"Class 6 section", rs:"No teacher marked for 2nd period tomorrow", c:"var(--blue)", ini:"6"},
-];
 const peopleDemo=[
   {n:"Hari Charan", s:"In · 8:58", c:"var(--green)"},{n:"Meena Rao", s:"Late · 9:24", c:"var(--amber)"},
   {n:"Ravi Kumar", s:"In · 8:41", c:"var(--green)"},{n:"Anita Desai", s:"Absent — no leave", c:"var(--red)"},
@@ -395,6 +390,20 @@ function guessTime(t){t=t.toLowerCase();
   if(/\bend of (the )?day\b|\beod\b/.test(t))return '17:00';
   return null;}
 function workload(){const l={};MEMBERS.forEach(m=>l[m.n]=tasks.filter(t=>!t.done&&hasWhoM(t,m.n)).length);return l;}
+/* real overdue/overloaded staff for Insights' "Who needs attention" — was hardcoded demo names
+   (Hari Charan, Meena R.) with no real-data path at all; mirrors console's attentionList(). */
+function attentionList(){
+  const load=workload();
+  return MEMBERS.map(m=>{
+    const mine=tasks.filter(t=>!t.done&&hasWhoM(t,m.n));
+    const od=mine.filter(t=>t.date&&t.date<iso(TODAY));
+    const worst=od.length?Math.max(...od.map(t=>Math.round((TODAY-new Date(t.date+'T00:00:00'))/86400000))):0;
+    const rs=[];
+    if(od.length)rs.push(od.length+' overdue — worst is '+worst+' day'+(worst!==1?'s':'')+' late');
+    if(load[m.n]>=3)rs.push(load[m.n]+' open tasks — heaviest load on the team');
+    return {m,od:od.length,load:load[m.n],reason:rs.join(' · ')};
+  }).filter(x=>x.reason).sort((a,b)=>b.od-a.od||b.load-a.load);
+}
 /* task creation should only offer departments that actually have real staff in them, and the
    Administrator's own department alone shouldn't count — same policy as console's realDeptKeys() */
 const realDeptKeys=()=>{const has=new Set(MEMBERS.filter(p=>p.role!=='Administrator').map(p=>p.dept));return Object.keys(BUCKETS).filter(k=>has.has(BUCKETS[k]));};
@@ -940,9 +949,11 @@ function Insights({ctx}){
     <div className="sec">Due dates · your span</div>
     <Cal ctx={ctx} allowFilter/>
     <div className="sec">Who needs attention <span className="free">FREE</span></div>
-    {attnDemo.map(a=><div className="attn" key={a.nm}>
-      <div className="ring" style={{background:a.c}}>{a.ini}</div>
-      <div><div className="nm">{a.nm}</div><div className="rs">{a.rs}</div></div></div>)}
+    {(()=>{const at=attentionList();
+      return at.length?at.map(x=><div className="attn" key={x.m.n}>
+        <div className="ring" style={{background:x.od?'var(--red)':'var(--amber)'}}>{x.m.i}</div>
+        <div><div className="nm">{x.m.n}</div><div className="rs">{x.reason}</div></div></div>)
+        :<div className="rs" style={{padding:'8px 2px'}}>Everyone's on track.</div>;})()}
     <div className="sec" style={{marginTop:16}}>Ask anything</div>
     <div className="task" style={{display:'flex',alignItems:'center',gap:10}}>
       <I n="mic" c="var(--accent-ink)"/>
