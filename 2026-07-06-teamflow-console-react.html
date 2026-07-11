@@ -1444,7 +1444,7 @@ function CalendarView({ctx}){
   const [fw,setFw]=useState('all');
   const [fb,setFb]=useState('all');
   const selRef=useRef(null);
-  useEffect(()=>{if(selDay!=null)selRef.current?.scrollIntoView({behavior:'smooth',block:'nearest'});},[selDay]);
+  useEffect(()=>{if(selDay!=null)selRef.current?.scrollIntoView({behavior:'instant',block:'nearest'});},[selDay]);
   const y=base.getFullYear(),m=base.getMonth();
   const firstDow=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate();
   const vis=tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)&&o.t.date&&(fb==='all'||o.t.bucket===fb)&&(fw==='all'||hasWho(o.t,fw)));
