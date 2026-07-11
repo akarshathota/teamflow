@@ -324,7 +324,7 @@ async function loadAll(){
   const byId=Object.fromEntries((staffRows||[]).map(r=>[r.id,{name:r.name,short:r.short_name,initials:r.initials}]));
   ALL_PEOPLE.length=0;ALL_PEOPLE.push(...(staffRows||[]).map(r=>({n:r.name,s:r.short_name,id:r.id,authId:r.auth_user_id,role:r.role,
     boss:r.boss_id&&byId[r.boss_id]?byId[r.boss_id].short:null})));
-  MEMBERS.length=0;MEMBERS.push(...(staffRows||[]).filter(r=>r.role==='Teacher'||r.role==='Team Member').map(r=>({
+  MEMBERS.length=0;MEMBERS.push(...(staffRows||[]).map(r=>({
     n:r.short_name,i:r.initials,dept:r.department,role:JOB_TITLE[r.short_name]||r.role,
     types:(SKILLS[r.short_name]||{}).types||[],buckets:(SKILLS[r.short_name]||{}).buckets||[],id:r.id})));
   ALL_STAFF.length=0;ALL_STAFF.push(...MEMBERS.map(m=>m.n));

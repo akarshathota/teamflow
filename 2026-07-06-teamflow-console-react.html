@@ -542,7 +542,7 @@ const avColor=n=>{let h=0;for(const c of n)h=(h*31+c.charCodeAt(0))%997;return A
 function workloadMap(){const m={};STAFF.forEach(p=>m[p.s]=tasks.filter(t=>hasWho(t,p.s)&&t.status!=='done').length);return m;}
 function suggestWho(type,scope){
   const load=workloadMap();
-  const pool=scope.filter(p=>p.role==='Teacher');
+  const pool=scope;
   const deptForType={repair:'Maintenance',maint:'Maintenance',purchase:'Administration',work:'Academics'};
   let cand=pool.filter(p=>p.dept===deptForType[type]);let basis='dept';
   if(!cand.length){cand=pool;basis='load';}
@@ -598,7 +598,7 @@ function suggestFixer(text){const t=(text||'').toLowerCase();
   if(/fan|light|electric|wiring|socket|projector|power/.test(t))return{s:'Hari',why:'handles electrical work'};
   if(/tap|leak|water|pipe|plumb|toilet|drain/.test(t))return{s:'Suresh',why:'handles plumbing work'};
   const load=workloadMap();
-  const pool=STAFF.filter(p=>p.dept==='Maintenance'&&p.role==='Teacher').sort((a,b)=>load[a.s]-load[b.s]);
+  const pool=STAFF.filter(p=>p.dept==='Maintenance').sort((a,b)=>load[a.s]-load[b.s]);
   return pool.length?{s:pool[0].s,why:'lightest workload'}:null;}
 function deliveryStats(list){
   return [
@@ -857,7 +857,7 @@ function App(){
 
   function attentionList(){
     const load=workloadMap();
-    return scope.filter(p=>p.role==='Teacher').map(p=>{
+    return scope.map(p=>{
       const pm=tasks.filter(t=>hasWho(t,p.s));
       const od=pm.filter(isOverdue);
       const worst=od.slice().sort((a,b)=>a.date<b.date?-1:1)[0];
@@ -915,7 +915,7 @@ function App(){
       csvDownload(iso(new Date())+'-teamflow-tasks.csv',rows);say('Tasks exported (CSV)');
     }else{
       const load=workloadMap();const rows=[['Employee','Department','Role','Open','Overdue','Done']];
-      scope.filter(p=>p.role==='Teacher').forEach(p=>{const tt=tasks.filter(t=>hasWho(t,p.s));
+      scope.forEach(p=>{const tt=tasks.filter(t=>hasWho(t,p.s));
         rows.push([p.n,p.dept,p.role,load[p.s],tt.filter(isOverdue).length,tt.filter(t=>t.status==='done').length]);});
       csvDownload(iso(new Date())+'-teamflow-workload.csv',rows);say('Workload exported (CSV)');
     }
@@ -1082,7 +1082,7 @@ function Dashboard({ctx,open,over,today,done}){
   const pend=ctx.qReqs.length+ctx.qExts.length;
   const bTot=mine.length||1;
   const bRows=Object.keys(BUCKETS).map(k=>({k,c:mine.filter(t=>t.bucket===k).length})).filter(o=>o.c).sort((a,b)=>b.c-a.c);
-  const wStaff=ctx.scope.filter(p=>p.role==='Teacher');
+  const wStaff=ctx.scope;
   const wCnt=p=>tasks.filter(t=>hasWho(t,p.s)&&t.status!=='done'&&(loadBucket==='all'||t.bucket===loadBucket)).length;
   const wRows=wStaff.map(p=>({p,l:wCnt(p)})).sort((a,b)=>b.l-a.l);
   const wMax=Math.max(1,...wRows.map(o=>o.l));
@@ -1180,7 +1180,7 @@ function QueuePanel({ctx}){
       {ctx.qReqs.map(o=>{const r=o.r,p=byShort(r.from);
         if(r.kind==='issue'){
           const can=ctx.canAssignIssue,sug=suggestFixer(r.t);
-          const pool=STAFF.filter(x=>x.dept==='Maintenance'&&x.role==='Teacher');
+          const pool=STAFF.filter(x=>x.dept==='Maintenance');
           const cur=sel[o.i]||(sug?sug.s:pool[0]&&pool[0].s);
           return <div className="attn" key={'r'+o.i}>
             <div className="ring" style={{background:'var(--amber)'}}><I n="tool" c="#fff"/></div>
@@ -1412,7 +1412,7 @@ function Drawer({ctx,idx}){
       {reassign?<div className="kv"><div className="k">Move to</div><div className="v" style={{flex:1}}>
         <select className="fsel" style={{width:'100%'}} defaultValue="" onChange={e=>{if(!e.target.value)return;t.who=e.target.value;t.coWho=undefined;saveTask(t).catch(console.error);ctx.R();ctx.say('Reassigned to '+byShort(e.target.value).n);setReassign(false);}}>
           <option value="">Choose a person…</option>
-          {ctx.scope.filter(x=>x.role==='Teacher').map(x=><option key={x.s} value={x.s}>{x.n} · {x.dept}</option>)}
+          {ctx.scope.map(x=><option key={x.s} value={x.s}>{x.n} · {x.dept}</option>)}
         </select></div></div>:null}
       <div className="kv"><div className="k">Due</div><div className="v" style={{color:od?'var(--red)':undefined}}>{fmtDate(t.date)}{t.time?' · '+fmtTime(t.time):''}{od?' · '+overdueDays(t)+' days late':''}</div></div>
       <div className="kv"><div className="k">Type</div><div className="v"><span className="tag gray">{TYPES[t.type||'work']}</span></div></div>
@@ -1478,7 +1478,7 @@ function CalendarView({ctx}){
   const y=base.getFullYear(),m=base.getMonth();
   const firstDow=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate();
   const vis=tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)&&o.t.date&&(fb==='all'||o.t.bucket===fb)&&(fw==='all'||hasWho(o.t,fw)));
-  const empOpts=ctx.scope.filter(p=>(p.role==='Teacher'||p.n===ctx.viewer.n)&&(fb==='all'||tasks.some(t=>hasWho(t,p.s)&&t.bucket===fb&&t.status!=='done')));
+  const empOpts=ctx.scope.filter(p=>fb==='all'||tasks.some(t=>hasWho(t,p.s)&&t.bucket===fb&&t.status!=='done'));
   const byDay={};vis.forEach(o=>{const d=new Date(o.t.date+'T00:00:00');if(d.getFullYear()===y&&d.getMonth()===m)(byDay[d.getDate()]=byDay[d.getDate()]||[]).push(o);});
   const monthEvs=Object.values(byDay).flat();
   const bks=[...new Set(monthEvs.map(o=>o.t.bucket).filter(Boolean))];
@@ -2155,8 +2155,8 @@ function ReportsView({ctx}){
   const dn=mine.filter(t=>t.status==='done').length,ov=mine.filter(isOverdue).length;
   const rate=mine.length?Math.round(dn/mine.length*100):0;
   const segs=deliveryStats(mine);const segTot=segs.reduce((a,x)=>a+x.v,0);
-  const empOpts=ctx.scope.filter(p=>(p.role==='Teacher'||p.n===ctx.viewer.n)&&(fb==='all'||tasks.some(t=>hasWho(t,p.s)&&t.bucket===fb)));
-  const workers=ctx.scope.filter(p=>p.role==='Teacher'&&(fw==='all'||p.s===fw)&&(fb==='all'||tasks.some(t=>hasWho(t,p.s)&&t.bucket===fb)));
+  const empOpts=ctx.scope.filter(p=>fb==='all'||tasks.some(t=>hasWho(t,p.s)&&t.bucket===fb));
+  const workers=ctx.scope.filter(p=>(fw==='all'||p.s===fw)&&(fb==='all'||tasks.some(t=>hasWho(t,p.s)&&t.bucket===fb)));
   const load=workloadMap();
   const byEmp=fw==='all'
     ?workers.map(p=>{const tt=mine.filter(t=>hasWho(t,p.s));return [p.s,tt.length?Math.round(tt.filter(t=>t.status==='done').length/tt.length*100):0];})
@@ -2237,7 +2237,7 @@ function QuickCapture({ctx,close}){
     setTxt(text);
     if(kind!=='task'||text.trim().length<6)return;
     const low=text.toLowerCase();
-    const named=ctx.scope.filter(p=>p.role==='Teacher'&&new RegExp('\\b'+p.s.toLowerCase()+'\\b').test(low)).map(p=>p.s);
+    const named=ctx.scope.filter(p=>new RegExp('\\b'+p.s.toLowerCase()+'\\b').test(low)).map(p=>p.s);
     if(named.length){setWhos(named);setWhoSugg(false);setWhoWhy(named.length>1?'all named in your sentence — joint task':'named in your sentence');}
     else{const s=suggestWho(guessType(low),ctx.scope);if(s&&(whoSugg||!whos.length)){setWhos([s.s]);setWhoSugg(true);setWhoWhy(s.why);}}
     const gt=guessType(low);setType(gt);
@@ -2302,7 +2302,7 @@ function QuickCapture({ctx,close}){
     ctx.say((mode==='self'?'Added to your list':'Assigned '+(list.length>1?'jointly to ':'to ')+names+' · sent on WhatsApp')+(recur?' · '+recurLabel(recur,recurOn):'')+(boss?' · as per '+boss:''));
   }
   const dts=[0,1,7].map(n=>{const d=new Date(TODAY);d.setDate(d.getDate()+n);return d;});
-  const whoList=ctx.scope.filter(x=>x.role==='Teacher'&&(!whoQ||x.n.toLowerCase().includes(whoQ.toLowerCase())||x.dept.toLowerCase().includes(whoQ.toLowerCase())));
+  const whoList=ctx.scope.filter(x=>!whoQ||x.n.toLowerCase().includes(whoQ.toLowerCase())||x.dept.toLowerCase().includes(whoQ.toLowerCase()));
   const hints={task:<span>Type or speak in plain words — <b>AI fills in who, when and what type</b>. Tap any value to change it.</span>,
     issue:<span>Goes straight to <b>Vikram (maintenance head)</b> — he assigns the right person, no approval needed.</span>,
     request:<span>Goes to <b>your department boss</b> for one-tap approval, then to procurement (Accounts department).</span>};
