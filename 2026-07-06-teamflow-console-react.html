@@ -392,7 +392,6 @@ const {useState,useEffect,useRef,useCallback} = React;
 /* ============ data ============ */
 const TYPES={work:"Work",purchase:"Purchase",repair:"Repair",maint:"Maintenance",other:"Other"};
 const PRIOS={high:{l:"High",c:"var(--red)"},med:{l:"Medium",c:"var(--amber)"},low:{l:"Low",c:"#9aa2a8"}};
-const DEPTS=['Academics','Maintenance','Construction','HR','Accounts','Administration','Transport','IT','Housekeeping','Operations'];
 const AV_COLORS=['#0e7a6f','#39638f','#1a7a48','#b06e12','#c43a53','#0e7a8f','#a34d78','#5b5ea6'];
 const ROLE_TAG={'Administrator':'teal','Management':'blue','Manager':'green','Team Lead':'purple','Team Member':'amber','Teacher':'gray'};
 /* display labels for the org-chart view only — the DB role strings themselves (and every other
@@ -1673,15 +1672,20 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
     </ModalShell>;
   }
   if(step==='add-dept'){
+    const takenDepts=new Set(orgDepts().map(d=>d.dept));
+    const availDepts=Object.values(BUCKETS).filter(d=>!takenDepts.has(d));
     return <ModalShell close={close} err={err} title="Add a department" sub="Creates a new Sr. Manager department under Management — overseen jointly by every Management member.">
       <div className="mf">
-        <label>Department name</label><input value={f.dept||''} onChange={e=>setF({...f,dept:e.target.value})} placeholder="e.g. Facilities" autoFocus/>
+        <label>Department name</label>
+        {availDepts.length?<select value={f.dept||availDepts[0]} onChange={e=>setF({...f,dept:e.target.value})} autoFocus>
+          {availDepts.map(d=><option key={d}>{d}</option>)}</select>
+        :<div className="whysm" style={{margin:0}}>Every department already has a Sr. Manager.</div>}
         <label>Sr. Manager name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Priya Nair"/>
       </div>
       <div className="qc-actions">
         <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
-        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
-          const dept=(f.dept||'').trim(),name=(f.name||'').trim();
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy||!availDepts.length} onClick={async()=>{
+          const dept=(f.dept||availDepts[0]||'').trim(),name=(f.name||'').trim();
           if(!dept||!name){setErr('Enter both a department name and a Sr. Manager name.');return;}
           if(orgDepts().some(d=>d.dept.toLowerCase()===dept.toLowerCase())){setErr('A department with that name already exists.');return;}
           setBusy(true);setErr('');
@@ -1910,8 +1914,13 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
   }
   if(step==='rename-dept'){
     const {person}=oaCtx;
+    const takenByOthers=new Set(orgDepts().filter(d=>d.n!==person.n).map(d=>d.dept));
+    const renameOpts=Object.values(BUCKETS).filter(d=>d===person.dept||!takenByOthers.has(d));
     return <ModalShell close={close} err={err} title="Rename department" sub="Updates the department name for everyone in it.">
-      <div className="mf"><label>Department name</label><input value={f.dept!==undefined?f.dept:person.dept} onChange={e=>setF({...f,dept:e.target.value})} autoFocus/></div>
+      <div className="mf"><label>Department name</label>
+        <select value={f.dept!==undefined?f.dept:person.dept} onChange={e=>setF({...f,dept:e.target.value})} autoFocus>
+          {renameOpts.map(d=><option key={d}>{d}</option>)}</select>
+      </div>
       <div className="qc-actions">
         <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
         <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
@@ -2002,7 +2011,7 @@ function PeopleView({ctx}){
 }
 
 function EmpModal({ctx,close}){
-  const [f,setF]=useState({n:'',role:'Teacher',dept:'Academics',boss:'Anita Desai',phone:'',email:''});
+  const [f,setF]=useState({n:'',role:'Teacher',dept:BUCKETS.academic,boss:(STAFF.find(p=>p.role!=='Teacher')||{}).n||'',phone:'',email:''});
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState('');
   const [result,setResult]=useState(null); // {name, login, username, password}
@@ -2057,7 +2066,7 @@ function EmpModal({ctx,close}){
           <div><label>Role</label><select value={f.role} onChange={e=>setF({...f,role:e.target.value})}>
             {Object.keys(ROLE_TAG).map(r=><option key={r}>{r}</option>)}</select></div>
           <div><label>Department</label><select value={f.dept} onChange={e=>setF({...f,dept:e.target.value})}>
-            {DEPTS.map(d=><option key={d}>{d}</option>)}</select></div>
+            {Object.values(BUCKETS).map(d=><option key={d}>{d}</option>)}</select></div>
         </div>
         <div className="row2">
           <div><label>Reports to</label><select value={f.boss} onChange={e=>setF({...f,boss:e.target.value})}>
