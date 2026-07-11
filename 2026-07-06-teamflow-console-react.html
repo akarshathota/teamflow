@@ -1528,6 +1528,9 @@ function CalendarView({ctx}){
 const byId=id=>STAFF.find(p=>p.id===id);
 const directReports=name=>STAFF.filter(p=>p.boss===name);
 const orgDepts=()=>STAFF.filter(p=>p.role==='Manager'); // Sr. Manager rows = department heads
+/* task creation should only offer departments that actually exist in People & roles right now,
+   not the full fixed BUCKETS vocabulary regardless of whether anyone's really in it */
+const realDeptKeys=()=>{const has=new Set(STAFF.map(p=>p.dept));return Object.keys(BUCKETS).filter(k=>has.has(BUCKETS[k]));};
 const mgmtMembers=()=>STAFF.filter(p=>p.role==='Management');
 function orgDeepestOfType(rootName,dbRole){
   let last=null;
@@ -2354,7 +2357,7 @@ function QuickCapture({ctx,close}){
         </div></div>
         <div className="fieldrow"><div className="k">Department</div><div className="v">
           <span className="editchip" onClick={()=>setPick(pick==='bucket'?null:'bucket')}>{BUCKETS[bucket]||bucket} <I n="chevd" s={13}/></span>
-          {pick==='bucket'?<div className="pickrow">{Object.keys(BUCKETS).map(k=><button key={k} className={'pk'+(k===bucket?' cur':'')}
+          {pick==='bucket'?<div className="pickrow">{realDeptKeys().map(k=><button key={k} className={'pk'+(k===bucket?' cur':'')}
             onClick={()=>{setBucket(k);setBucketSugg(false);setPick(null);}}>{BUCKETS[k]}</button>)}</div>:null}
         </div></div>
         <div className="fieldrow"><div className="k">Priority</div><div className="v">
