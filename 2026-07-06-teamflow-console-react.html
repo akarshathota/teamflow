@@ -1099,7 +1099,7 @@ function Dashboard({ctx,open,over,today,done}){
           <div className="h-row"><h3>Team workload</h3>
             <select className="fsel" style={{padding:'6px 10px',fontSize:12.5}} value={loadBucket} onChange={e=>setLoadBucket(e.target.value)}>
               <option value="all">All departments</option>
-              {realDeptKeys().map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}
+              {realDeptKeys(ctx.scope).map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}
             </select></div>
           <div className="scrollbox">
             {wRows.map(o=>{const c=o.l>=3?'var(--red)':o.l===2?'var(--amber)':'var(--green)';
@@ -1272,7 +1272,7 @@ function TasksView({ctx}){
         <div className="col-toprow">
           <select className="fsel" style={{flex:1}} value={fb} onChange={e=>setFb(e.target.value)}>
             <option value="all">All departments</option>
-            {realDeptKeys().map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}
+            {realDeptKeys(ctx.scope).map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}
           </select>
         </div>
         <div className="scrollbox col-scroll">
@@ -1298,7 +1298,7 @@ function TasksView({ctx}){
         <div className="col-toprow">
           <select className="fsel" style={{flex:1}} disabled={isManagerTier} value={effectiveDeptFb} onChange={e=>setDeptFb(e.target.value)}>
             <option value="all">All departments</option>
-            {realDeptKeys().map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}
+            {realDeptKeys(ctx.scope).map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}
           </select>
         </div>
         {isManagerTier?<div className="col-empty-note">Fixed to your team — only Management can filter by department here.</div>:null}
@@ -1471,7 +1471,7 @@ function CalendarView({ctx}){
       <div className="spacer"/>
       <select className="fsel" value={fb} onChange={e=>{setFb(e.target.value);setFw('all');}}>
         <option value="all">All departments</option>
-        {realDeptKeys().map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}</select>
+        {realDeptKeys(ctx.scope).map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}</select>
       <select className="fsel" value={fw} onChange={e=>setFw(e.target.value)}>
         <option value="all">{fb==='all'?'All employees':'All in '+BUCKETS[fb]}</option>
         {empOpts.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}</select>
@@ -1504,7 +1504,12 @@ const orgDepts=()=>STAFF.filter(p=>p.role==='Manager'); // Sr. Manager rows = de
    not the full fixed BUCKETS vocabulary regardless of whether anyone's really in it */
 /* the Administrator's own department doesn't count toward "real" — their role is running the
    org chart, not doing task work, so their department alone shouldn't make it assignable */
-const realDeptKeys=()=>{const has=new Set(STAFF.filter(p=>p.role!=='Administrator').map(p=>p.dept));return Object.keys(BUCKETS).filter(k=>has.has(BUCKETS[k]));};
+/* defaults to org-wide (STAFF) for task creation, where categorizing new work under any real
+   department makes sense regardless of who's creating it. Filter dropdowns on scoped views
+   (Dashboard/Tasks/Calendar/Reports) pass ctx.scope instead — a Manager whose visible scope is
+   just their own team shouldn't be offered a department nobody in that scope belongs to; picking
+   it would always show zero results. */
+const realDeptKeys=(scope=STAFF)=>{const has=new Set(scope.filter(p=>p.role!=='Administrator').map(p=>p.dept));return Object.keys(BUCKETS).filter(k=>has.has(BUCKETS[k]));};
 const mgmtMembers=()=>STAFF.filter(p=>p.role==='Management');
 function orgDeepestOfType(rootName,dbRole){
   let last=null;
@@ -2136,7 +2141,7 @@ function ReportsView({ctx}){
     <div className="filters">
       <select className="fsel" value={fb} onChange={e=>{setFb(e.target.value);setFw('all');}}>
         <option value="all">All departments</option>
-        {realDeptKeys().map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}</select>
+        {realDeptKeys(ctx.scope).map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}</select>
       <select className="fsel" value={fw} onChange={e=>setFw(e.target.value)}>
         <option value="all">{fb==='all'?'All staff':'All in '+BUCKETS[fb]}</option>
         {empOpts.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}</select>
