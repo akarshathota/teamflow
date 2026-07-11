@@ -7,51 +7,19 @@
 // Everyone else gets a generated username @teamflow.demo and a generated password, both
 // returned once in the response for the calling admin to relay to the new person.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { CORS, json, randomPassword, verifyAdmin } from "../_shared/helpers.ts";
 
 const CONSOLE_ROLES = ["Administrator", "Management", "Manager", "Team Lead", "Team Member", "Teacher"];
 const ADMIN_TIER = ["Administrator", "Management"];
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info",
-};
-
-function randomPassword(len = 14) {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
-  const arr = new Uint32Array(len);
-  crypto.getRandomValues(arr);
-  return Array.from(arr, (n) => chars[n % chars.length]).join("");
-}
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
   try {
-    const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-    if (!jwt) return json({ error: "Missing Authorization" }, 401);
-
-    const url = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Verify the caller's own session first (rejects garbage/expired tokens cheaply).
-    const asCaller = createClient(url, anonKey, { global: { headers: { Authorization: `Bearer ${jwt}` } } });
-    const { data: { user }, error: userErr } = await asCaller.auth.getUser();
-    if (userErr || !user) return json({ error: "Invalid session" }, 401);
-
-    // Everything past this point runs as service_role, bypassing RLS — that's the point of
-    // this function existing server-side at all.
-    const admin = createClient(url, serviceKey);
-
-    const { data: callerStaff } = await admin.from("staff").select("role").eq("auth_user_id", user.id).maybeSingle();
-    if (!callerStaff || !ADMIN_TIER.includes(callerStaff.role)) {
-      return json({ error: "Only Administrator or Management can create accounts" }, 403);
-    }
+    const verified = await verifyAdmin(req, "create accounts");
+    if ("error" in verified) return verified.error;
+    const { admin } = verified;
 
     const body = await req.json().catch(() => ({}));
     const name = String(body.name || "").trim();

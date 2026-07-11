@@ -75,16 +75,19 @@ async function uploadFile(file,folder){
   if(signErr)throw signErr;
   return {name:file.name,url:data.signedUrl,path};
 }
+/* triggers a real browser save for an in-memory Blob — same 4 lines csvDownload and downloadFile
+   both used to hand-roll separately (only how they got the Blob differed) */
+function saveBlob(blob,name){
+  const href=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=href;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(href),1500);
+}
 /* the plain `download` attribute doesn't reliably force-save a cross-origin Storage URL — some
    browsers just navigate the tab to it instead. Fetching the bytes and saving a same-origin blob
    URL works everywhere; falls back to opening the file if the fetch itself fails (e.g. offline). */
 async function downloadFile(url,name){
-  try{
-    const blob=await (await fetch(url)).blob();
-    const href=URL.createObjectURL(blob);const a=document.createElement('a');
-    a.href=href;a.download=name;document.body.appendChild(a);a.click();a.remove();
-    setTimeout(()=>URL.revokeObjectURL(href),1500);
-  }catch(e){window.open(url,'_blank');}
+  try{saveBlob(await (await fetch(url)).blob(),name);}
+  catch(e){window.open(url,'_blank');}
 }
 /* best-effort — the file/task-log record removal is what matters to the user, so a failed
    Storage cleanup (e.g. already gone) shouldn't block or error out the actual remove action */
@@ -93,3 +96,33 @@ async function removeAttachment(path){
   const {error}=await sb.storage.from('attachments').remove([path]);
   if(error)console.error(error);
 }
+const IMG_EXT=/\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+/* toast state + auto-dismiss timer — identical in both apps down to the 2400ms, just renamed
+   local variables. `ctx.say(...)`/`useToast()` return the same {toast,say} shape either way. */
+function useToast(){
+  const [toast,setToast]=React.useState(null);
+  const t=React.useRef();
+  const say=React.useCallback(m=>{setToast(m);clearTimeout(t.current);t.current=setTimeout(()=>setToast(null),2400);},[]);
+  return {toast,say};
+}
+/* the ~15 icon glyphs both apps draw identically (checked via diff, not just "looks similar") —
+   written with React.createElement instead of JSX since this file isn't run through Babel.
+   Each app spreads this into its own PATHS object alongside its own app-specific icons. */
+const g=(tag,props,...kids)=>React.createElement(tag,props,...kids);
+const SHARED_ICON_PATHS={
+  checkc:g('g',null,g('circle',{cx:12,cy:12,r:9}),g('path',{d:"M8.5 12.2l2.4 2.4 4.6-5"})),
+  cal:g('g',null,g('rect',{x:3.5,y:5,width:17,height:15.5,rx:2}),g('path',{d:"M3.5 9.5h17M8 3v4M16 3v4"})),
+  chart:g('path',{d:"M4 20V10M10 20V4M16 20v-7M21 20H3"}),
+  plus:g('path',{d:"M12 5v14M5 12h14"}),
+  mic:g('g',null,g('rect',{x:9,y:3,width:6,height:11,rx:3}),g('path',{d:"M5.5 11.5a6.5 6.5 0 0013 0M12 18v3"})),
+  x:g('path',{d:"M6 6l12 12M18 6L6 18"}),
+  chevl:g('path',{d:"M14.5 6l-6 6 6 6"}),
+  chevr:g('path',{d:"M9.5 6l6 6-6 6"}),
+  clock:g('g',null,g('circle',{cx:12,cy:12,r:9}),g('path',{d:"M12 7v5.2l3.4 2"})),
+  spark:g('path',{d:"M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"}),
+  check:g('path',{d:"M5 12.5l4.5 4.5L19 7.5"}),
+  bell:g('path',{d:"M18 16H6c1.2-1.4 1.8-2.4 1.8-5a4.2 4.2 0 018.4 0c0 2.6.6 3.6 1.8 5zM10 19a2 2 0 004 0"}),
+  redo:g('path',{d:"M4 16v-5a5 5 0 015-5h10M15.5 2.5L19 6l-3.5 3.5"}),
+  tool:g('path',{d:"M20.3 7.1a4.6 4.6 0 01-6 5.3l-6.4 6.4a2.1 2.1 0 11-3-3l6.4-6.4a4.6 4.6 0 015.3-6l-2.9 2.9 3.7 3.7z"}),
+  box:g('g',null,g('path',{d:"M3.5 8L12 3.5 20.5 8v8L12 20.5 3.5 16z"}),g('path',{d:"M3.5 8L12 12.5 20.5 8M12 12.5v8"})),
+};

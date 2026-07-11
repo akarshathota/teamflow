@@ -5,49 +5,16 @@
 // path). Everyone else needs an admin to generate a new password and relay it — same shape as
 // create-staff-account's "shown once" credential handoff.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const ADMIN_TIER = ["Administrator", "Management"];
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info",
-};
-
-function randomPassword(len = 14) {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
-  const arr = new Uint32Array(len);
-  crypto.getRandomValues(arr);
-  return Array.from(arr, (n) => chars[n % chars.length]).join("");
-}
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
-}
+import { CORS, json, randomPassword, verifyAdmin } from "../_shared/helpers.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
   try {
-    const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-    if (!jwt) return json({ error: "Missing Authorization" }, 401);
-
-    const url = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const asCaller = createClient(url, anonKey, { global: { headers: { Authorization: `Bearer ${jwt}` } } });
-    const { data: { user }, error: userErr } = await asCaller.auth.getUser();
-    if (userErr || !user) return json({ error: "Invalid session" }, 401);
-
-    // Everything past this point runs as service_role, bypassing RLS — needed to touch
-    // another user's Auth record at all.
-    const admin = createClient(url, serviceKey);
-
-    const { data: callerStaff } = await admin.from("staff").select("role").eq("auth_user_id", user.id).maybeSingle();
-    if (!callerStaff || !ADMIN_TIER.includes(callerStaff.role)) {
-      return json({ error: "Only Administrator or Management can reset passwords" }, 403);
-    }
+    const verified = await verifyAdmin(req, "reset passwords");
+    if ("error" in verified) return verified.error;
+    const { admin } = verified;
 
     const body = await req.json().catch(() => ({}));
     const staffId = body.staffId;

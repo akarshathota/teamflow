@@ -481,28 +481,13 @@ const SAMPLES=[
 
 /* ============ icons ============ */
 const PATHS={
+  ...SHARED_ICON_PATHS,
   home:<g><path d="M4 11l8-7 8 7v8.5a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 19.5z"/><path d="M9.5 21v-6h5v6"/></g>,
-  checkc:<g><circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.4 2.4 4.6-5"/></g>,
-  cal:<g><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></g>,
-  chart:<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>,
   horn:<g><path d="M4 10v4a1 1 0 001 1h2l5 4V5L7 9H5a1 1 0 00-1 1z"/><path d="M16 9a4.5 4.5 0 010 6M18.5 6.5a8 8 0 010 11"/></g>,
   dots:<g><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></g>,
-  plus:<path d="M12 5v14M5 12h14"/>,
-  mic:<g><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3"/></g>,
-  x:<path d="M6 6l12 12M18 6L6 18"/>,
-  bell:<path d="M18 16H6c1.2-1.4 1.8-2.4 1.8-5a4.2 4.2 0 018.4 0c0 2.6.6 3.6 1.8 5zM10 19a2 2 0 004 0"/>,
-  redo:<path d="M4 16v-5a5 5 0 015-5h10M15.5 2.5L19 6l-3.5 3.5"/>,
-  check:<path d="M5 12.5l4.5 4.5L19 7.5"/>,
-  tool:<path d="M20.3 7.1a4.6 4.6 0 01-6 5.3l-6.4 6.4a2.1 2.1 0 11-3-3l6.4-6.4a4.6 4.6 0 015.3-6l-2.9 2.9 3.7 3.7z"/>,
-  box:<g><path d="M3.5 8L12 3.5 20.5 8v8L12 20.5 3.5 16z"/><path d="M3.5 8L12 12.5 20.5 8M12 12.5v8"/></g>,
-  clock:<g><circle cx="12" cy="12" r="9"/><path d="M12 7v5.2l3.4 2"/></g>,
-  chevl:<path d="M14.5 6l-6 6 6 6"/>,
-  chevr:<path d="M9.5 6l6 6-6 6"/>,
-  spark:<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>,
 };
 const I=({n,s,c})=><svg className="i" viewBox="0 0 24 24" style={{width:s,height:s,color:c}}>{PATHS[n]}</svg>;
 
-const IMG_EXT=/\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 /* Every uploaded attachment always has a url (uploadFile always sets one) — branching on file
    type by extension, not url presence, is what actually distinguishes an image from a PDF/doc.
    Both the thumbnail/chip and the download link are real links now, not dead-end text/icons. */
@@ -591,9 +576,7 @@ function App(){
   const [sheet,setSheet]=useState(null); // {kind, idx?}
   const sheetRef=useRef(null);
   useEffect(()=>{sheetRef.current=sheet;},[sheet]);
-  const [toast,setToastS]=useState(null);
-  const tRef=useRef();
-  const say=useCallback(m=>{setToastS(m);clearTimeout(tRef.current);tRef.current=setTimeout(()=>setToastS(null),2400);},[]);
+  const {toast,say}=useToast();
   const [loaded,setLoaded]=useState(false);
   const [session,setSession]=useState(undefined); // undefined=checking · null=signed out · object=signed in
   const [recovery,setRecovery]=useState(false); // true once Supabase reports this session came from a reset-password email link
@@ -913,9 +896,7 @@ function Cal({ctx,personal,allowFilter}){
     let s='BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//TeamFlow//EN\r\n';
     openVis.forEach((o,ix)=>{s+='BEGIN:VEVENT\r\nUID:tf-'+ix+'-'+Date.now()+'@teamflow\r\nDTSTART;VALUE=DATE:'+o.t.date.replace(/-/g,'')+'\r\nSUMMARY:'+o.t.t+' ('+o.t.who+')\r\nEND:VEVENT\r\n';});
     s+='END:VCALENDAR';
-    const blob=new Blob([s],{type:'text/calendar'});const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');a.href=url;a.download=iso(new Date())+'-teamflow-calendar.ics';document.body.appendChild(a);a.click();a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    saveBlob(new Blob([s],{type:'text/calendar'}),iso(new Date())+'-teamflow-calendar.ics');
     ctx.say(openVis.length+' due dates exported (.ics)');
   }
   return <div className="calwrap">
