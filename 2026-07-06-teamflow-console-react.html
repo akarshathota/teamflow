@@ -663,6 +663,19 @@ const PATHS={
 };
 const I=({n,s,c})=><svg className="i" viewBox="0 0 24 24" style={{width:s,height:s,color:c}}>{PATHS[n]}</svg>;
 
+const IMG_EXT=/\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+/* Every uploaded attachment always has a url (uploadFile always sets one) — branching on file
+   type by extension, not url presence, is what actually distinguishes an image from a PDF/doc.
+   Both the thumbnail/chip and the download icon are real links now so a boss can open or save it. */
+function FileChip({x}){
+  return <span className="filechip-wrap">
+    <a href={x.url} target="_blank" rel="noopener" title={x.name}>
+      {IMG_EXT.test(x.name||'')?<img className="thumb" src={x.url}/>:<span className="filechip"><I n="clip"/>{x.name}</span>}
+    </a>
+    <a href={x.url} download={x.name} className="dlicon" title="Download" onClick={e=>e.stopPropagation()}><I n="dl"/></a>
+  </span>;
+}
+
 /* ============ login ============ */
 function LoginScreen(){
   const [id,setId]=useState('');const [pw,setPw]=useState('');const [err,setErr]=useState('');const [busy,setBusy]=useState(false);
@@ -1174,7 +1187,7 @@ function QueuePanel({ctx}){
             <div style={{flex:1,minWidth:0}}>
               <div className="nm">{r.t} <span className="tag amber">Issue</span></div>
               <div className="rs">From {p?p.n:r.from} · {fmtDate(r.date)}{r.note?' · “'+r.note+'”':''} · direct to {head?head.n.split(' ')[0]:'—'} (maintenance head)</div>
-              {r.files&&r.files.length?<div className="filelist">{r.files.map((x,ix)=>x.url?<img key={ix} className="thumb" src={x.url} title={x.name}/>:<span key={ix} className="filechip">{x.name}</span>)}</div>:null}
+              {r.files&&r.files.length?<div className="filelist">{r.files.map((x,ix)=><FileChip key={ix} x={x}/>)}</div>:null}
               {can?<>
                 <div className="rs" style={{marginTop:6,color:'var(--accent-ink)'}}>✦ Suggested: <b>{sug?byShort(sug.s).n:'—'}</b>{sug?' — '+sug.why:''}</div>
                 <div style={{display:'flex',gap:8,marginTop:7,alignItems:'center'}}>
@@ -1409,7 +1422,7 @@ function Drawer({ctx,idx}){
       {t.selfAssigned?<div className="kv"><div className="k">Origin</div><div className="v"><span className="tag green">Self-logged</span>{t.instructedBy?' as per '+t.instructedBy:''}</div></div>:null}
       {t.extReq?<div className="kv"><div className="k">Extension</div><div className="v">asks {fmtDate(t.extReq.newDate)}{t.extReq.reason?' — “'+t.extReq.reason+'”':''}</div></div>:null}
       {t.files&&t.files.length?<div className="kv" style={{alignItems:'flex-start'}}><div className="k">Attachments</div>
-        <div className="v"><span className="filelist" style={{marginTop:0}}>{t.files.map((x,ix)=>x.url?<img key={ix} className="thumb" src={x.url} title={x.name}/>:<span key={ix} className="filechip">{x.name}</span>)}</span></div></div>:null}
+        <div className="v"><span className="filelist" style={{marginTop:0}}>{t.files.map((x,ix)=><FileChip key={ix} x={x}/>)}</span></div></div>:null}
       <div className="dr-sec">Job log — notes & updates</div>
       <textarea className="dr-note" value={note} onChange={e=>setNote(e.target.value)} placeholder="Add an update — progress, blockers, instructions… (kept forever, visible to assignee and boss)"/>
       <button className="btn soft" style={{marginTop:9}} onClick={()=>{
@@ -1420,7 +1433,7 @@ function Drawer({ctx,idx}){
         saveTask(t).catch(console.error);logTask(t,ctx.viewer.n,txt).catch(console.error);
         ctx.R();ctx.say('Added to the job log');}}><I n="note"/>Add to log</button>
       <div className="dr-sec">Add proof of work — photos & files</div>
-      {t.files&&t.files.length?<div className="filelist" style={{marginTop:0,marginBottom:8}}>{t.files.map((x,ix)=>x.url?<img key={ix} className="thumb" src={x.url} title={x.name}/>:<span key={ix} className="filechip">{x.name}</span>)}</div>:null}
+      {t.files&&t.files.length?<div className="filelist" style={{marginTop:0,marginBottom:8}}>{t.files.map((x,ix)=><FileChip key={ix} x={x}/>)}</div>:null}
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
         {[['camera','Camera',{accept:'image/*',capture:'environment'}],['image','Photos',{accept:'image/*',multiple:true}],['clip','Files',{multiple:true}]].map(([ic,l,at])=>
           <label key={l} className="btn ghost" style={{flex:1,justifyContent:'center',cursor:'pointer',minWidth:90}}>
@@ -2289,7 +2302,7 @@ function QuickCapture({ctx,close}){
       {kind==='issue'?<div className="qc-attach">
         {[['camera','Camera',{accept:'image/*',capture:'environment'}],['image','Photos',{accept:'image/*',multiple:true}],['clip','Files',{multiple:true}]].map(([ic,l,at])=>
           <label key={l} className="btn soft"><I n={ic}/>{l}<input type="file" style={{display:'none'}} onChange={filePicked} {...at}/></label>)}
-        {files.length?<div className="filelist">{files.map((x,ix)=>x.url?<img key={ix} className="thumb" src={x.url} title={x.name}/>:<span key={ix} className="filechip">{x.name}</span>)}</div>:null}
+        {files.length?<div className="filelist">{files.map((x,ix)=><FileChip key={ix} x={x}/>)}</div>:null}
       </div>:null}
       {kind!=='task'?<div className="qc-opts">
         <label>{kind==='issue'?'Extra details (optional)':'Why / for which class? (optional)'}</label>

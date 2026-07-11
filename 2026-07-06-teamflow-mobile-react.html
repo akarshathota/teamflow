@@ -502,6 +502,19 @@ const PATHS={
 };
 const I=({n,s,c})=><svg className="i" viewBox="0 0 24 24" style={{width:s,height:s,color:c}}>{PATHS[n]}</svg>;
 
+const IMG_EXT=/\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+/* Every uploaded attachment always has a url (uploadFile always sets one) — branching on file
+   type by extension, not url presence, is what actually distinguishes an image from a PDF/doc.
+   Both the thumbnail/chip and the download link are real links now, not dead-end text/icons. */
+function FileChip({f}){
+  return <span className="filechip-wrap">
+    <a href={f.url} target="_blank" rel="noopener">
+      {IMG_EXT.test(f.name||'')?<img className="thumb" src={f.url}/>:<span className="filechip">📄 {f.name}</span>}
+    </a>
+    <a href={f.url} download={f.name} className="dlicon" onClick={e=>e.stopPropagation()}>⬇</a>
+  </span>;
+}
+
 /* ============ login ============ */
 function LoginScreen(){
   const [id,setId]=useState('');const [pw,setPw]=useState('');const [err,setErr]=useState('');const [busy,setBusy]=useState(false);
@@ -764,7 +777,7 @@ function TaskCard({o,ctx,acts}){
     {t.reopened?<div className="meta" style={{marginTop:5}}><span className="tag2 amber">↻ Reopened by {t.reopened.by.split(' ')[0]}{t.reopened.comment?' — “'+t.reopened.comment+'”':''}</span></div>:null}
     {t.progress==='inprogress'&&!t.done?<div className="meta" style={{marginTop:5}}><span className="tag2 blue">🔧 In progress</span></div>:null}
     {t.note?<div className="notepv">“{t.note}”</div>:null}
-    {t.files&&t.files.length?<div className="attrow">{t.files.map((f,ix)=>f.url?<img key={ix} className="thumb" src={f.url}/>:<span key={ix} className="filechip">📄 {f.name}</span>)}</div>:null}
+    {t.files&&t.files.length?<div className="attrow">{t.files.map((f,ix)=><FileChip key={ix} f={f}/>)}</div>:null}
     <div className="meta" style={{marginTop:5}}>{t.done?'Closed'+(t.doneWhen?' · '+t.doneWhen:''):t.due}</div>
     {!t.done?<div className="cardbtns">
       <button className="btn primary" onClick={()=>ctx.setSheet({kind:'update',idx:i})}>Update / Done</button>
@@ -800,7 +813,7 @@ function Home({ctx,acts}){
             <span className="pill today">🔧 Maintenance issue</span>
             <div className="tt">{q.t}</div>
             <div className="meta"><span className="who">{q.av}</span> Reported by {q.from}</div>
-            {q.files&&q.files.length?<div className="attrow">{q.files.map((f,ix)=>f.url?<img key={ix} className="thumb" src={f.url}/>:<span key={ix} className="filechip">📄 {f.name}</span>)}</div>:null}
+            {q.files&&q.files.length?<div className="attrow">{q.files.map((f,ix)=><FileChip key={ix} f={f}/>)}</div>:null}
             <div className="meta" style={{marginTop:7,color:'var(--accent-ink)',fontWeight:600}}>✨ Suggested: {sug.n} — {sug.why}</div>
             <div className="picker" style={{marginTop:8}}>
               {['Hari','Suresh','Latha'].map(n=>{const m=findMember(n);
@@ -830,7 +843,7 @@ function WorkerPending({ctx}){
       <span className="pill today">🔧 Sent to maintenance head</span>
       <div className="tt">{q.t}</div>
       <div className="meta">Vikram will assign it to the right person</div>
-      {q.files&&q.files.length?<div className="attrow">{q.files.map((f,fx)=>f.url?<img key={fx} className="thumb" src={f.url}/>:<span key={fx} className="filechip">📄 {f.name}</span>)}</div>:null}
+      {q.files&&q.files.length?<div className="attrow">{q.files.map((f,fx)=><FileChip key={fx} f={f}/>)}</div>:null}
     </div>)}
     {myR.map((q,ix)=><div className="task" key={'wr'+ix}>
       <span className="pill today">⏳ Waiting approval</span>
@@ -1244,7 +1257,7 @@ function IssueSheet({ctx,close}){
       <label className="uploadbtn">🖼 Photos<input type="file" accept="image/*" multiple style={{display:'none'}} onChange={pickF}/></label>
       <label className="uploadbtn">📎 Files<input type="file" multiple style={{display:'none'}} onChange={pickF}/></label>
     </div>
-    {files.length?<div className="filelist">{files.map((f,ix)=>f.url?<img key={ix} className="thumb" src={f.url}/>:<span key={ix} className="filechip">📄 {f.name}</span>)}</div>:null}
+    {files.length?<div className="filelist">{files.map((f,ix)=><FileChip key={ix} f={f}/>)}</div>:null}
     <button className="send" onClick={send}>Send to maintenance head ✓</button>
   </>;
 }
@@ -1326,7 +1339,7 @@ function UpdateSheet({ctx,idx,close}){
       <label className="uploadbtn">🖼 Photos<input type="file" accept="image/*" multiple style={{display:'none'}} onChange={pickF}/></label>
       <label className="uploadbtn">📎 Files<input type="file" accept="image/*,application/pdf,.doc,.docx" multiple style={{display:'none'}} onChange={pickF}/></label>
     </div>
-    {files.length?<div className="filelist">{files.map((f,ix)=>f.url?<img key={ix} className="thumb" src={f.url}/>:<span key={ix} className="filechip">📄 {f.name}</span>)}</div>:null}
+    {files.length?<div className="filelist">{files.map((f,ix)=><FileChip key={ix} f={f}/>)}</div>:null}
     <button className="send" onClick={save}>{st==='done'?'Mark done ✓':'Save update'}</button>
   </>;
 }
