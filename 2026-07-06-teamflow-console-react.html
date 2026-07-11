@@ -1536,7 +1536,9 @@ const directReports=name=>STAFF.filter(p=>p.boss===name);
 const orgDepts=()=>STAFF.filter(p=>p.role==='Manager'); // Sr. Manager rows = department heads
 /* task creation should only offer departments that actually exist in People & roles right now,
    not the full fixed BUCKETS vocabulary regardless of whether anyone's really in it */
-const realDeptKeys=()=>{const has=new Set(STAFF.map(p=>p.dept));return Object.keys(BUCKETS).filter(k=>has.has(BUCKETS[k]));};
+/* the Administrator's own department doesn't count toward "real" — their role is running the
+   org chart, not doing task work, so their department alone shouldn't make it assignable */
+const realDeptKeys=()=>{const has=new Set(STAFF.filter(p=>p.role!=='Administrator').map(p=>p.dept));return Object.keys(BUCKETS).filter(k=>has.has(BUCKETS[k]));};
 const mgmtMembers=()=>STAFF.filter(p=>p.role==='Management');
 function orgDeepestOfType(rootName,dbRole){
   let last=null;
