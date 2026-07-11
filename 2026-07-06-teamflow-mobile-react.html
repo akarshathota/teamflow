@@ -297,7 +297,8 @@ function rowToMobileTask(row,assignRows,byId,logRows){
     due:'Due '+dueLabel(row.due_date,row.due_time?row.due_time.slice(0,5):''),
     date:row.due_date,bucket:LABEL_TO_BUCKET[row.department]||'administration',type:row.type,
     done:row.status==='done',
-    progress:(row.status==='inprogress'||row.status==='partial')?row.status:undefined,
+    /* legacy 'partial' rows collapse into 'inprogress' — the app no longer distinguishes them */
+    progress:(row.status==='inprogress'||row.status==='partial')?'inprogress':undefined,
     note:row.note||undefined,doneOn:row.done_on||undefined,
     doneWhen:row.status==='done'?fmtD(row.done_on||row.due_date):undefined,
     doneBy:doneBy.length?doneBy:undefined,
@@ -762,7 +763,6 @@ function TaskCard({o,ctx,acts}){
       <span className="tag2 amber">⏳ Pending: {assigneesM(t).filter(a=>!(t.doneBy||[]).includes(a)).join(', ')}</span></div>:null}
     {t.reopened?<div className="meta" style={{marginTop:5}}><span className="tag2 amber">↻ Reopened by {t.reopened.by.split(' ')[0]}{t.reopened.comment?' — “'+t.reopened.comment+'”':''}</span></div>:null}
     {t.progress==='inprogress'&&!t.done?<div className="meta" style={{marginTop:5}}><span className="tag2 blue">🔧 In progress</span></div>:null}
-    {t.progress==='partial'&&!t.done?<div className="meta" style={{marginTop:5}}><span className="tag2 amber">◑ Partially done</span></div>:null}
     {t.note?<div className="notepv">“{t.note}”</div>:null}
     {t.files&&t.files.length?<div className="attrow">{t.files.map((f,ix)=>f.url?<img key={ix} className="thumb" src={f.url}/>:<span key={ix} className="filechip">📄 {f.name}</span>)}</div>:null}
     <div className="meta" style={{marginTop:5}}>{t.done?'Closed'+(t.doneWhen?' · '+t.doneWhen:''):t.due}</div>
@@ -1305,12 +1305,12 @@ function UpdateSheet({ctx,idx,close}){
     } else t.done=false;
     saveTask(t).catch(console.error);
     close();ctx.R();
-    ctx.say(st==='partial'?'Marked partial ◑':'Progress updated 🔧');};
+    ctx.say('Progress updated 🔧');};
   return <>
     <h3>Update task</h3>
     <div className="sub">{t.t}</div>
     <div className="modetabs">
-      {[['inprogress','🔧 In progress'],['partial','◑ Partial'],['done','✓ Done']].map(([k,l])=>
+      {[['inprogress','🔧 In progress'],['done','✓ Done']].map(([k,l])=>
         <button key={k} className={'mtab'+(st===k?' on':'')} onClick={()=>setSt(k)}>{l}</button>)}
     </div>
     {logs.length?<div style={{marginBottom:10}}>

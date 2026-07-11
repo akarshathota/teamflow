@@ -524,7 +524,9 @@ const hasWho=(t,s)=>assignees(t).includes(s);
 const inScope=(t,sh)=>assignees(t).some(a=>sh.includes(a));
 function descendants(name){let out=[],q=STAFF.filter(p=>p.boss===name);
   while(q.length){const p=q.shift();out.push(p);q=q.concat(STAFF.filter(x=>x.boss===p.n));}return out;}
-const ST={open:{l:"Open",c:"gray"},inprogress:{l:"In progress",c:"blue"},partial:{l:"Partial",c:"amber"},done:{l:"Done",c:"green"}};
+/* 'partial' kept only so ST[...] still resolves for tasks a legacy mobile build once wrote as
+   'partial' — the status bar itself only ever shows/writes open · inprogress · done now. */
+const ST={open:{l:"Open",c:"gray"},inprogress:{l:"In progress",c:"blue"},partial:{l:"In progress",c:"blue"},done:{l:"Done",c:"green"}};
 const isOverdue=t=>t.status!=='done'&&t.date&&t.date<iso(TODAY);
 const isToday=t=>t.status!=='done'&&t.date===iso(TODAY);
 const overdueDays=t=>Math.round((new Date(iso(TODAY))-new Date(t.date))/864e5);
@@ -1338,7 +1340,8 @@ function Drawer({ctx,idx}){
   const [reassign,setReassign]=useState(false);
   const [reDate,setReDate]=useState('');
   const [reNote,setReNote]=useState('');
-  useEffect(()=>{setNote('');setReassign(false);setReDate('');setReNote('');},[idx]);
+  const [pendingDone,setPendingDone]=useState(false);
+  useEffect(()=>{setNote('');setReassign(false);setReDate('');setReNote('');setPendingDone(tasks[idx]&&tasks[idx].status==='done');},[idx]);
   if(!t)return null;
   const p=byShort(t.who),od=isOverdue(t);
   const tl=[{w:'Assigned to '+assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),d:fmtDate(t.date)+' due date set'}];
@@ -1354,8 +1357,13 @@ function Drawer({ctx,idx}){
       <button className="iconbtn" onClick={()=>ctx.setDrawerIdx(-1)}><I n="x"/></button></div>
     <div className="dr-body">
       <div className="dr-sec">Status</div>
-      <div className="segs">{Object.keys(ST).map(s=>
-        <button key={s} className={t.status===s?'on':''} onClick={()=>{if(s==='done'){const nd=completeTask(t);persistComplete(t,nd);ctx.say(nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'Status → Done');}else{t.status=s;delete t.doneOn;saveTask(t).catch(console.error);ctx.say('Status → '+ST[s].l);}ctx.R();}}>{ST[s].l}</button>)}</div>
+      <div className="segs">{['open','inprogress','done'].map(s=>{
+        const active=s==='done'?pendingDone:(!pendingDone&&(t.status===s||(s==='inprogress'&&t.status==='partial')));
+        return <button key={s} className={active?'on':''} onClick={()=>{
+          if(s==='done'){setPendingDone(true);return;}
+          setPendingDone(false);t.status=s;delete t.doneOn;saveTask(t).catch(console.error);ctx.say('Status → '+ST[s].l);ctx.R();
+        }}>{ST[s].l}</button>;})}</div>
+      {pendingDone&&t.status!=='done'?<div className="whysm" style={{margin:'6px 20px 0'}}>Click OK below to close the task.</div>:null}
       {t.coWho&&t.coWho.length?<>
         <div className="dr-sec">Completion — each member confirms</div>
         {assignees(t).map(a=>{const q=byShort(a);const dn=(t.doneBy||[]).includes(a);
@@ -1365,7 +1373,7 @@ function Drawer({ctx,idx}){
             <button className={'btn '+(dn?'primary':'ghost')} style={{padding:'6px 12px',minHeight:0}}
               onClick={()=>{t.doneBy=dn?(t.doneBy||[]).filter(x=>x!==a):[...(t.doneBy||[]),a];
                 if(assignees(t).every(x=>(t.doneBy||[]).includes(x))){const nd=completeTask(t);persistComplete(t,nd);ctx.say(nd?'All done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'All members done — task completed');}
-                else{if(t.status==='done'){t.status='open';delete t.doneOn;}saveTask(t).catch(console.error);}
+                else{if(t.status==='done'){t.status='open';delete t.doneOn;}setPendingDone(false);saveTask(t).catch(console.error);}
                 ctx.R();}}>{dn?'✓ Done':'Pending'}</button>
           </div>;})}
       </>:null}
@@ -1376,7 +1384,7 @@ function Drawer({ctx,idx}){
         <textarea className="dr-note" value={reNote} onChange={e=>setReNote(e.target.value)} placeholder="What needs to be fixed? (sent to the assignee)"/>
         <button className="btn ghost" style={{marginTop:9,color:'var(--red)'}} onClick={()=>{
           if(!reDate){ctx.say('Pick a new due date first');return;}
-          t.status='open';t.date=reDate;delete t.doneOn;t.doneBy=[];
+          setPendingDone(false);t.status='open';t.date=reDate;delete t.doneOn;t.doneBy=[];
           t.reopened={by:ctx.viewer.n,comment:reNote.trim()};
           t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
           t.log.push({by:ctx.viewer.n,when:fmtDate(iso(TODAY)),text:'Reopened — '+(reNote.trim()||'not up to the mark')});
@@ -1436,7 +1444,10 @@ function Drawer({ctx,idx}){
     <div className="dr-actions">
       <button className="btn ghost" style={{flex:1}} onClick={()=>ctx.remindPerson(t.who)}><I n="bell"/>Remind</button>
       <button className="btn ghost" style={{flex:1}} onClick={()=>setReassign(!reassign)}><I n="redo"/>Reassign</button>
-      {t.status!=='done'?<button className="btn primary" style={{flex:1}} onClick={()=>{const nd=completeTask(t);persistComplete(t,nd);ctx.R();ctx.setDrawerIdx(-1);ctx.say(nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'Task marked done');}}><I n="check"/>Done</button>:null}
+      <button className="btn primary" style={{flex:1}} onClick={()=>{
+        if(pendingDone&&t.status!=='done'){const nd=completeTask(t);persistComplete(t,nd);ctx.R();ctx.setDrawerIdx(-1);ctx.say(nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'Task marked done');}
+        else ctx.setDrawerIdx(-1);
+      }}><I n="check"/>OK</button>
     </div>
   </div>;
 }
