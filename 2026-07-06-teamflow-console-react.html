@@ -409,7 +409,7 @@ let requests=[];
 
 function rowsToStaff(rows){
   const byId=Object.fromEntries(rows.map(r=>[r.id,r]));
-  return rows.map(r=>({n:r.name,s:r.short_name,role:r.role,dept:r.department,
+  return rows.map(r=>({n:r.name,s:r.short_name,role:r.role,dept:r.department,subDept:r.sub_dept||undefined,
     boss:r.boss_id?byId[r.boss_id].name:null,bossId:r.boss_id,av:r.initials,id:r.id,authId:r.auth_user_id,
     tempCovering:r.temp_covering,tempSnap:r.temp_cover_snapshot}));
 }
@@ -1526,13 +1526,13 @@ function personLabel(p){
   if(p.role==='Management')return tier+' — '+p.n;
   return tier+' — '+p.n+' ('+p.dept+')';
 }
-async function createStaffAccount({name,role,department,boss,phone,email}){
+async function createStaffAccount({name,role,department,subDept,boss,phone,email}){
   const {data:{session}}=await sb.auth.getSession();
   const resp=await fetch('https://fumggrcamegejihenkhb.supabase.co/functions/v1/create-staff-account',{
     method:'POST',
     headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token,
       apikey:'sb_publishable_bEqR06srB99BHHdvLQy14g_-pLZPWwJ'},
-    body:JSON.stringify({name,role,department,boss:boss||null,phone:phone||null,email:email||null})});
+    body:JSON.stringify({name,role,department,subDept:subDept||null,boss:boss||null,phone:phone||null,email:email||null})});
   const j=await resp.json();
   if(!resp.ok)throw new Error(j.error||'Could not create account');
   return j;
@@ -1569,6 +1569,7 @@ function OrgNode({person,onNodeClick,canM}){
         {person.role==='Manager'?<div className="odept">{person.dept}
           {canM?<span className="org-edit-dept" title="Rename department" onClick={e=>{e.stopPropagation();onNodeClick(person,'rename-dept');}}>✎</span>:null}
         </div>:null}
+        {person.role==='Team Lead'&&person.subDept?<div className="odept">{person.subDept}</div>:null}
         {person.tempCovering?<><div className="otempflag">Temporary</div><div className="otaphint">Click to revert</div></>:null}
       </div>
     </div>
@@ -1698,6 +1699,10 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <select value={f.deptId||(depts[0]||{}).id||''} onChange={e=>setF({...f,deptId:e.target.value})}>
           {depts.map(d=><option key={d.id} value={d.id}>{d.dept}{d.n?' — '+d.n:''}</option>)}
         </select>
+        {step==='add-lead'?<>
+          <label>Sub-department name</label>
+          <input value={f.subDept||''} onChange={e=>setF({...f,subDept:e.target.value})} placeholder="e.g. Network Support (optional)"/>
+        </>:null}
       </div>
       <div className="qc-actions">
         <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
@@ -1705,6 +1710,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           const name=(f.name||'').trim();
           const deptId=f.deptId||(depts[0]||{}).id;
           const deptHead=depts.find(d=>d.id===deptId);
+          const subDept=step==='add-lead'?(f.subDept||'').trim()||undefined:undefined;
           if(!name){setErr('Enter a name.');return;}
           if(!deptHead){setErr('Pick a department.');return;}
           const dbRole=step==='add-jrm'?'Team Member':step==='add-lead'?'Team Lead':'Teacher';
@@ -1715,15 +1721,15 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
             const existing=orgDeepestOfType(deptHead.n,dbRole);
             const candidates=directReports(attachPoint.n);
             if(!existing&&candidates.length){
-              setOaCtx({dbRole,name,deptHead,attachPoint,candidates});
+              setOaCtx({dbRole,name,deptHead,attachPoint,candidates,subDept});
               setStep('add-reassign');
               return;
             }
           }
           setBusy(true);setErr('');
           try{
-            const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,boss:attachPoint.n});
-            STAFF.push({n:j.name,s:j.short_name,role:dbRole,dept:deptHead.dept,boss:attachPoint.n,bossId:attachPoint.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
+            const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,subDept,boss:attachPoint.n});
+            STAFF.push({n:j.name,s:j.short_name,role:dbRole,dept:deptHead.dept,subDept,boss:attachPoint.n,bossId:attachPoint.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
             ctx.R();say('Added '+TIER_LABEL[dbRole]+' '+name+' under '+deptHead.dept);setBusy(false);setResult(j);
           }catch(e){setBusy(false);setErr(e.message);}
         }}>{busy?'Adding…':'Add'}</button>
@@ -1731,7 +1737,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
     </ModalShell>;
   }
   if(step==='add-reassign'){
-    const {dbRole,name,deptHead,attachPoint,candidates}=oaCtx;
+    const {dbRole,name,deptHead,attachPoint,candidates,subDept}=oaCtx;
     const [checked,setChecked]=[f.checked||Object.fromEntries(candidates.map(c=>[c.id,true])),
       sel=>setF({...f,checked:sel})];
     return <ModalShell close={close} err={err} title={'Who reports to the new '+TIER_LABEL[dbRole]+'?'}
@@ -1745,8 +1751,8 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
           setBusy(true);setErr('');
           try{
-            const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,boss:attachPoint.n});
-            const newPerson={n:j.name,s:j.short_name,role:dbRole,dept:deptHead.dept,boss:attachPoint.n,bossId:attachPoint.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null};
+            const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,subDept,boss:attachPoint.n});
+            const newPerson={n:j.name,s:j.short_name,role:dbRole,dept:deptHead.dept,subDept,boss:attachPoint.n,bossId:attachPoint.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null};
             STAFF.push(newPerson);
             const moved=candidates.filter(c=>checked[c.id]!==false);
             for(const c of moved){await updateStaffFields(c.id,{boss_id:j.id});const local=byId(c.id);if(local){local.boss=j.name;local.bossId=j.id;}}

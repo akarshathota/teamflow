@@ -25,6 +25,7 @@ Deno.serve(async (req) => {
     const name = String(body.name || "").trim();
     const role = body.role;
     const department = String(body.department || "").trim();
+    const subDept = body.subDept ? String(body.subDept).trim() || null : null;
     const bossName = body.boss || null;
     const phone = body.phone || null;
     const email = String(body.email || "").trim().toLowerCase();
@@ -83,6 +84,7 @@ Deno.serve(async (req) => {
     const staffFields = {
       role,
       department,
+      sub_dept: subDept,
       boss_id: bossId,
       phone,
       auth_user_id: created.user.id,
