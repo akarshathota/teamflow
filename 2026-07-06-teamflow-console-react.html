@@ -1443,6 +1443,8 @@ function CalendarView({ctx}){
   const [selDay,setSelDay]=useState(null);
   const [fw,setFw]=useState('all');
   const [fb,setFb]=useState('all');
+  const selRef=useRef(null);
+  useEffect(()=>{if(selDay!=null)selRef.current?.scrollIntoView({behavior:'smooth',block:'nearest'});},[selDay]);
   const y=base.getFullYear(),m=base.getMonth();
   const firstDow=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate();
   const vis=tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)&&o.t.date&&(fb==='all'||o.t.bucket===fb)&&(fw==='all'||hasWho(o.t,fw)));
@@ -1488,7 +1490,7 @@ function CalendarView({ctx}){
         <span style={{marginLeft:'auto'}}><span className="ldot" style={{background:'#fff',boxShadow:'0 0 0 1.5px var(--red)'}}/>red ring = overdue</span>
       </div>:null}
     </div>
-    {selDay!=null?<div className="panel">
+    {selDay!=null?<div className="panel" ref={selRef}>
       {byDay[selDay]?<>
         <div className="h-row"><h3><I n="cal"/>Due on {selDay} {base.toLocaleString('en',{month:'long'})} — {byDay[selDay].length} task{byDay[selDay].length!=1?'s':''}</h3></div>
         {byDay[selDay].map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx}/>)}
