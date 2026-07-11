@@ -1243,16 +1243,14 @@ function ExportFormatModal({target,close,say}){
 function TasksView({ctx}){
   const [fb,setFb]=useState('all');
   const [fboss,setFboss]=useState('all');
-  const [deptSeg,setDeptSeg]=useState('me');
   const [deptFb,setDeptFb]=useState('all');
   const [exportFor,setExportFor]=useState(null);
 
   const showDept=ctx.role==='srm'||ctx.role==='mgmt';
   const isManagerTier=ctx.role==='srm';
   const bossLabelOf=n=>BOSS_LABEL[n]||n;
-  const myBossLabel=bossLabelOf(ctx.viewer.n);
 
-  const rowsMine=tasks.map((t,i)=>({t,i})).filter(o=>hasWho(o.t,ctx.viewer.s)&&(fb==='all'||o.t.bucket===fb));
+  const rowsMine=tasks.map((t,i)=>({t,i})).filter(o=>hasWho(o.t,ctx.viewer.s)&&!o.t.instructedBy&&(fb==='all'||o.t.bucket===fb));
   const rowsBoss=tasks.map((t,i)=>({t,i})).filter(o=>hasWho(o.t,ctx.viewer.s)&&o.t.instructedBy&&(fboss==='all'||o.t.instructedBy===fboss));
   // Manager's own dept-lock is intentionally "show everything in my scope" rather than a specific
   // bucket — staff.department (org-chart HR field, e.g. "Academics") and task.bucket (e.g.
@@ -1261,8 +1259,7 @@ function TasksView({ctx}){
   // real per-bucket dropdown.
   const effectiveDeptFb=isManagerTier?'all':deptFb;
   const rowsDept=showDept?tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)&&!hasWho(o.t,ctx.viewer.s)
-    &&(effectiveDeptFb==='all'||o.t.bucket===effectiveDeptFb)
-    &&(deptSeg==='me'?o.t.instructedBy===myBossLabel:o.t.instructedBy!==myBossLabel)):[];
+    &&(effectiveDeptFb==='all'||o.t.bucket===effectiveDeptFb)):[];
 
   const col=(label,rows,note)=><>
     <div className="col-head"><h3>{label}</h3>{note}<ExportKebab label={label} rows={rows} viewerName={ctx.viewer.n} onExport={setExportFor}/></div>
@@ -1298,19 +1295,15 @@ function TasksView({ctx}){
 
       {showDept?<div className="panel colpanel">
         {col('Department tasks',rowsDept,<span className="col-note">Manager · Management</span>)}
-        <div className="col-toprow" style={{flexDirection:'column',alignItems:'stretch',gap:8}}>
-          <div className="segs">
-            <button className={deptSeg==='me'?'on':''} onClick={()=>setDeptSeg('me')}>By me</button>
-            <button className={deptSeg==='others'?'on':''} onClick={()=>setDeptSeg('others')}>By others</button>
-          </div>
-          <select className="fsel" disabled={isManagerTier} value={effectiveDeptFb} onChange={e=>setDeptFb(e.target.value)}>
+        <div className="col-toprow">
+          <select className="fsel" style={{flex:1}} disabled={isManagerTier} value={effectiveDeptFb} onChange={e=>setDeptFb(e.target.value)}>
             <option value="all">All departments</option>
             {realDeptKeys().map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}
           </select>
         </div>
         {isManagerTier?<div className="col-empty-note">Fixed to your team — only Management can filter by department here.</div>:null}
         <div className="scrollbox col-scroll">
-          {rowsDept.length?rowsDept.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx}/>):<Empty t="No tasks" s="Nothing here — try switching By me/By others or the department filter."/>}
+          {rowsDept.length?rowsDept.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx}/>):<Empty t="No tasks" s="Nothing here — try clearing the department filter."/>}
         </div>
       </div>:null}
     </div>
