@@ -557,7 +557,7 @@ function suggestDue(type){const d=new Date(TODAY);
   d.setDate(d.getDate()+1);return{date:iso(d),why:'default next-day'};}
 function guessBucket(t){t=t.toLowerCase();
   if(/\b(exam|class|academic|timetable|teacher|lesson|syllabus|library)\b/.test(t))return 'academic';
-  if(/\b(projector|wifi|network|computer|smart ?board|cctv|printer|software)\b/.test(t))return 'it';
+  if(/\b(projector|wifi|network|computer|laptop|desktop|monitor|smart ?board|cctv|printer|software|hardware|server|rack|router|switch|internet)\b/.test(t))return 'it';
   if(/\b(bus|driver|vehicle|transport|route)\b/.test(t))return 'transport';
   if(/\b(leave|recruit|salary|payroll|appraisal|hiring)\b/.test(t))return 'hr';
   if(/\b(invoice|payment|purchase|order|buy|cash|fees?|budget|supplies)\b/.test(t))return 'accounts';
