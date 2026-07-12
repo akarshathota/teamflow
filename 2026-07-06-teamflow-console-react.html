@@ -517,6 +517,9 @@ const byName=n=>STAFF.find(x=>x.n===n);
 const assignees=t=>[t.who].concat(t.coWho||[]);
 const hasWho=(t,s)=>assignees(t).includes(s);
 const inScope=(t,sh)=>assignees(t).some(a=>sh.includes(a));
+/* a person's own org department, not which task buckets happen to be tagged on their tasks —
+   otherwise a stray task tagged into another department made that person show up there too */
+const inDept=(p,fb)=>fb==='all'||LABEL_TO_BUCKET[p.dept]===fb;
 function descendants(name){let out=[],q=STAFF.filter(p=>p.boss===name);
   while(q.length){const p=q.shift();out.push(p);q=q.concat(STAFF.filter(x=>x.boss===p.n));}return out;}
 /* 'partial' kept only so ST[...] still resolves for tasks a legacy mobile build once wrote as
@@ -1446,7 +1449,7 @@ function CalendarView({ctx}){
   const y=base.getFullYear(),m=base.getMonth();
   const firstDow=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate();
   const vis=tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)&&o.t.date&&(fb==='all'||o.t.bucket===fb)&&(fw==='all'||hasWho(o.t,fw)));
-  const empOpts=ctx.scope.filter(p=>fb==='all'||tasks.some(t=>hasWho(t,p.s)&&t.bucket===fb&&t.status!=='done'));
+  const empOpts=ctx.scope.filter(p=>inDept(p,fb));
   const byDay={};vis.forEach(o=>{const d=new Date(o.t.date+'T00:00:00');if(d.getFullYear()===y&&d.getMonth()===m)(byDay[d.getDate()]=byDay[d.getDate()]||[]).push(o);});
   const monthEvs=Object.values(byDay).flat();
   const bks=[...new Set(monthEvs.map(o=>o.t.bucket).filter(Boolean))];
@@ -2134,8 +2137,8 @@ function ReportsView({ctx}){
   const dn=mine.filter(t=>t.status==='done').length,ov=mine.filter(isOverdue).length;
   const rate=mine.length?Math.round(dn/mine.length*100):0;
   const segs=deliveryStats(mine);const segTot=segs.reduce((a,x)=>a+x.v,0);
-  const empOpts=ctx.scope.filter(p=>fb==='all'||tasks.some(t=>hasWho(t,p.s)&&t.bucket===fb));
-  const workers=ctx.scope.filter(p=>(fw==='all'||p.s===fw)&&(fb==='all'||tasks.some(t=>hasWho(t,p.s)&&t.bucket===fb)));
+  const empOpts=ctx.scope.filter(p=>inDept(p,fb));
+  const workers=ctx.scope.filter(p=>(fw==='all'||p.s===fw)&&inDept(p,fb));
   const load=workloadMap();
   const byEmp=fw==='all'
     ?workers.map(p=>{const tt=mine.filter(t=>hasWho(t,p.s));return [p.s,tt.length?Math.round(tt.filter(t=>t.status==='done').length/tt.length*100):0];})
