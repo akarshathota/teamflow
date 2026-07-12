@@ -640,25 +640,26 @@ function App(){
     <button className="syncb" onClick={()=>sb.auth.signOut()}>Sign out</button></div></div>;
   const role=(myRoleKey==='admin'&&previewRole)?previewRole:myRoleKey;
 
-  /* When Preview As is engaged this is a hypothetical simulation with no real backing person, so
-     keep the canonical demo persona for that role. Otherwise show whoever's actually logged in —
-     ROLES[role].name/av used to be a fixed persona per role, which showed every admin/mgmt
-     account as "Priya"/"Rajesh" regardless of who signed in. Same fix for `team`: worker/srm/jrm
-     all used to be hardcoded per-role lists (ROLES.worker.team=["Hari"], srm=Anita's exact roster,
-     jrm=Vikram's), so any other real account at those tiers would've seen the demo persona's
-     people instead of their own. worker just needs [myPerson.s] (no Teacher has reports here);
-     srm/jrm now walk the real boss_id chain via descendantsM(). Preserves each role's original
-     self-inclusion behavior exactly (srm included Anita herself in her own team, jrm did NOT
-     include Vikram in his) rather than unifying them, since that's an existing behavioral
-     distinction, not something this fix was asked to change. admin/mgmt stay on ALL_STAFF
-     unchanged — that's already role-based, not position-based, so it was never broken. */
+  /* Show whoever actually holds this role — ROLES[role].name/av used to be a fixed demo persona
+     (Anita Desai, Vikram Rao, ...) shown for every account at that tier regardless of who signed
+     in, and Preview As kept using that same fake persona+team even after real accounts existed,
+     since it has "no real backing person" of its own. Resolving Preview As to a real current
+     holder of that role (mirroring the console's roleRep()) fixes both: real logins already got
+     their own name/team here, Preview As now gets a real one too instead of Anita's fictional
+     roster. worker just needs [person.s] (no Teacher has reports here); srm/jrm walk the real
+     boss_id chain via descendantsM(). Preserves each role's original self-inclusion behavior
+     exactly (srm includes the person themself in their own team, jrm does not) rather than
+     unifying them, since that's an existing behavioral distinction, not something this fix was
+     asked to change. admin/mgmt stay on ALL_STAFF unchanged — that's already role-based, not
+     position-based, so it was never broken. */
   const previewing=role!==myRoleKey;
-  const r=previewing?ROLES[role]:{...ROLES[role],name:myPerson.n,
-    self:myPerson.s,
-    av:myPerson.n.split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase(),
-    team:role==='worker'?[myPerson.s]
-      :role==='srm'?[myPerson.s].concat(descendantsM(myPerson.s).map(p=>p.s))
-      :role==='jrm'?descendantsM(myPerson.s).map(p=>p.s)
+  const person=previewing?(ALL_PEOPLE.find(p=>DB_ROLE_TO_KEY[p.role]===role)||myPerson):myPerson;
+  const r={...ROLES[role],name:person.n,
+    self:person.s,
+    av:person.n.split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase(),
+    team:role==='worker'?[person.s]
+      :role==='srm'?[person.s].concat(descendantsM(person.s).map(p=>p.s))
+      :role==='jrm'?descendantsM(person.s).map(p=>p.s)
       :ROLES[role].team};
   const scope=r.team;
   const mine=tasks.map((t,i)=>({t,i})).filter(o=>assigneesM(o.t).some(a=>scope.includes(a)));
