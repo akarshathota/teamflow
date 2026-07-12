@@ -1376,6 +1376,7 @@ function Drawer({ctx,idx}){
       <div className="kv"><div className="k">Assignee{t.coWho&&t.coWho.length?'s':''}</div>
         <div className="v">{assignees(t).map(a=>{const q=byShort(a);return <React.Fragment key={a}><span className="avex">{q?q.av:'?'}</span>{q?q.n:a}</React.Fragment>;})}
         {t.coWho&&t.coWho.length?<span className="tag teal">joint</span>:<span className="roletag">{p?p.dept:''}</span>}</div></div>
+      {!t.selfAssigned&&t.instructedBy?<div className="kv"><div className="k">Assigned by</div><div className="v">{t.instructedBy}</div></div>:null}
       {reassign?<div className="kv"><div className="k">Move to</div><div className="v" style={{flex:1}}>
         <select className="fsel" style={{width:'100%'}} defaultValue="" onChange={e=>{if(!e.target.value)return;t.who=e.target.value;t.coWho=undefined;saveTask(t).catch(console.error);ctx.R();ctx.say('Reassigned to '+byShort(e.target.value).n);setReassign(false);}}>
           <option value="">Choose a person…</option>
@@ -1388,8 +1389,6 @@ function Drawer({ctx,idx}){
       {t.recur?<div className="kv"><div className="k">Repeats</div><div className="v"><span className="tag teal">↻ {recurLabel(t.recur,t.recurOn)}</span><span style={{fontWeight:500,color:'var(--muted)',fontSize:12.5}}>next created on completion</span></div></div>:null}
       {t.selfAssigned?<div className="kv"><div className="k">Origin</div><div className="v"><span className="tag green">Self-logged</span>{t.instructedBy?' as per '+t.instructedBy:''}</div></div>:null}
       {t.extReq?<div className="kv"><div className="k">Extension</div><div className="v">asks {fmtDate(t.extReq.newDate)}{t.extReq.reason?' — “'+t.extReq.reason+'”':''}</div></div>:null}
-      {t.files&&t.files.length?<div className="kv" style={{alignItems:'flex-start'}}><div className="k">Attachments</div>
-        <div className="v"><span className="filelist" style={{marginTop:0}}>{t.files.map((x,ix)=><FileChip key={ix} x={x}/>)}</span></div></div>:null}
       <div className="dr-sec">Job log — notes & updates</div>
       <textarea className="dr-note" value={note} onChange={e=>setNote(e.target.value)} placeholder="Add an update — progress, blockers, instructions… (kept forever, visible to assignee and boss)"/>
       <button className="btn soft" style={{marginTop:9}} onClick={()=>{
@@ -1399,7 +1398,7 @@ function Drawer({ctx,idx}){
         t.note=txt;setNote('');
         saveTask(t).catch(console.error);logTask(t,ctx.viewer.n,txt).catch(console.error);
         ctx.R();ctx.say('Added to the job log');}}><I n="note"/>Add to log</button>
-      <div className="dr-sec">Add proof of work — photos & files</div>
+      <div className="dr-sec">Attachments — files & proof of work</div>
       {t.files&&t.files.length?<div className="filelist" style={{marginTop:0,marginBottom:8}}>{t.files.map((x,ix)=><FileChip key={ix} x={x} onRemove={()=>{
         t.files=t.files.filter((_,i)=>i!==ix);
         saveTask(t).catch(console.error);
