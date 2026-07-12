@@ -8,7 +8,7 @@
    diffing first; a plausible-looking merge that quietly changes one app's behavior is worse than
    the duplication it removes. */
 
-const TODAY=new Date(2026,6,6);
+const TODAY=new Date();
 const RECURS={daily:"Daily",weekly:"Weekly",monthly:"Monthly",yearly:"Yearly"};
 const BUCKETS={academic:"Academic",maintenance:"Maintenance",construction:"Construction",hr:"HR",accounts:"Accounts",administration:"Administration",transport:"Transport",it:"IT & Systems"};
 const BUCKET_COLORS={academic:'#39638f',maintenance:'#b06e12',construction:'#8a6a52',hr:'#a34d78',accounts:'#1a7a48',administration:'#5d6672',transport:'#0e7a8f',it:'#5b5ea6'};
