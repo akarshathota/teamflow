@@ -368,6 +368,10 @@
     .drawer{width:100vw}
     .calcell{min-height:64px}
     .calev .txt{display:none}
+    .cols3{grid-template-columns:1fr}
+    .calhead{flex-wrap:wrap}
+    .calhead .spacer{flex-basis:100%;height:0}
+    .calhead .fsel{flex:1;min-width:0}
   }
   @media print{
     body>*{display:none!important}
@@ -2178,12 +2182,14 @@ function ReportsView({ctx}){
         <Bars rows={Object.keys(TYPES).map(k=>[TYPES[k],mine.filter(t=>(t.type||'work')===k).length]).filter(r=>r[1]>0)}/></div>
     </div>
     <div className="panel"><h3>Workload — open tasks per employee</h3>
+      <div style={{overflowX:'auto'}}>
       <table><thead><tr><th>Employee</th><th>Department</th><th>Open</th><th>Overdue</th><th>Done</th></tr></thead>
       <tbody>{workers.map(p=>{const tt=mine.filter(t=>hasWho(t,p.s));
         return <tr key={p.s}><td><span className="avex" style={{marginRight:8,background:avColor(p.n),color:'#fff'}}>{p.av}</span>{p.n}</td>
           <td>{p.dept}</td><td><b>{load[p.s]}</b></td>
           <td style={{color:tt.filter(isOverdue).length?'var(--red)':undefined}}>{tt.filter(isOverdue).length}</td>
           <td>{tt.filter(t=>t.status==='done').length}</td></tr>;})}</tbody></table>
+      </div>
     </div>
   </div>;
 }
