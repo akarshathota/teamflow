@@ -511,7 +511,11 @@ async function deleteStaffAccount(staffId){
   return j;
 }
 
-const ROLE_VIEWER={admin:"Akarsh",mgmt:"Rajesh Menon",srm:"Anita Desai",jrm:"Vikram Rao"};
+/* whichever real staff member currently holds this role tier — same lookup the Preview As dropdown
+   uses for its own label, so the two can never drift apart the way a hardcoded name map did (that
+   map still said "Anita Desai"/"Vikram Rao" long after the real org moved to Chandu/Imran, so every
+   Preview As selection resolved to a nonexistent person and silently showed zero tasks). */
+const roleRep=k=>STAFF.find(p=>DB_ROLE_TO_KEY[p.role]===k);
 const BOSS_LABEL={"Akarsh":"Akarsh (Admin)","Rajesh Menon":"Rajesh (Management)","Anita Desai":"Anita (Manager)","Vikram Rao":"Vikram (Team Member)"};
 const SCOPE_WORD={admin:"all teams",mgmt:"org-wide",srm:"your teams",jrm:"your team",lead:"your team"};
 
@@ -816,7 +820,7 @@ function App(){
      persona for that role (same as always). Otherwise it's whoever's actually logged in — not a
      fixed per-role persona, which used to show every admin/mgmt account as "Priya"/"Rajesh". */
   const previewing=role!==myRoleKey;
-  const viewer=previewing?(byName(ROLE_VIEWER[role])||{n:'',s:'',role:'',dept:'',boss:null,av:''}):myStaff;
+  const viewer=previewing?(roleRep(role)||{n:'',s:'',role:'',dept:'',boss:null,av:''}):myStaff;
   /* admin/mgmt see the whole org regardless of where they sit in the boss_id tree (matches their
      RLS access and mobile's ALL_STAFF team) — walking descendants() from a specific person only
      makes sense for the tree-scoped srm/jrm roles. */
@@ -935,7 +939,7 @@ function App(){
           <div className="side-lab">Preview as</div>
           <select className="roleSel" value={role} onChange={e=>setRole(e.target.value)}>
             {[['admin','Administrator'],['mgmt','Management'],['srm','Manager'],['jrm','Team Member']].map(([k,label])=>{
-              const person=k==='admin'?myStaff:STAFF.find(p=>DB_ROLE_TO_KEY[p.role]===k);
+              const person=k==='admin'?myStaff:roleRep(k);
               return <option key={k} value={k}>{label}{person?' · '+person.n.split(' ')[0]:''}</option>;})}
           </select>
         </>:<>
