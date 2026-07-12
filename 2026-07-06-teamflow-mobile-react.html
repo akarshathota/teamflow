@@ -317,7 +317,7 @@ async function loadAll(){
     sb.from('notices').select('*').order('created_at',{ascending:false})
   ]);
   const byId=Object.fromEntries((staffRows||[]).map(r=>[r.id,{name:r.name,short:r.short_name,initials:r.initials}]));
-  ALL_PEOPLE.length=0;ALL_PEOPLE.push(...(staffRows||[]).map(r=>({n:r.name,s:r.short_name,id:r.id,authId:r.auth_user_id,role:r.role,
+  ALL_PEOPLE.length=0;ALL_PEOPLE.push(...(staffRows||[]).map(r=>({n:r.name,s:r.short_name,id:r.id,authId:r.auth_user_id,role:r.role,department:r.department,
     boss:r.boss_id&&byId[r.boss_id]?byId[r.boss_id].short:null})));
   MEMBERS.length=0;MEMBERS.push(...(staffRows||[]).map(r=>({
     n:r.short_name,i:r.initials,dept:r.department,role:JOB_TITLE[r.short_name]||r.role,
@@ -657,6 +657,10 @@ function App(){
   const r={...ROLES[role],name:person.n,
     self:person.s,
     av:person.n.split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase(),
+    // admin/mgmt are org-wide, not tied to a department, so their org string stays the fixed
+    // "Greenwood School · <tier>" text — everyone else's real department replaces the old
+    // hardcoded one (e.g. "Manager · Academic + Admin" regardless of who was previewed).
+    org:(role==='admin'||role==='mgmt')?ROLES[role].org:person.role+' · '+(person.department||''),
     team:role==='worker'?[person.s]
       :role==='srm'?[person.s].concat(descendantsM(person.s).map(p=>p.s))
       :role==='jrm'?descendantsM(person.s).map(p=>p.s)
