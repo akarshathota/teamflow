@@ -6,11 +6,59 @@
 // Administrator/Management accounts log in with a real email (required in the request).
 // Everyone else gets a generated username @teamflow.demo and a generated password, both
 // returned once in the response for the calling admin to relay to the new person.
+//
+// Self-contained: inlines its own CORS/json/randomPassword/verifyAdmin instead of importing
+// ../_shared/helpers.ts, so it works standalone if pasted alone into the Supabase Dashboard's
+// function editor (how it's actually deployed — see supabase/OPERATIONS.md). _shared/helpers.ts
+// still holds the canonical copies.
 
-import { CORS, json, randomPassword, verifyAdmin } from "../_shared/helpers.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const CONSOLE_ROLES = ["Administrator", "Management", "Manager", "Team Lead", "Team Member", "Teacher"];
 const ADMIN_TIER = ["Administrator", "Management"];
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info",
+};
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
+}
+
+function randomPassword(len = 14) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+  const arr = new Uint32Array(len);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, (n) => chars[n % chars.length]).join("");
+}
+
+// Verifies the caller's session and that they're Administrator/Management. On success returns a
+// service_role client (bypasses RLS for the rest of the handler) plus the caller's own staff
+// id/name (so the handler can record who did this in admin_activity_log); on failure returns the
+// Response to return immediately.
+async function verifyAdmin(
+  req: Request,
+  action: string,
+): Promise<{ admin: ReturnType<typeof createClient>; actorId: string; actorName: string } | { error: Response }> {
+  const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!jwt) return { error: json({ error: "Missing Authorization" }, 401) };
+
+  const url = Deno.env.get("SUPABASE_URL")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  const asCaller = createClient(url, anonKey, { global: { headers: { Authorization: `Bearer ${jwt}` } } });
+  const { data: { user }, error: userErr } = await asCaller.auth.getUser();
+  if (userErr || !user) return { error: json({ error: "Invalid session" }, 401) };
+
+  const admin = createClient(url, serviceKey);
+  const { data: callerStaff } = await admin.from("staff").select("id, name, role").eq("auth_user_id", user.id).maybeSingle();
+  if (!callerStaff || !ADMIN_TIER.includes(callerStaff.role)) {
+    return { error: json({ error: `Only Administrator or Management can ${action}` }, 403) };
+  }
+  return { admin, actorId: callerStaff.id, actorName: callerStaff.name };
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -19,7 +67,7 @@ Deno.serve(async (req) => {
   try {
     const verified = await verifyAdmin(req, "create accounts");
     if ("error" in verified) return verified.error;
-    const { admin } = verified;
+    const { admin, actorId } = verified;
 
     const body = await req.json().catch(() => ({}));
     const name = String(body.name || "").trim();
@@ -98,6 +146,17 @@ Deno.serve(async (req) => {
       await admin.auth.admin.deleteUser(created.user.id); // don't leave an orphaned login with no staff row
       return json({ error: "Could not create staff record: " + staffErr.message }, 500);
     }
+
+    // Best-effort audit trail — a logging failure shouldn't turn a successful account creation
+    // into an error response for the admin who just did it.
+    const { error: logErr } = await admin.from("admin_activity_log").insert({
+      actor_staff_id: actorId,
+      action: "create_staff",
+      target_staff_id: staffRow.id,
+      target_name: name,
+      detail: { role, department, subDept, login: loginEmail, linkedExisting: !!existing },
+    });
+    if (logErr) console.error("[create-staff-account] admin_activity_log insert failed:", logErr.message);
 
     return json({
       id: staffRow.id,

@@ -1,8 +1,10 @@
-// Shared by every admin-only Edge Function in this project (create/delete staff, reset password).
-// Each function used to carry its own copy of CORS headers, the json() responder, randomPassword(),
-// and the "verify caller is Administrator/Management" block — byte-identical except for the one
-// error-message string. Supabase bundles relative imports like this at deploy time, so splitting
-// it out costs nothing per-function.
+// Canonical reference copy of the logic shared by every admin-only Edge Function in this project
+// (create/delete staff, reset password, update login). As of 2026-07-14 every function in
+// supabase/functions/*/index.ts inlines its own copy of this instead of importing from here —
+// they're deployed via the Supabase Dashboard's browser code editor, which needs each file to be
+// self-contained/paste-able on its own (see supabase/OPERATIONS.md). This file is no longer
+// imported by anything, but is kept as the one place that documents the canonical shape; if you
+// change the logic here, copy the change into each function's inlined version too.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -25,13 +27,14 @@ export function randomPassword(len = 14) {
 }
 
 // Verifies the caller's session and that they're Administrator/Management. On success returns a
-// service_role client (bypasses RLS for the rest of the handler); on failure returns the Response
-// to return immediately. `action` only fills in the one word that differs per caller ("create
-// accounts" / "remove staff" / "reset passwords").
+// service_role client (bypasses RLS for the rest of the handler) plus the caller's own staff
+// id/name (used to record who did it in admin_activity_log); on failure returns the Response to
+// return immediately. `action` only fills in the one word that differs per caller ("create
+// accounts" / "remove staff" / "reset passwords" / "change login details").
 export async function verifyAdmin(
   req: Request,
   action: string,
-): Promise<{ admin: ReturnType<typeof createClient> } | { error: Response }> {
+): Promise<{ admin: ReturnType<typeof createClient>; actorId: string; actorName: string } | { error: Response }> {
   const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
   if (!jwt) return { error: json({ error: "Missing Authorization" }, 401) };
 
@@ -44,9 +47,9 @@ export async function verifyAdmin(
   if (userErr || !user) return { error: json({ error: "Invalid session" }, 401) };
 
   const admin = createClient(url, serviceKey);
-  const { data: callerStaff } = await admin.from("staff").select("role").eq("auth_user_id", user.id).maybeSingle();
+  const { data: callerStaff } = await admin.from("staff").select("id, name, role").eq("auth_user_id", user.id).maybeSingle();
   if (!callerStaff || !ADMIN_TIER.includes(callerStaff.role)) {
     return { error: json({ error: `Only Administrator or Management can ${action}` }, 403) };
   }
-  return { admin };
+  return { admin, actorId: callerStaff.id, actorName: callerStaff.name };
 }

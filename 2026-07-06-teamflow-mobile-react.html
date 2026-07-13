@@ -259,15 +259,28 @@ const ROLES={
   jrm:{name:"Vikram Rao",org:"Team Member · Maintenance head",av:"V",team:["Hari","Suresh","Latha"],self:"Vikram",rank:3,
     tabs:["home","alltasks","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
     brief:"Your team: Hari has 1 task overdue 4 days. Assign or remind to keep things on track."},
+  /* 'Team Lead' (DB_ROLE_TO_KEY, shared.js) sits between jrm and worker in the reporting chain and
+     "behaves like jrm everywhere a role-key gate exists today" — same tabs/admin/billing/canPost
+     shape as jrm. name/org/av/team/self are placeholder demo values only, same as every other
+     entry here — real logins and Preview As both resolve to a real person at render time (see
+     App's `person` lookup below), so these are never actually shown. rank matches jrm's so
+     bossesFor() treats a Team Lead's chain identically to a Team Member's. Without this entry, a
+     real Team Lead login hit ROLES[role] being undefined and crashed. */
+  lead:{name:"Team Lead",org:"Team Lead",av:"T",team:[],self:"",rank:3,
+    tabs:["home","alltasks","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
+    brief:""},
   worker:{name:"Hari Charan",org:"Teacher",av:"H",team:["Hari"],self:"Hari",rank:4,
     tabs:["alltasks","calendar","notices"],admin:false,billing:false,canPost:false,brief:""}
 };
 const CHAIN=[{rank:0,label:"Akarsh (Admin)"},{rank:1,label:"Rajesh (Management)"},{rank:2,label:"Anita (Manager)"},{rank:3,label:"Vikram (Team Member)"}];
 const bossesFor=role=>CHAIN.filter(c=>c.rank<ROLES[role].rank).map(c=>c.label);
-/* same approval model as the console: admin/mgmt approve anything, otherwise only the person's direct boss */
-const FIRST=n=>String(n).split(' ')[0];
-const BOSS_ROLE={Meena:'srm',Kavya:'srm',Ravi:'srm',Vikram:'srm',Hari:'jrm',Suresh:'jrm',Latha:'jrm',Arjun:'mgmt',Deepa:'mgmt',Anita:'mgmt',Rajesh:'admin'};
-const canApproveFrom=(role,from)=>role==='admin'||role==='mgmt'||BOSS_ROLE[FIRST(from)]===role;
+/* same approval model as the console's canApprove: admin/mgmt approve anything, otherwise only the
+   person's real direct boss (checked live via ALL_PEOPLE/findPerson, matching console's
+   `p.boss===viewer.n` exactly) — not a hardcoded name→role table. The old BOSS_ROLE map only ever
+   covered the original ~10 demo first names and silently failed (denied) for anyone hired since,
+   e.g. Chandu (Construction) or Prashant (IT & Systems). viewerShort is the short name of whoever
+   is actually viewing (real login or Preview As person), passed in by each call site. */
+const canApproveFrom=(role,from,viewerShort)=>{const p=findPerson(from);return role==='admin'||role==='mgmt'||!!(p&&p.boss===viewerShort);};
 const canAssignIssues=role=>role==='admin'||role==='mgmt'||role==='jrm'; /* jrm = Vikram, maintenance head */
 
 /* every staff row, incl. Priya/Rajesh/Anita-the-manager — for resolving requesters/approvers.
@@ -674,7 +687,7 @@ function App(){
     org:(role==='admin'||role==='mgmt')?ROLES[role].org:person.role+' · '+(person.department||''),
     team:role==='worker'?[person.s]
       :role==='srm'?[person.s].concat(descendantsM(person.s).map(p=>p.s))
-      :role==='jrm'?descendantsM(person.s).map(p=>p.s)
+      :(role==='jrm'||role==='lead')?descendantsM(person.s).map(p=>p.s)
       :ROLES[role].team};
   const scope=r.team;
   const mine=tasks.map((t,i)=>({t,i})).filter(o=>assigneesM(o.t).some(a=>scope.includes(a)));
@@ -683,8 +696,8 @@ function App(){
   const todayN=mine.filter(o=>!o.t.done&&o.t.date===iso(TODAY)).length;
   const waitN=role==='worker'?0
     :(canAssignIssues(role)?pendingIssues.length:0)
-    +pendingReqs.filter(q=>canApproveFrom(role,q.from)).length
-    +tasks.filter(t=>t.extReq&&canApproveFrom(role,t.who)).length;
+    +pendingReqs.filter(q=>canApproveFrom(role,q.from,person.s)).length
+    +tasks.filter(t=>t.extReq&&canApproveFrom(role,t.who,person.s)).length;
 
   const switchRole=v=>{setPreviewRole(v);const rr=ROLES[v];if(!rr.tabs.includes(page))setPage(rr.tabs[0]);setSheet(null);};
   const ctx={role,r,scope,mine,say,R,setSheet,setPage,page,notifs};
@@ -747,7 +760,7 @@ function App(){
           <select className="rolesel" value={role} onChange={e=>switchRole(e.target.value)}>
             <option value="admin">Administrator</option><option value="mgmt">Management</option>
             <option value="srm">Manager</option><option value="jrm">Team Member</option>
-            <option value="worker">Teacher</option>
+            <option value="lead">Team Lead</option><option value="worker">Teacher</option>
           </select>
         </>:<span className="rolesel">{myPerson.n}</span>}
         <button className="uploadbtn" style={{flex:'0 0 auto',padding:'6px 10px',fontSize:11}} onClick={()=>sb.auth.signOut()}>Sign out</button>
@@ -819,8 +832,8 @@ function TaskCard({o,ctx,acts}){
 
 /* ============ home ============ */
 function Home({ctx,acts}){
-  const exts=tasks.map((t,i)=>({t,i})).filter(o=>o.t.extReq&&canApproveFrom(ctx.role,o.t.who));
-  const reqs=pendingReqs.map((q,qi)=>({q,qi})).filter(o=>canApproveFrom(ctx.role,o.q.from));
+  const exts=tasks.map((t,i)=>({t,i})).filter(o=>o.t.extReq&&canApproveFrom(ctx.role,o.t.who,ctx.r.self));
+  const reqs=pendingReqs.map((q,qi)=>({q,qi})).filter(o=>canApproveFrom(ctx.role,o.q.from,ctx.r.self));
   return <div>
     {ctx.role!=='worker'?<>
       {exts.length?<><div className="sec">Time extension requests</div>
@@ -1008,7 +1021,6 @@ function Notices({ctx}){
           style={{width:'100%',border:'none',borderBottom:'1.5px solid var(--line)',fontSize:16,fontWeight:600,padding:'6px 0',outline:'none',fontFamily:'inherit',color:'var(--ink)',background:'none'}}/>
         <textarea value={b} onChange={e=>setB(e.target.value)} placeholder="Write the message…" rows={3}
           style={{width:'100%',border:'none',fontSize:14,padding:'10px 0 0',outline:'none',resize:'none',fontFamily:'inherit',color:'var(--ink)',background:'none'}}/>
-        <span className="aibadge">✨ Auto-translate to 9 languages</span>
         <button className="send" style={{marginTop:12}} onClick={post}>Post &amp; broadcast on WhatsApp 📣</button>
       </div></>:<div className="sec">Notices for you</div>}
     <div className="sec" style={{marginTop:16}}>Recent</div>

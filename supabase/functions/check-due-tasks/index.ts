@@ -2,9 +2,21 @@
 // user — so it checks Postgres/Deno's own clock for what's overdue or due today, and works even if
 // nobody has the app open. Writes one row per assignee into task_notifications (in-app only for
 // now — the client shows these as a bell/badge; no email/push is wired in yet).
+//
+// Self-contained: inlines its own CORS/json instead of importing ../_shared/helpers.ts, so it works
+// standalone if pasted alone into the Supabase Dashboard's function editor (how it's actually
+// deployed — see supabase/OPERATIONS.md). _shared/helpers.ts still holds the canonical copies.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { CORS, json } from "../_shared/helpers.ts";
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info",
+};
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -61,6 +73,16 @@ Deno.serve(async (req) => {
       notified = rows.length;
     }
   }
+
+  // Health signal for console's "last cron run" indicator (see the cron_runs migration for why a
+  // dedicated table exists instead of reading task_notifications directly — that table's RLS is
+  // scoped per-recipient with no admin bypass, so it'd often look empty on a day the cron ran fine
+  // and correctly found nothing to flag). Best-effort — a failure to record the run shouldn't turn
+  // an otherwise-successful cron run into an error response.
+  const { error: cronLogErr } = await admin
+    .from("cron_runs")
+    .insert({ overdue_count: overdue.length, due_today_count: dueToday.length, notified_count: notified });
+  if (cronLogErr) console.error("[check-due-tasks] cron_runs insert failed:", cronLogErr.message);
 
   return json({ today, overdue: overdue.length, dueToday: dueToday.length, notified });
 });
