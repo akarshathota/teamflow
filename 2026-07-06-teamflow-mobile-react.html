@@ -447,7 +447,7 @@ function guessBucket(t){t=t.toLowerCase();
   if(/\b(bus|driver|vehicle|transport|route)\b/.test(t))return 'transport';
   if(/\b(leave|recruit|salary|payroll|appraisal|hiring)\b/.test(t))return 'hr';
   if(/\b(invoice|payment|purchase|order|buy|cash|fees?|budget|supplies|stock)\b/.test(t))return 'accounts';
-  if(/\b(build|construction|civil|wall|cement)\b/.test(t))return 'construction';
+  if(/\b(build|construction|civil|wall|cement|slab|elevation|surveyor|turf)\b/.test(t))return 'construction';
   if(/\b(repair|fix|broken|leak|clean|service|maintain)\b/.test(t))return 'maintenance';
   return 'administration';}
 function suggestDue(type,text){const t=(text||'').toLowerCase();
