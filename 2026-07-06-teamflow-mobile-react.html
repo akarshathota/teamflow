@@ -33,6 +33,9 @@
   .hello{font-size:13px;color:var(--muted);line-height:1.45}
   .hello b{color:var(--ink);font-weight:700}
   .av{width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+  .bell-btn{position:relative;background:none;border:none;padding:6px;color:var(--ink);cursor:pointer}
+  .bell-badge{position:absolute;top:0;right:0;background:var(--red);color:#fff;font-size:9.5px;font-weight:700;
+    border-radius:8px;min-width:15px;height:15px;padding:0 3px;display:flex;align-items:center;justify-content:center;line-height:1}
   .rolebar{display:flex;align-items:center;gap:8px;margin-top:12px;background:#f1f0e9;border-radius:9px;padding:8px 10px}
   .rolebar .demo{font-size:10px;font-weight:700;letter-spacing:.5px;color:var(--accent-ink);background:var(--accent-soft);padding:3px 7px;border-radius:6px;white-space:nowrap}
   .rolesel{flex:1;border:none;background:none;font-family:inherit;font-size:13.5px;font-weight:700;color:var(--ink);outline:none;cursor:pointer}
@@ -237,6 +240,7 @@ let tasks=[];
 let pendingReqs=[];
 let pendingIssues=[];
 let notices=[];
+let notifs=[];
 const peopleDemo=[
   {n:"Hari Charan", s:"In · 8:58", c:"var(--green)"},{n:"Meena Rao", s:"Late · 9:24", c:"var(--amber)"},
   {n:"Ravi Kumar", s:"In · 8:41", c:"var(--green)"},{n:"Anita Desai", s:"Absent — no leave", c:"var(--red)"},
@@ -308,13 +312,14 @@ function rowToMobileTask(row,assignRows,byId,logRows){
   return t;
 }
 async function loadAll(){
-  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},{data:noticeRows}]=await Promise.all([
+  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},{data:noticeRows},notifRows]=await Promise.all([
     sb.from('staff').select('*'),
     sb.from('tasks').select('*'),
     sb.from('task_assignees').select('*'),
     sb.from('task_log').select('*').order('created_at'),
     sb.from('requests').select('*').order('created_at'),
-    sb.from('notices').select('*').order('created_at',{ascending:false})
+    sb.from('notices').select('*').order('created_at',{ascending:false}),
+    loadNotifs()
   ]);
   const byId=Object.fromEntries((staffRows||[]).map(r=>[r.id,{name:r.name,short:r.short_name,initials:r.initials}]));
   ALL_PEOPLE.length=0;ALL_PEOPLE.push(...(staffRows||[]).map(r=>({n:r.name,s:r.short_name,id:r.id,authId:r.auth_user_id,role:r.role,department:r.department,
@@ -332,6 +337,7 @@ async function loadAll(){
   pendingIssues.length=0;pendingIssues.push(...(reqRows||[]).filter(r=>r.kind==='issue').map(r=>
     ({id:r.id,t:r.title,from:r.from_short,av:r.from_init,files:r.files&&r.files.length?r.files:undefined})));
   notices.length=0;notices.push(...(noticeRows||[]).map(r=>({id:r.id,t:r.title,b:r.body||'',d:fmtD(r.created_at.slice(0,10))})));
+  notifs.length=0;notifs.push(...(notifRows||[]));
 }
 function mobileTaskRow(t){
   return {title:t.t,type:t.type||'work',department:BUCKETS[t.bucket]||t.bucket,
@@ -624,6 +630,7 @@ function App(){
       .on('postgres_changes',{event:'*',schema:'public',table:'task_log'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'requests'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'notices'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'task_notifications'},refetch)
       .subscribe();
     return ()=>{clearTimeout(t);sb.removeChannel(ch);};
   },[session]);
@@ -680,7 +687,7 @@ function App(){
     +tasks.filter(t=>t.extReq&&canApproveFrom(role,t.who)).length;
 
   const switchRole=v=>{setPreviewRole(v);const rr=ROLES[v];if(!rr.tabs.includes(page))setPage(rr.tabs[0]);setSheet(null);};
-  const ctx={role,r,scope,mine,say,R,setSheet,setPage,page};
+  const ctx={role,r,scope,mine,say,R,setSheet,setPage,page,notifs};
 
   const needExt=t=>{if(t.done||!t.date)return false;const lim=new Date(TODAY);lim.setDate(lim.getDate()+2);return t.date<=iso(lim);};
 
@@ -712,6 +719,13 @@ function App(){
       saveTask(t).catch(console.error);
       say('Extension rejected — original due date stands');},
     needExt,
+    /* opening a notification always jumps to the real signed-in user's own task, regardless of
+       whatever role "Preview As" is currently simulating — the notification IS theirs (RLS-scoped) */
+    openNotif:n=>{markNotifRead(n.id).catch(console.error);n.read_at=new Date().toISOString();R();
+      const idx=tasks.findIndex(x=>x.id===n.task_id);if(idx>=0)setSheet({kind:'update',idx});else setSheet(null);},
+    markAllNotifsSeen:()=>{const ids=notifs.filter(n=>!n.read_at).map(n=>n.id);
+      if(!ids.length)return;markAllNotifsRead(ids).catch(console.error);
+      notifs.forEach(n=>{if(!n.read_at)n.read_at=new Date().toISOString();});R();},
   };
 
   return <>
@@ -719,7 +733,13 @@ function App(){
     <div className="top">
       <div className="row">
         <div className="hello">Good morning,<br/><b>{r.name}</b> · <span>{r.org}</span></div>
-        <div className="av">{r.av}</div>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <button className="bell-btn" onClick={()=>setSheet({kind:'notifs'})} aria-label="Notifications">
+            <I n="bell" s={20}/>
+            {notifs.filter(n=>!n.read_at).length?<span className="bell-badge">{notifs.filter(n=>!n.read_at).length>9?'9+':notifs.filter(n=>!n.read_at).length}</span>:null}
+          </button>
+          <div className="av">{r.av}</div>
+        </div>
       </div>
       <div className="rolebar">
         {myRoleKey==='admin'?<>
@@ -1050,8 +1070,27 @@ function Sheets({ctx,acts,sheet}){
       {sheet.kind==='reassign'&&<ReassignSheet ctx={ctx} idx={sheet.idx} close={close}/>}
       {sheet.kind==='event'&&<EventSheet ctx={ctx} idx={sheet.idx} close={close}/>}
       {sheet.kind==='day'&&<DaySheet ctx={ctx} day={sheet.day} events={sheet.events} close={close}/>}
+      {sheet.kind==='notifs'&&<NotifSheet ctx={ctx} acts={acts} close={close}/>}
     </div>
   </div>;
+}
+function NotifSheet({ctx,acts,close}){
+  const unread=ctx.notifs.filter(n=>!n.read_at);
+  return <>
+    <h3>Notifications
+      {unread.length?<span style={{float:'right',fontSize:12.5,fontWeight:600,color:'var(--accent-ink)',cursor:'pointer'}} onClick={acts.markAllNotifsSeen}>Mark all read</span>:null}
+    </h3>
+    <div style={{maxHeight:400,overflowY:'auto'}}>
+      {ctx.notifs.length?ctx.notifs.map(n=>{
+        const t=tasks.find(x=>x.id===n.task_id);
+        return <div key={n.id} className="task" style={{cursor:'pointer',opacity:n.read_at?0.55:1}} onClick={()=>acts.openNotif(n)}>
+          <div className="stripe" style={{background:n.kind==='overdue'?'var(--red)':'var(--amber)'}}/>
+          <div className="tt">{t?t.t:'(task removed)'}</div>
+          <div className="meta">{n.kind==='overdue'?'Overdue':'Due today'} · {fmtD(n.for_date)}</div>
+        </div>;
+      }):<div className="empty">No notifications</div>}
+    </div>
+  </>;
 }
 function Actions({ctx}){
   return <>

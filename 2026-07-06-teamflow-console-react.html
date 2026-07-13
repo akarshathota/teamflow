@@ -65,6 +65,9 @@
   .sd-head{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);padding:8px 10px 4px}
   .sd-empty{padding:16px 12px;color:var(--muted);font-size:13px;text-align:center}
   .av{width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+  .bell-btn{position:relative}
+  .bell-badge{position:absolute;top:2px;right:2px;background:var(--red);color:#fff;font-size:9.5px;font-weight:700;
+    border-radius:8px;min-width:15px;height:15px;padding:0 3px;display:flex;align-items:center;justify-content:center;line-height:1}
 
   .btn{border:none;border-radius:8px;padding:9px 15px;font-size:13.5px;font-weight:700;cursor:pointer;
     display:inline-flex;align-items:center;gap:7px;transition:filter .15s,background .15s,transform .1s}
@@ -411,6 +414,7 @@ const MAINT_HEAD="Vikram Rao";
 let STAFF=[];
 let tasks=[];
 let requests=[];
+let notifs=[];
 
 function rowsToStaff(rows){
   const byId=Object.fromEntries(rows.map(r=>[r.id,r]));
@@ -444,12 +448,13 @@ function rowToRequest(row){
     note:row.note||"",files:row.files&&row.files.length?row.files:undefined};
 }
 async function loadAll(){
-  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows}]=await Promise.all([
+  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},notifRows]=await Promise.all([
     sb.from('staff').select('*'),
     sb.from('tasks').select('*'),
     sb.from('task_assignees').select('*'),
     sb.from('task_log').select('*').order('created_at'),
-    sb.from('requests').select('*').order('created_at')
+    sb.from('requests').select('*').order('created_at'),
+    loadNotifs()
   ]);
   STAFF.length=0;STAFF.push(...rowsToStaff(staffRows||[]));
   const byId=Object.fromEntries(STAFF.map(p=>[p.id,p]));
@@ -459,6 +464,7 @@ async function loadAll(){
   tasks.length=0;tasks.push(...(taskRows||[]).map(r=>rowToTask(r,assignRows||[],logRows||[]))
     .sort((a,b)=>(a.date||'')<(b.date||'')?-1:1));
   requests.length=0;requests.push(...(reqRows||[]).map(rowToRequest));
+  notifs.length=0;notifs.push(...(notifRows||[]));
 }
 function taskRow(t){
   return {title:t.t,type:t.type||'work',department:BUCKETS[t.bucket]||t.bucket,priority:t.prio||'med',
@@ -778,6 +784,7 @@ function App(){
       .on('postgres_changes',{event:'*',schema:'public',table:'task_log'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'requests'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'notices'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'task_notifications'},refetch)
       .subscribe();
     return ()=>{clearTimeout(t);sb.removeChannel(ch);};
   },[session]);
@@ -893,6 +900,14 @@ function App(){
     saveTask(t).catch(console.error);
     say('Extension rejected — original due date stands');};
 
+  /* opening a notification always jumps to the real signed-in user's own task list, regardless of
+     whatever role "Preview As" is currently simulating — the notification IS theirs (RLS-scoped) */
+  const openNotif=n=>{markNotifRead(n.id).catch(console.error);n.read_at=new Date().toISOString();R();
+    const idx=tasks.findIndex(x=>x.id===n.task_id);setView('tasks');if(idx>=0)setDrawerIdx(idx);};
+  const markAllNotifsSeen=()=>{const ids=notifs.filter(n=>!n.read_at).map(n=>n.id);
+    if(!ids.length)return;markAllNotifsRead(ids).catch(console.error);
+    notifs.forEach(n=>{if(!n.read_at)n.read_at=new Date().toISOString();});R();};
+
   function exportCSV(kind){
     if(kind==='tasks'){
       const rows=[['Task','Type','Department','Priority','Repeats','Assignee','Due','Status','Overdue','Note']];
@@ -926,7 +941,8 @@ function App(){
 
   const ctx={role,view,setView,say,R,scope,shorts,viewer,treeRoot,mine,canApprove,canAssignIssue,bossChain,
     quickDone,remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,
-    setDrawerIdx,setModal,setResetTarget,exportCSV,printReport,qReqs,qExts,attentionList};
+    setDrawerIdx,setModal,setResetTarget,exportCSV,printReport,qReqs,qExts,attentionList,
+    notifs,openNotif,markAllNotifsSeen};
 
   return <div className="app">
     <aside className="sidebar">
@@ -987,6 +1003,8 @@ function App(){
 /* ============ topbar + search ============ */
 function Topbar({ctx,searchRef}){
   const [q,setQ]=useState('');
+  const [bellOpen,setBellOpen]=useState(false);
+  const unread=ctx.notifs.filter(n=>!n.read_at);
   const TITLES={dashboard:"Dashboard",tasks:"Tasks",calendar:"Team calendar",people:"People & roles",reports:"Reports"};
   const ql=q.trim().toLowerCase();
   const tHits=ql?tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)&&(o.t.t.toLowerCase().includes(ql)||assignees(o.t).some(a=>byShort(a)&&byShort(a).n.toLowerCase().includes(ql)))).slice(0,5):[];
@@ -1007,6 +1025,24 @@ function Topbar({ctx,searchRef}){
           {pHits.map(p=><div key={'p'+p.s} className="sd-item" onClick={()=>{setQ('');ctx.setView('people');}}>
             <span className="avex" style={{background:avColor(p.n),color:'#fff'}}>{p.av}</span><div><div className="t">{p.n}</div><div className="m">{p.role} · {p.dept}</div></div></div>)}
           {!tHits.length&&!pHits.length?<div className="sd-empty">No matches for “{q}”</div>:null}
+        </div>:null}
+      </div>
+      <div className="searchwrap">
+        <button className="btn ghost bell-btn" onClick={()=>setBellOpen(o=>!o)} aria-label="Notifications">
+          <I n="bell"/>{unread.length?<span className="bell-badge">{unread.length>9?'9+':unread.length}</span>:null}
+        </button>
+        {bellOpen?<div className="searchdrop" style={{width:320}}>
+          <div className="sd-head" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span>Notifications</span>
+            {unread.length?<span style={{cursor:'pointer',textTransform:'none',fontWeight:600,color:'var(--accent-ink)'}} onClick={()=>ctx.markAllNotifsSeen()}>Mark all read</span>:null}
+          </div>
+          {ctx.notifs.length?ctx.notifs.slice(0,20).map(n=>{
+            const t=tasks.find(x=>x.id===n.task_id);
+            return <div key={n.id} className="sd-item" style={{opacity:n.read_at?0.55:1}} onClick={()=>{setBellOpen(false);ctx.openNotif(n);}}>
+              <span className="avex" style={{background:n.kind==='overdue'?'var(--red)':'var(--amber)',color:'#fff'}}>{n.kind==='overdue'?'!':'•'}</span>
+              <div><div className="t">{t?t.t:'(task removed)'}</div><div className="m">{n.kind==='overdue'?'Overdue':'Due today'} · {fmtDate(n.for_date)}</div></div>
+            </div>;
+          }):<div className="sd-empty">No notifications</div>}
         </div>:null}
       </div>
       <button className="btn primary" onClick={()=>ctx.setModal(true)}><I n="plus"/>New task</button>
@@ -1649,13 +1685,15 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
 
   if(result)return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
     <div className="modal" style={{width:440}}>
-      <div className="qc-head"><h3>Account created</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
+      <div className="qc-head"><h3>{result.changedLogin?'Login updated':'Account created'}</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
       <div className="mf">
-        <div className="whysm" style={{marginTop:0,marginBottom:14}}>Share these with {result.name.split(' ')[0]} — the password won't be shown again.</div>
+        <div className="whysm" style={{marginTop:0,marginBottom:14}}>{result.changedLogin
+          ?result.name.split(' ')[0]+' should use this to sign in from now on.'
+          :'Share these with '+result.name.split(' ')[0]+' — the password won\'t be shown again.'}</div>
         <label>{result.username?'Username':'Email'}</label>
         <input readOnly value={result.username||result.login} onFocus={e=>e.target.select()}/>
-        <label>Password</label>
-        <input readOnly value={result.password} onFocus={e=>e.target.select()}/>
+        {result.changedLogin?null:<><label>Password</label>
+        <input readOnly value={result.password} onFocus={e=>e.target.select()}/></>}
       </div>
       <div className="qc-actions"><button className="btn primary" style={{flex:1,justifyContent:'center'}} onClick={close}><I n="check"/>Done</button></div>
     </div>
@@ -2021,9 +2059,42 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
     return <ModalShell close={close} err={err} title={person.n} sub={(TIER_LABEL[person.role]||person.role)+(person.dept?' · '+person.dept:'')}>
       <div className="mf" style={{display:'flex',flexDirection:'column',gap:8}}>
         {person.authId?<button className="btn soft" onClick={()=>{close();ctx.setResetTarget(person);}}><I n="key" s={15}/>Reset password</button>:null}
+        {person.authId?<button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('change-login');}}><I n="redo" s={15}/>Change login</button>:null}
         {person.tempCovering?<button className="btn soft" onClick={()=>{setOaCtx({person});setStep('revert-name');}}>Revert to their original role</button>:null}
       </div>
       <div className="qc-actions"><button className="btn soft" style={{flex:1}} onClick={close}>Close</button></div>
+    </ModalShell>;
+  }
+  if(step==='change-login'){
+    const {person}=oaCtx;
+    const isAdminTier=person.role==='Administrator'||person.role==='Management';
+    return <ModalShell close={close} err={err} title="Change login"
+      sub={(isAdminTier?'Set a new email ':'Set a new username ')+person.n.split(' ')[0]+' will sign in with — applies immediately, no confirmation email needed.'}>
+      <div className="mf">
+        <label>{isAdminTier?'New email':'New username'}</label>
+        <input value={f.login||''} onChange={e=>setF({...f,login:e.target.value})}
+          placeholder={isAdminTier?'name@example.com':'e.g. '+person.n.split(' ')[0].toLowerCase()} autoFocus/>
+      </div>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+          const val=(f.login||'').trim();
+          if(!val){setErr(isAdminTier?'Enter an email address.':'Enter a username.');return;}
+          setBusy(true);setErr('');
+          try{
+            const {data:{session}}=await sb.auth.getSession();
+            const resp=await fetch('https://fumggrcamegejihenkhb.supabase.co/functions/v1/update-staff-login',{
+              method:'POST',
+              headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token,
+                apikey:'sb_publishable_bEqR06srB99BHHdvLQy14g_-pLZPWwJ'},
+              body:JSON.stringify(isAdminTier?{staffId:person.id,email:val}:{staffId:person.id,username:val})});
+            const j=await resp.json();
+            setBusy(false);
+            if(!resp.ok){setErr(j.error||'Could not update login');return;}
+            setResult({...j,changedLogin:true});
+          }catch(e){setBusy(false);setErr('Could not reach the server — check your connection');}
+        }}>{busy?'Saving…':'Save'}</button>
+      </div>
     </ModalShell>;
   }
   return null;

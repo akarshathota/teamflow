@@ -96,6 +96,15 @@ async function removeAttachment(path){
   const {error}=await sb.storage.from('attachments').remove([path]);
   if(error)console.error(error);
 }
+/* task_notifications rows for the real signed-in user — RLS (staff_id=auth_staff_id()) already
+   scopes this to "my own", including while "Preview As" is simulating a different role client-side */
+async function loadNotifs(){
+  const {data,error}=await sb.from('task_notifications').select('*').order('created_at',{ascending:false});
+  if(error){console.error(error);return [];}
+  return data;
+}
+const markNotifRead=id=>sb.from('task_notifications').update({read_at:new Date().toISOString()}).eq('id',id);
+const markAllNotifsRead=ids=>ids.length?sb.from('task_notifications').update({read_at:new Date().toISOString()}).in('id',ids):Promise.resolve();
 const IMG_EXT=/\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 /* toast state + auto-dismiss timer — identical in both apps down to the 2400ms, just renamed
    local variables. `ctx.say(...)`/`useToast()` return the same {toast,say} shape either way. */

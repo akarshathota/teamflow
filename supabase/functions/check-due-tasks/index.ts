@@ -1,8 +1,7 @@
 // Runs on a schedule (see the check-due-tasks-daily cron job in migrations), not by a logged-in
 // user — so it checks Postgres/Deno's own clock for what's overdue or due today, and works even if
-// nobody has the app open. Detection only for now: no email/push is wired in yet, so it logs a
-// summary (visible in the function's logs in the Supabase dashboard). The TODO below marks where a
-// real send call plugs in once a delivery channel (email first, per the plan) is chosen.
+// nobody has the app open. Writes one row per assignee into task_notifications (in-app only for
+// now — the client shows these as a bell/badge; no email/push is wired in yet).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { CORS, json } from "../_shared/helpers.ts";
@@ -32,11 +31,36 @@ Deno.serve(async (req) => {
   const overdue = (data || []).filter((t) => t.due_date < today);
   const dueToday = (data || []).filter((t) => t.due_date === today);
 
-  // TODO: send the actual notification here (email first) once a delivery channel is chosen —
-  // for now this just proves the schedule fires and the overdue/due-today query is correct.
   console.log(`[check-due-tasks] ${today}: ${overdue.length} overdue, ${dueToday.length} due today`);
-  overdue.forEach((t) => console.log(`  overdue: ${t.title} (was due ${t.due_date})`));
-  dueToday.forEach((t) => console.log(`  due today: ${t.title}`));
 
-  return json({ today, overdue: overdue.length, dueToday: dueToday.length });
+  const flagged = [...overdue.map((t) => ({ t, kind: "overdue" })), ...dueToday.map((t) => ({ t, kind: "due_today" }))];
+  let notified = 0;
+  if (flagged.length) {
+    const { data: assignRows, error: assignErr } = await admin
+      .from("task_assignees")
+      .select("task_id, staff_id")
+      .in("task_id", flagged.map((f) => f.t.id));
+    if (assignErr) return json({ error: assignErr.message }, 500);
+
+    const staffByTask: Record<string, string[]> = {};
+    for (const a of assignRows || []) (staffByTask[a.task_id] ||= []).push(a.staff_id);
+
+    const rows = flagged.flatMap((f) =>
+      (staffByTask[f.t.id] || []).map((staff_id) => ({
+        staff_id,
+        task_id: f.t.id,
+        kind: f.kind,
+        for_date: today,
+      }))
+    );
+    if (rows.length) {
+      const { error: upErr } = await admin
+        .from("task_notifications")
+        .upsert(rows, { onConflict: "staff_id,task_id,kind,for_date", ignoreDuplicates: true });
+      if (upErr) return json({ error: upErr.message }, 500);
+      notified = rows.length;
+    }
+  }
+
+  return json({ today, overdue: overdue.length, dueToday: dueToday.length, notified });
 });
