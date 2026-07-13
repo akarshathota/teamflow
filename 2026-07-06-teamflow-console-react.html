@@ -1067,7 +1067,7 @@ function Dashboard({ctx,open,over,today,done}){
   const pend=ctx.qReqs.length+ctx.qExts.length;
   const bTot=mine.length||1;
   const bRows=Object.keys(BUCKETS).map(k=>({k,c:mine.filter(t=>t.bucket===k).length})).filter(o=>o.c).sort((a,b)=>b.c-a.c);
-  const wStaff=ctx.scope;
+  const wStaff=ctx.scope.filter(p=>inDept(p,loadBucket));
   const wCnt=p=>tasks.filter(t=>hasWho(t,p.s)&&t.status!=='done'&&(loadBucket==='all'||t.bucket===loadBucket)).length;
   const wRows=wStaff.map(p=>({p,l:wCnt(p)})).sort((a,b)=>b.l-a.l);
   const wMax=Math.max(1,...wRows.map(o=>o.l));
