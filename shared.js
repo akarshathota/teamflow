@@ -103,8 +103,11 @@ async function loadNotifs(){
   if(error){console.error(error);return [];}
   return data;
 }
-const markNotifRead=id=>sb.from('task_notifications').update({read_at:new Date().toISOString()}).eq('id',id);
-const markAllNotifsRead=ids=>ids.length?sb.from('task_notifications').update({read_at:new Date().toISOString()}).in('id',ids):Promise.resolve();
+/* wrapped in async functions (not bare arrows returning the query builder) so the result is a
+   real Promise — Supabase's builder is thenable but doesn't implement .catch(), and every call
+   site here does `markNotifRead(id).catch(...)` */
+async function markNotifRead(id){return sb.from('task_notifications').update({read_at:new Date().toISOString()}).eq('id',id);}
+async function markAllNotifsRead(ids){if(!ids.length)return;return sb.from('task_notifications').update({read_at:new Date().toISOString()}).in('id',ids);}
 const IMG_EXT=/\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 /* toast state + auto-dismiss timer — identical in both apps down to the 2400ms, just renamed
    local variables. `ctx.say(...)`/`useToast()` return the same {toast,say} shape either way. */
