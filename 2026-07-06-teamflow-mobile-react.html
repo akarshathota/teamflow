@@ -61,6 +61,7 @@
   .tag2{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px}
   .tag2.green{background:var(--green-soft);color:var(--green)}
   .tag2.amber{background:var(--amber-soft);color:var(--amber)}
+  .tag2.red{background:var(--red-soft);color:var(--red)}
   .tag2.blue{background:var(--blue-soft);color:var(--blue)}
   .tag2.gray{background:#efeee7;color:#5d6367}
   .notepv{font-size:12.5px;color:var(--ink2);background:#f7f6f1;border-radius:7px;padding:7px 10px;margin-top:7px;line-height:1.4;font-style:italic}
@@ -183,7 +184,9 @@
   .syncbtns{display:flex;gap:8px}
   .syncb{flex:1;border:1.5px solid var(--line);background:var(--card);border-radius:8px;padding:10px 6px;font-size:12px;font-weight:700;color:var(--ink2);cursor:pointer}
 
-  .empty{text-align:center;color:var(--muted);font-size:13.5px;padding:28px 10px}
+  .empty{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;color:var(--muted);font-size:13.5px;padding:28px 10px}
+  .empty .em-ic{font-size:26px;line-height:1}
+  .empty b{color:var(--ink);display:block;font-size:14px;margin-bottom:2px}
   .toast{position:absolute;bottom:150px;left:50%;transform:translateX(-50%);background:#22262a;color:#fff;
     padding:12px 17px;border-radius:10px;font-size:13px;font-weight:600;z-index:60;max-width:92%;width:max-content;text-align:center;line-height:1.45;animation:up .2s ease}
 
@@ -307,7 +310,7 @@ function rowToMobileTask(row,assignRows,byId,logRows){
     init:primary&&byId[primary.staff_id]?byId[primary.staff_id].initials:'',
     coWho:co.length?co.map(a=>a.staff_short):undefined,
     due:'Due '+dueLabel(row.due_date,row.due_time?row.due_time.slice(0,5):''),
-    date:row.due_date,bucket:LABEL_TO_BUCKET[row.department]||'administration',type:row.type,
+    date:row.due_date,bucket:LABEL_TO_BUCKET[row.department]||'administration',type:row.type,prio:row.priority,
     done:row.status==='done',
     /* legacy 'partial' rows collapse into 'inprogress' — the app no longer distinguishes them */
     progress:(row.status==='inprogress'||row.status==='partial')?'inprogress':undefined,
@@ -715,7 +718,7 @@ function App(){
 
   /* actions shared */
   const acts={
-    remind:i=>say('Reminder sent to '+assigneesM(tasks[i]).join(' & ')+' on WhatsApp 🔔'),
+    remind:i=>say('Reminder sent to '+assigneesM(tasks[i]).join(' & ')+' 🔔'),
     approveReq:qi=>{const q=pendingReqs.splice(qi,1)[0];if(!q)return;
       const s=suggestAssignee('purchase','accounts');
       const nt={t:"Buy: "+q.t,who:s.n,init:s.i,due:"This week",date:whenToDate("this week"),
@@ -732,7 +735,7 @@ function App(){
       tasks.unshift(nt);
       R();
       saveTask(nt).catch(console.error);deleteRequestRow(q).catch(console.error);
-      say('Assigned to '+who+' 🔧 · notified on WhatsApp');},
+      say('Assigned to '+who+' 🔧 · notified in TeamFlow');},
     approveExt:i=>{const t=tasks[i];if(!t||!t.extReq)return;
       t.date=t.extReq.newDate;t.due='Due '+fmtD(t.extReq.newDate);delete t.extReq;R();
       saveTask(t).catch(console.error);
@@ -802,6 +805,14 @@ function App(){
   </>;
 }
 
+/* ============ empty state ============ */
+// mobile's own warmer empty state — an icon (svg via I/PATHS where one fits, otherwise an emoji,
+// matching mobile's existing emoji-heavy copy) + bold heading + one line of next-step guidance.
+// Same idea as console's <Empty>, but mobile's own component/markup, not a shared import.
+function MobileEmpty({icon,t,s,style}){
+  return <div className="empty" style={style}><div className="em-ic">{icon}</div><div><b>{t}</b><br/>{s}</div></div>;
+}
+
 /* ============ task card ============ */
 function TaskCard({o,ctx,acts}){
   const t=o.t,i=o.i;
@@ -814,6 +825,7 @@ function TaskCard({o,ctx,acts}){
     <div className="tt">{t.t}</div>
     <div className="meta"><span className="who">{t.init}</span> {t.who}{t.coWho&&t.coWho.length?' + '+t.coWho.join(' + '):''} · {BUCKETS[t.bucket]||t.bucket}
       <span className="tag2 gray">{TYPES[t.type||'work'].e} {TYPES[t.type||'work'].l}</span>
+      {t.prio==='high'?<span className="tag2 red">🔴 High priority</span>:t.prio==='med'?<span className="tag2 amber">🟡 Medium priority</span>:null}
       {t.recur?<span className="tag2 blue">↻ {recurLabel(t.recur,t.recurOn)}</span>:null}</div>
     {t.selfAssigned?<div className="meta" style={{marginTop:5}}><span className="tag2 green">🙋 Self-assigned</span>{t.instructedBy?<span className="tag2 amber">📣 As per {t.instructedBy}</span>:null}</div>
       :t.instructedBy?<div className="meta" style={{marginTop:5}}><span className="tag2 gray">📣 Assigned by {t.instructedBy}</span></div>:null}
@@ -878,7 +890,7 @@ function Home({ctx,acts}){
           </div></div>)}</>:null}
     </>:<WorkerPending ctx={ctx}/>}
     <div className="sec">Today</div>
-    {ctx.mine.length?ctx.mine.map(o=><TaskCard key={o.i} o={o} ctx={ctx} acts={acts}/>):<div className="empty">No tasks yet.</div>}
+    {ctx.mine.length?ctx.mine.map(o=><TaskCard key={o.i} o={o} ctx={ctx} acts={acts}/>):<MobileEmpty icon="✅" t="Nothing due today" s="New tasks assigned to you will show up here."/>}
   </div>;
 }
 function WorkerPending({ctx}){
@@ -929,7 +941,7 @@ function AllTasks({ctx,acts}){
         <button key={k} className={'tchip'+(k===f?' on':'')} style={{whiteSpace:'nowrap'}} onClick={()=>setF(k)}>{e?e+' ':''}{l}{counts[k]?' · '+counts[k]:''}</button>)}
     </div>
     {list.length?list.map(o=><TaskCard key={o.i} o={o} ctx={ctx} acts={acts}/>)
-      :<div className="empty">No {f==='all'?'':TYPES[f].l.toLowerCase()+' '}tasks yet.</div>}
+      :<MobileEmpty icon="📋" t={'No '+(f==='all'?'':TYPES[f].l.toLowerCase()+' ')+'tasks yet'} s="Tap + to create one."/>}
   </div>;
 }
 
@@ -1020,7 +1032,7 @@ function Notices({ctx}){
   const [t,setT]=useState('');const [b,setB]=useState('');
   const post=()=>{const nn={t:t.trim()||'Untitled notice',b:b.trim(),d:'Just now'};notices.unshift(nn);setT('');setB('');ctx.R();
     postNotice(nn).catch(console.error);
-    ctx.say('Posted · broadcast on WhatsApp 📣');};
+    ctx.say('Posted · staff notified 📣');};
   return <div>
     {ctx.r.canPost?<>
       <div className="sec">Post a notice</div>
@@ -1030,7 +1042,7 @@ function Notices({ctx}){
           style={{width:'100%',border:'none',borderBottom:'1.5px solid var(--line)',fontSize:16,fontWeight:600,padding:'6px 0',outline:'none',fontFamily:'inherit',color:'var(--ink)',background:'none'}}/>
         <textarea value={b} onChange={e=>setB(e.target.value)} placeholder="Write the message…" rows={3}
           style={{width:'100%',border:'none',fontSize:14,padding:'10px 0 0',outline:'none',resize:'none',fontFamily:'inherit',color:'var(--ink)',background:'none'}}/>
-        <button className="send" style={{marginTop:12}} onClick={post}>Post &amp; broadcast on WhatsApp 📣</button>
+        <button className="send" style={{marginTop:12}} onClick={post}>Post &amp; notify staff 📣</button>
       </div></>:<div className="sec">Notices for you</div>}
     <div className="sec" style={{marginTop:16}}>Recent</div>
     {notices.map((n,ix)=><div className="task" key={ix}>
@@ -1097,22 +1109,33 @@ function Sheets({ctx,acts,sheet}){
 }
 function NotifSheet({ctx,acts,close}){
   const unread=ctx.notifs.filter(n=>!n.read_at);
+  // Same flat feed as before, split into two labeled groups — overdue/due-today ("Needs
+  // attention") vs job-log-activity pings ("Activity") — each still in the feed's own recency
+  // order (loadNotifs already sorts the merged list by created_at before this ever runs).
+  const notifItem=n=>{
+    const t=tasks.find(x=>x.id===n.task_id);
+    const isAct=n.source==='activity';
+    const entry=isAct&&t&&t.log?t.log.find(x=>x.id===n.task_log_id):null;
+    const actor=isAct?(ALL_PEOPLE.find(p=>p.id===n.actor_staff_id)||{}).n:null;
+    return <div key={n.source+n.id} className="task" style={{cursor:'pointer',opacity:n.read_at?0.55:1}} onClick={()=>acts.openNotif(n)}>
+      <div className="stripe" style={{background:isAct?'var(--accent)':n.kind==='overdue'?'var(--red)':'var(--amber)'}}/>
+      <div className="tt">{isAct?(actor||'Someone')+' updated “'+(t?t.t:'a task')+'”':(t?t.t:'(task removed)')}</div>
+      <div className="meta">{isAct?(entry?'“'+(entry.text.length>60?entry.text.slice(0,60)+'…':entry.text)+'” · ':'')+fmtDateTime(n.created_at):(n.kind==='overdue'?'Overdue':'Due today')+' · '+fmtD(n.for_date)}</div>
+    </div>;
+  };
+  const attn=ctx.notifs.filter(n=>n.source!=='activity');
+  const act=ctx.notifs.filter(n=>n.source==='activity');
   return <>
     <h3>Notifications
       {unread.length?<span style={{float:'right',fontSize:12.5,fontWeight:600,color:'var(--accent-ink)',cursor:'pointer'}} onClick={acts.markAllNotifsSeen}>Mark all read</span>:null}
     </h3>
     <div style={{maxHeight:400,overflowY:'auto'}}>
-      {ctx.notifs.length?ctx.notifs.map(n=>{
-        const t=tasks.find(x=>x.id===n.task_id);
-        const isAct=n.source==='activity';
-        const entry=isAct&&t&&t.log?t.log.find(x=>x.id===n.task_log_id):null;
-        const actor=isAct?(ALL_PEOPLE.find(p=>p.id===n.actor_staff_id)||{}).n:null;
-        return <div key={n.source+n.id} className="task" style={{cursor:'pointer',opacity:n.read_at?0.55:1}} onClick={()=>acts.openNotif(n)}>
-          <div className="stripe" style={{background:isAct?'var(--accent)':n.kind==='overdue'?'var(--red)':'var(--amber)'}}/>
-          <div className="tt">{isAct?(actor||'Someone')+' updated “'+(t?t.t:'a task')+'”':(t?t.t:'(task removed)')}</div>
-          <div className="meta">{isAct?(entry?'“'+(entry.text.length>60?entry.text.slice(0,60)+'…':entry.text)+'” · ':'')+fmtDateTime(n.created_at):(n.kind==='overdue'?'Overdue':'Due today')+' · '+fmtD(n.for_date)}</div>
-        </div>;
-      }):<div className="empty">No notifications</div>}
+      {ctx.notifs.length?<>
+        {attn.length?<div className="sec">Needs attention</div>:null}
+        {attn.map(notifItem)}
+        {act.length?<div className="sec">Activity</div>:null}
+        {act.map(notifItem)}
+      </>:<MobileEmpty icon={<I n="bell" s={26}/>} t="You're all caught up" s="Overdue alerts, due-today reminders, and task activity will show up here."/>}
     </div>
   </>;
 }
@@ -1196,7 +1219,7 @@ function TaskSheet({ctx,close}){
     close();ctx.R();
     saveTask(nt).catch(console.error);
     const tail=(cur.recur?' · '+recurLabel(cur.recur,cur.recurOn).toLowerCase():'')+(instruct?' · as per '+instruct:'');
-    ctx.say(self?'Added to your list'+tail:'Assigned '+(list.length>1?'jointly to ':'to ')+list.join(' + ')+tail+' · sent on WhatsApp');
+    ctx.say(self?'Added to your list'+tail:'Assigned '+(list.length>1?'jointly to ':'to ')+list.join(' + ')+tail+' · notified in TeamFlow');
   }
   const depts=['all',...new Set(MEMBERS.map(m=>m.dept))];
   const load=workload();
@@ -1221,10 +1244,14 @@ function TaskSheet({ctx,close}){
     </div>:<div>
       <div className={'mic'+(rec?' rec':'')} onClick={record}><I n="mic"/></div>
       <div className="heard">{heard||<span className="ph">Tap the mic to speak…</span>}</div>
+      <div style={{fontSize:11,color:'var(--muted)',textAlign:'center',marginTop:8}}>🎤 Demo: shows a sample sentence to try the flow — edit the task text below if it's wrong.</div>
     </div>}
     {cur?<div style={{marginTop:14}}>
       <span className="aibadge">✨ AI understood</span>
-      <div className="field"><div className="k">Task</div><div className="v">{cur.task}</div></div>
+      <div className="field"><div className="k">Task</div><div className="v">
+        <input value={cur.task} onChange={e=>setCur({...cur,task:e.target.value})}
+          style={{width:'100%',border:'none',borderBottom:'1.5px solid var(--line)',fontFamily:'inherit',fontSize:'inherit',fontWeight:'inherit',color:'inherit',padding:'2px 0',outline:'none',background:'none'}}/>
+      </div></div>
       <div className="field"><div className="k">Assign to</div><div className="v">
         {ctx.role!=='worker'?<div className="modetabs" style={{marginBottom:9}}>
           <button className={'mtab'+(assign==='others'?' on':'')} onClick={()=>setAssign('others')}>👥 Others</button>
@@ -1243,7 +1270,7 @@ function TaskSheet({ctx,close}){
             <div className="empcol">
               {emp.length?emp.map(m=><button key={m.n} className={'pickchip'+(cur.whos.includes(m.n)?' cur':'')} onClick={()=>toggleWho(m.n)}>
                 {cur.whos.includes(m.n)?'✓ ':''}<b>{m.n}</b> · {load[m.n]} open<span className="emprole">{m.dept} · {m.role}</span></button>)
-                :<div className="empty" style={{padding:12}}>No one matches</div>}
+                :<MobileEmpty icon="🔍" t="No one matches" s="Try a different name, department, or skill." style={{padding:12}}/>}
             </div>
           </div>:null}
         </>}
@@ -1400,6 +1427,8 @@ function UpdateSheet({ctx,idx,close}){
   return <>
     <h3>Update task</h3>
     <div className="sub">{t.t}</div>
+    {t.prio==='high'?<span className="tag2 red" style={{marginTop:6,display:'inline-block'}}>🔴 High priority</span>
+      :t.prio==='med'?<span className="tag2 amber" style={{marginTop:6,display:'inline-block'}}>🟡 Medium priority</span>:null}
     <div className="modetabs">
       {[['inprogress','🔧 In progress'],['done','✓ Done']].map(([k,l])=>
         <button key={k} className={'mtab'+(st===k?' on':'')} onClick={()=>setSt(k)}>{l}</button>)}
@@ -1488,7 +1517,7 @@ function ReassignSheet({ctx,idx,close}){
   const list=MEMBERS.filter(m=>!q||m.n.toLowerCase().includes(q.toLowerCase())||m.dept.toLowerCase().includes(q.toLowerCase())||m.role.toLowerCase().includes(q.toLowerCase()));
   const go=n=>{const m=findMember(n);t.who=n;t.init=m?m.i:n[0];t.coWho=undefined;
     saveTask(t).catch(console.error);
-    close();ctx.R();ctx.say('Reassigned to '+n+' · notified on WhatsApp');};
+    close();ctx.R();ctx.say('Reassigned to '+n+' · notified in TeamFlow');};
   return <>
     <h3>Reassign task</h3>
     <div className="sub">{t.t}</div>
@@ -1496,7 +1525,7 @@ function ReassignSheet({ctx,idx,close}){
     <div className="empcol" style={{maxHeight:290}}>
       {list.length?list.map(m=><button key={m.n} className={'pickchip'+(hasWhoM(t,m.n)?' cur':'')} onClick={()=>go(m.n)}>
         {hasWhoM(t,m.n)?'✓ ':''}<b>{m.n}</b> · {load[m.n]} open<span className="emprole">{m.dept} · {m.role}</span></button>)
-        :<div className="empty" style={{padding:12}}>No one matches</div>}
+        :<MobileEmpty icon="🔍" t="No one matches" s="Try a different name, department, or skill." style={{padding:12}}/>}
     </div>
   </>;
 }

@@ -71,13 +71,14 @@ function persistComplete(t,nd){
   saveTask(t).catch(console.error);
   if(nd)saveTask(tasks[tasks.length-1]).catch(console.error);
 }
-/* uploads to the private 'attachments' bucket and returns a long-lived signed URL (10y — this
-   app never rotates it, so anything longer just pushes the same ceiling further out) */
+/* uploads to the private 'attachments' bucket and returns a signed URL (1y — long enough that
+   staff won't hit a dead link mid-use, short enough to bound exposure if a URL ever leaks; only
+   affects newly-issued URLs, doesn't shorten ones already handed out) */
 async function uploadFile(file,folder){
   const path=folder+'/'+Date.now()+'-'+Math.random().toString(36).slice(2)+'-'+file.name.replace(/[^\w.\-]/g,'_');
   const {error}=await sb.storage.from('attachments').upload(path,file);
   if(error)throw error;
-  const {data,error:signErr}=await sb.storage.from('attachments').createSignedUrl(path,315360000);
+  const {data,error:signErr}=await sb.storage.from('attachments').createSignedUrl(path,31536000);
   if(signErr)throw signErr;
   return {name:file.name,url:data.signedUrl,path};
 }

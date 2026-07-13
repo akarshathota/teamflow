@@ -158,6 +158,7 @@
   .duecell.over{color:var(--red);font-weight:700}
   .duecell svg{width:14px;height:14px}
   .prio{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+  .priolabel{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;flex:0 0 auto;white-space:nowrap}
   .filters{display:flex;gap:9px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .fsel{border:1.5px solid var(--line);border-radius:8px;padding:8px 11px;font-family:inherit;font-size:13px;font-weight:600;outline:none;background:var(--card);cursor:pointer;color:var(--ink)}
   .fsel:focus{border-color:var(--accent)}
@@ -893,7 +894,7 @@ function App(){
     persistComplete(t,nd);
     R();say(nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd)
       :t.coWho&&t.coWho.length?'Marked done for all assignees':'Task marked done');};
-  const remindPerson=s=>{const p=byShort(s);say('Reminder sent to '+(p?p.n.split(' ')[0]:s)+' on WhatsApp');};
+  const remindPerson=s=>{const p=byShort(s);say('Reminder sent to '+(p?p.n.split(' ')[0]:s));};
   const approveReq=i=>{const r=requests[i];if(!r||r.kind!=='request')return;
     if(!canApprove(r.from)){say('Only the department boss can approve this');return;}
     const s=suggestWho('purchase',scope);const d=new Date(TODAY);d.setDate(d.getDate()+4);
@@ -913,7 +914,7 @@ function App(){
     tasks.unshift(nt);
     requests.splice(i,1);R();
     saveTask(nt).catch(console.error);deleteRequestRow(r).catch(console.error);
-    say('Issue assigned to '+byShort(who).n+' · notified on WhatsApp');};
+    say('Issue assigned to '+byShort(who).n+' · notified in TeamFlow');};
   const approveExt=i=>{const t=tasks[i];if(!t||!t.extReq)return;
     if(!canApprove(t.who)){say('Only the department boss can approve this');return;}
     t.date=t.extReq.newDate;delete t.extReq;R();
@@ -1043,6 +1044,19 @@ function Topbar({ctx,searchRef}){
     (ctx.lastCronRun?{ok:true,text:'Cron last ran '+new Date(ctx.lastCronRun.ran_at).toLocaleString('en',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})+' · '+ctx.lastCronRun.overdue_count+' overdue, '+ctx.lastCronRun.due_today_count+' due today'}
       :{ok:false,text:'Cron: no runs recorded yet'})
     :null;
+  // Bell dropdown item markup, shared by both the "Needs attention" (overdue/due-today,
+  // source!=='activity') and "Activity" (job-log-ping, source==='activity') groups below —
+  // grouping is just two labeled slices of the same already recency-sorted ctx.notifs list.
+  const notifItem=n=>{
+    const t=tasks.find(x=>x.id===n.task_id);
+    const isAct=n.source==='activity';
+    const entry=isAct&&t&&t.log?t.log.find(x=>x.id===n.task_log_id):null;
+    return <div key={n.source+n.id} className="sd-item" style={{opacity:n.read_at?0.55:1}} onClick={()=>{setBellOpen(false);ctx.openNotif(n);}}>
+      <span className="avex" style={{background:isAct?'var(--accent)':n.kind==='overdue'?'var(--red)':'var(--amber)',color:'#fff'}}>{isAct?'✎':n.kind==='overdue'?'!':'•'}</span>
+      <div><div className="t">{isAct?(byId2Name(n.actor_staff_id)||'Someone')+' updated “'+(t?t.t:'a task')+'”':(t?t.t:'(task removed)')}</div>
+        <div className="m">{isAct?(entry?'“'+(entry.text.length>60?entry.text.slice(0,60)+'…':entry.text)+'” · ':'')+fmtDateTime(n.created_at):(n.kind==='overdue'?'Overdue':'Due today')+' · '+fmtDate(n.for_date)}</div></div>
+    </div>;
+  };
   return <div className="topbar">
     <h1>{TITLES[ctx.view]}</h1>
     {cronStatus?<span className={'chip-s '+(cronStatus.ok?'green':'red')} style={{marginLeft:10}} title="check-due-tasks daily cron health">{cronStatus.text}</span>:null}
@@ -1071,16 +1085,17 @@ function Topbar({ctx,searchRef}){
             <span>Notifications</span>
             {unread.length?<span style={{cursor:'pointer',textTransform:'none',fontWeight:600,color:'var(--accent-ink)'}} onClick={()=>ctx.markAllNotifsSeen()}>Mark all read</span>:null}
           </div>
-          {ctx.notifs.length?ctx.notifs.slice(0,20).map(n=>{
-            const t=tasks.find(x=>x.id===n.task_id);
-            const isAct=n.source==='activity';
-            const entry=isAct&&t&&t.log?t.log.find(x=>x.id===n.task_log_id):null;
-            return <div key={n.source+n.id} className="sd-item" style={{opacity:n.read_at?0.55:1}} onClick={()=>{setBellOpen(false);ctx.openNotif(n);}}>
-              <span className="avex" style={{background:isAct?'var(--accent)':n.kind==='overdue'?'var(--red)':'var(--amber)',color:'#fff'}}>{isAct?'✎':n.kind==='overdue'?'!':'•'}</span>
-              <div><div className="t">{isAct?(byId2Name(n.actor_staff_id)||'Someone')+' updated “'+(t?t.t:'a task')+'”':(t?t.t:'(task removed)')}</div>
-                <div className="m">{isAct?(entry?'“'+(entry.text.length>60?entry.text.slice(0,60)+'…':entry.text)+'” · ':'')+fmtDateTime(n.created_at):(n.kind==='overdue'?'Overdue':'Due today')+' · '+fmtDate(n.for_date)}</div></div>
-            </div>;
-          }):<div className="sd-empty">No notifications</div>}
+          {ctx.notifs.length?(()=>{
+            const list=ctx.notifs.slice(0,20);
+            const attn=list.filter(n=>n.source!=='activity');
+            const act=list.filter(n=>n.source==='activity');
+            return <>
+              {attn.length?<div className="sd-head">Needs attention</div>:null}
+              {attn.map(notifItem)}
+              {act.length?<div className="sd-head">Activity</div>:null}
+              {act.map(notifItem)}
+            </>;
+          })():<div className="sd-empty">No notifications</div>}
         </div>:null}
       </div>
       <button className="btn primary" onClick={()=>ctx.setModal(true)}><I n="plus"/>New task</button>
@@ -1118,7 +1133,9 @@ function TaskRow({t,i,ctx}){
         <TagsFor t={t}/>
       </div>
     </div>
-    <span className="prio" style={{background:PRIOS[t.prio||'med'].c}} title={PRIOS[t.prio||'med'].l+' priority'}/>
+    <span className="priolabel" style={{color:PRIOS[t.prio||'med'].c}} title={PRIOS[t.prio||'med'].l+' priority'}>
+      <span className="prio" style={{background:PRIOS[t.prio||'med'].c}}/>{PRIOS[t.prio||'med'].l}
+    </span>
     {dn?<span className="duecell"><I n="check"/>Closed</span>
       :od?<span className="duecell over"><I n="alert"/>{fmtDate(t.date)} · {overdueDays(t)}d late</span>
       :isToday(t)?<span className="duecell" style={{color:'var(--amber)'}}><I n="clock"/>Today{t.time?' · '+fmtTime(t.time):''}</span>
@@ -2462,7 +2479,7 @@ function QuickCapture({ctx,close}){
     close();ctx.R();
     saveTask(nt).catch(console.error);
     const names=list.map(a=>(byShort(a)||{n:a}).n).join(' + ');
-    ctx.say((mode==='self'?'Added to your list':'Assigned '+(list.length>1?'jointly to ':'to ')+names+' · sent on WhatsApp')+(recur?' · '+recurLabel(recur,recurOn):'')+(boss?' · as per '+boss:''));
+    ctx.say((mode==='self'?'Added to your list':'Assigned '+(list.length>1?'jointly to ':'to ')+names+' · notified in TeamFlow')+(recur?' · '+recurLabel(recur,recurOn):'')+(boss?' · as per '+boss:''));
   }
   const dts=[0,1,7].map(n=>{const d=new Date(TODAY);d.setDate(d.getDate()+n);return d;});
   const whoList=ctx.scope.filter(x=>!whoQ||x.n.toLowerCase().includes(whoQ.toLowerCase())||x.dept.toLowerCase().includes(whoQ.toLowerCase()));
@@ -2481,6 +2498,7 @@ function QuickCapture({ctx,close}){
         <input className="qc-input" autoFocus placeholder={phs[kind]} value={txt} onChange={e=>parse(e.target.value)}/>
         <button className={'micbtn'+(rec?' rec':'')} onClick={record} title="Speak"><I n="mic"/></button>
       </div>
+      <div style={{padding:'4px 22px 0',fontSize:11,color:'var(--muted)'}}>🎤 Demo: speaking fills in a sample sentence to try the flow — edit the text above if it's wrong.</div>
       <div className="qc-hint">{hints[kind]}</div>
       {kind==='issue'?<div className="qc-attach">
         {[['camera','Camera',{accept:'image/*',capture:'environment'}],['image','Photos',{accept:'image/*',multiple:true}],['clip','Files',{multiple:true}]].map(([ic,l,at])=>
