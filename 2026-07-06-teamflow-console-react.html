@@ -440,7 +440,10 @@ function rowToTask(row,assignRows,logRows){
   if(row.ext_new_date)t.extReq={newDate:row.ext_new_date,reason:row.ext_reason||""};
   if(row.reopened_by)t.reopened={by:byId2Name(row.reopened_by),comment:row.reopened_comment||""};
   const logs=logRows.filter(l=>l.task_id===row.id);
-  if(logs.length)t.log=logs.map(l=>({by:l.author_name||"Earlier",when:fmtDate(l.created_at.slice(0,10)),text:l.body}));
+  /* author_id is the only real column on task_log — there is no author_name. Resolve it through
+     the same byId2Name lookup reopened_by uses just above; "Earlier" is the fallback for the rare
+     null-author row (e.g. pre-author-tracking data), not the default for every row. */
+  if(logs.length)t.log=logs.map(l=>({id:l.id,by:l.author_id?(byId2Name(l.author_id)||"Earlier"):"Earlier",when:fmtDateTime(l.created_at),text:l.body}));
   return t;
 }
 let byId2Name=()=>"";
@@ -500,7 +503,12 @@ async function syncAssignees(t){
 async function logTask(t,authorName,text){
   if(!t.id)return;
   const author=byName(authorName);
-  await sb.from('task_log').insert({task_id:t.id,author_id:author?author.id:null,body:text});
+  const {data,error}=await sb.from('task_log').insert({task_id:t.id,author_id:author?author.id:null,body:text}).select().single();
+  if(error){console.error(error);return;}
+  /* notify every OTHER assignee — not the poster themselves */
+  const others=[...new Set(assignees(t).filter(Boolean).filter(s=>!author||s!==author.s))]
+    .map(byShort).filter(Boolean).map(p=>p.id);
+  await notifyActivity(t.id,data.id,author?author.id:null,others);
 }
 async function saveRequest(r){
   const from=byShort(r.from);
@@ -801,6 +809,7 @@ function App(){
       .on('postgres_changes',{event:'*',schema:'public',table:'requests'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'notices'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'task_notifications'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'task_activity_notifications'},refetch)
       .subscribe();
     return ()=>{clearTimeout(t);sb.removeChannel(ch);};
   },[session]);
@@ -918,11 +927,11 @@ function App(){
 
   /* opening a notification always jumps to the real signed-in user's own task list, regardless of
      whatever role "Preview As" is currently simulating — the notification IS theirs (RLS-scoped) */
-  const openNotif=n=>{markNotifRead(n.id).catch(console.error);n.read_at=new Date().toISOString();R();
+  const openNotif=n=>{markNotifRead(n).catch(console.error);n.read_at=new Date().toISOString();R();
     const idx=tasks.findIndex(x=>x.id===n.task_id);setView('tasks');if(idx>=0)setDrawerIdx(idx);};
-  const markAllNotifsSeen=()=>{const ids=notifs.filter(n=>!n.read_at).map(n=>n.id);
-    if(!ids.length)return;markAllNotifsRead(ids).catch(console.error);
-    notifs.forEach(n=>{if(!n.read_at)n.read_at=new Date().toISOString();});R();};
+  const markAllNotifsSeen=()=>{const unread=notifs.filter(n=>!n.read_at);
+    if(!unread.length)return;markAllNotifsRead(unread).catch(console.error);
+    unread.forEach(n=>{n.read_at=new Date().toISOString();});R();};
 
   function exportCSV(kind){
     if(kind==='tasks'){
@@ -1064,9 +1073,12 @@ function Topbar({ctx,searchRef}){
           </div>
           {ctx.notifs.length?ctx.notifs.slice(0,20).map(n=>{
             const t=tasks.find(x=>x.id===n.task_id);
-            return <div key={n.id} className="sd-item" style={{opacity:n.read_at?0.55:1}} onClick={()=>{setBellOpen(false);ctx.openNotif(n);}}>
-              <span className="avex" style={{background:n.kind==='overdue'?'var(--red)':'var(--amber)',color:'#fff'}}>{n.kind==='overdue'?'!':'•'}</span>
-              <div><div className="t">{t?t.t:'(task removed)'}</div><div className="m">{n.kind==='overdue'?'Overdue':'Due today'} · {fmtDate(n.for_date)}</div></div>
+            const isAct=n.source==='activity';
+            const entry=isAct&&t&&t.log?t.log.find(x=>x.id===n.task_log_id):null;
+            return <div key={n.source+n.id} className="sd-item" style={{opacity:n.read_at?0.55:1}} onClick={()=>{setBellOpen(false);ctx.openNotif(n);}}>
+              <span className="avex" style={{background:isAct?'var(--accent)':n.kind==='overdue'?'var(--red)':'var(--amber)',color:'#fff'}}>{isAct?'✎':n.kind==='overdue'?'!':'•'}</span>
+              <div><div className="t">{isAct?(byId2Name(n.actor_staff_id)||'Someone')+' updated “'+(t?t.t:'a task')+'”':(t?t.t:'(task removed)')}</div>
+                <div className="m">{isAct?(entry?'“'+(entry.text.length>60?entry.text.slice(0,60)+'…':entry.text)+'” · ':'')+fmtDateTime(n.created_at):(n.kind==='overdue'?'Overdue':'Due today')+' · '+fmtDate(n.for_date)}</div></div>
             </div>;
           }):<div className="sd-empty">No notifications</div>}
         </div>:null}
@@ -1439,7 +1451,7 @@ function Drawer({ctx,idx}){
           setPendingDone(false);t.status='open';t.date=reDate;delete t.doneOn;t.doneBy=[];
           t.reopened={by:ctx.viewer.n,comment:reNote.trim()};
           t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
-          t.log.push({by:ctx.viewer.n,when:fmtDate(iso(TODAY)),text:'Reopened — '+(reNote.trim()||'not up to the mark')});
+          t.log.push({by:ctx.viewer.n,when:fmtDateTime(new Date()),text:'Reopened — '+(reNote.trim()||'not up to the mark')});
           if(reNote.trim())t.note=reNote.trim();
           saveTask(t).catch(console.error);logTask(t,ctx.viewer.n,'Reopened — '+(reNote.trim()||'not up to the mark')).catch(console.error);
           ctx.R();ctx.say('Task reopened — new due '+fmtDate(t.date)+' · assignee notified');}}>
@@ -1467,7 +1479,7 @@ function Drawer({ctx,idx}){
       <button className="btn soft" style={{marginTop:9}} onClick={()=>{
         const txt=note.trim(); if(!txt){ctx.say('Write something first');return;}
         t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
-        t.log.push({by:ctx.viewer.n,when:fmtDate(iso(TODAY)),text:txt});
+        t.log.push({by:ctx.viewer.n,when:fmtDateTime(new Date()),text:txt});
         t.note=txt;setNote('');
         saveTask(t).catch(console.error);logTask(t,ctx.viewer.n,txt).catch(console.error);
         ctx.R();ctx.say('Added to the job log');}}><I n="note"/>Add to log</button>

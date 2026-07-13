@@ -27,6 +27,12 @@ const sb=window.supabase.createClient(
 
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const fmtTime=t=>{if(!t)return '';const p=t.split(':'),h=+p[0],ap=h>=12?'PM':'AM';return (h%12||12)+':'+p[1]+' '+ap;};
+/* full ISO timestamptz (e.g. a task_log row's created_at) -> "14 Jul · 2:45 PM" in the viewer's
+   local timezone. Distinct from fmtDate/fmtD, which only ever take a plain YYYY-MM-DD string and
+   append a fake T00:00:00 — they can't represent a real time. Used anywhere a job-log entry's
+   posted-at needs to show both date and time. */
+const fmtDateTime=t=>{if(!t)return '';const x=new Date(t);
+  return x.toLocaleDateString('en',{day:'numeric',month:'short'})+' · '+x.toLocaleTimeString('en',{hour:'numeric',minute:'2-digit'});};
 const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const ord=n=>{const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);};
@@ -96,18 +102,50 @@ async function removeAttachment(path){
   const {error}=await sb.storage.from('attachments').remove([path]);
   if(error)console.error(error);
 }
-/* task_notifications rows for the real signed-in user — RLS (staff_id=auth_staff_id()) already
-   scopes this to "my own", including while "Preview As" is simulating a different role client-side */
+/* Merges two notification sources for the real signed-in user into one chronological feed:
+   task_notifications (cron-written overdue/due_today, RLS staff_id=auth_staff_id()) and
+   task_activity_notifications (client-written job-log-entry pings, same RLS shape). Each row is
+   tagged with `source` so mark-read (below) and the UI (which table it came from, how to render
+   it) can tell them apart without a second bell/dropdown. */
 async function loadNotifs(){
-  const {data,error}=await sb.from('task_notifications').select('*').order('created_at',{ascending:false});
-  if(error){console.error(error);return [];}
-  return data;
+  const [a,b]=await Promise.all([
+    sb.from('task_notifications').select('*').order('created_at',{ascending:false}),
+    sb.from('task_activity_notifications').select('*').order('created_at',{ascending:false})
+  ]);
+  if(a.error)console.error(a.error);
+  if(b.error)console.error(b.error);
+  return (a.data||[]).map(n=>({...n,source:'notif'}))
+    .concat((b.data||[]).map(n=>({...n,source:'activity'})))
+    .sort((x,y)=>x.created_at<y.created_at?1:-1);
 }
 /* wrapped in async functions (not bare arrows returning the query builder) so the result is a
    real Promise — Supabase's builder is thenable but doesn't implement .catch(), and every call
-   site here does `markNotifRead(id).catch(...)` */
-async function markNotifRead(id){return sb.from('task_notifications').update({read_at:new Date().toISOString()}).eq('id',id);}
-async function markAllNotifsRead(ids){if(!ids.length)return;return sb.from('task_notifications').update({read_at:new Date().toISOString()}).in('id',ids);}
+   site here does `markNotifRead(n).catch(...)`. Takes the merged notification object (not just an
+   id) so it can route the update to whichever table it actually came from. */
+async function markNotifRead(n){
+  const table=n.source==='activity'?'task_activity_notifications':'task_notifications';
+  return sb.from(table).update({read_at:new Date().toISOString()}).eq('id',n.id);
+}
+async function markAllNotifsRead(ns){
+  if(!ns.length)return;
+  const now=new Date().toISOString();
+  const ids1=ns.filter(n=>n.source!=='activity').map(n=>n.id);
+  const ids2=ns.filter(n=>n.source==='activity').map(n=>n.id);
+  return Promise.all([
+    ids1.length?sb.from('task_notifications').update({read_at:now}).in('id',ids1):null,
+    ids2.length?sb.from('task_activity_notifications').update({read_at:now}).in('id',ids2):null
+  ]);
+}
+/* one task_activity_notifications row per recipient in `staffIds`, for the freshly-inserted
+   task_log row `logId` on `taskId`, attributed to `actorId`. No-op when there's no one else to
+   notify (solo/self-assigned task) — genuinely identical logic both apps need right after their
+   own task_log insert. */
+async function notifyActivity(taskId,logId,actorId,staffIds){
+  if(!staffIds.length)return;
+  const rows=staffIds.map(staff_id=>({staff_id,task_id:taskId,task_log_id:logId,actor_staff_id:actorId}));
+  const {error}=await sb.from('task_activity_notifications').insert(rows);
+  if(error)console.error(error);
+}
 const IMG_EXT=/\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 /* toast state + auto-dismiss timer — identical in both apps down to the 2400ms, just renamed
    local variables. `ctx.say(...)`/`useToast()` return the same {toast,say} shape either way. */

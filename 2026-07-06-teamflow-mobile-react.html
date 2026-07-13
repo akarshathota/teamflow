@@ -321,7 +321,10 @@ function rowToMobileTask(row,assignRows,byId,logRows){
   if(row.ext_new_date)t.extReq={newDate:row.ext_new_date,label:extLabel(row.ext_new_date),reason:row.ext_reason||''};
   if(row.reopened_by)t.reopened={by:(byId[row.reopened_by]||{name:''}).name,comment:row.reopened_comment||''};
   const logs=logRows.filter(l=>l.task_id===row.id);
-  if(logs.length)t.log=logs.map(l=>({by:l.author_name||'Earlier',when:fmtD(l.created_at.slice(0,10)),text:l.body}));
+  /* author_id is the only real column on task_log — there is no author_name. Resolve it through
+     the byId map (id -> {name,short,initials}) already built for this pass; "Earlier" is the
+     fallback for the rare null-author row (e.g. pre-author-tracking data), not the default. */
+  if(logs.length)t.log=logs.map(l=>({id:l.id,by:l.author_id&&byId[l.author_id]?byId[l.author_id].name:'Earlier',when:fmtDateTime(l.created_at),text:l.body}));
   return t;
 }
 async function loadAll(){
@@ -380,7 +383,12 @@ async function syncAssignees(t){
 async function logTask(t,authorName,text){
   if(!t.id)return;
   const p=findPerson(authorName);
-  await sb.from('task_log').insert({task_id:t.id,author_id:p?p.id:null,body:text});
+  const {data,error}=await sb.from('task_log').insert({task_id:t.id,author_id:p?p.id:null,body:text}).select().single();
+  if(error){console.error(error);return;}
+  /* notify every OTHER assignee — not the poster themselves */
+  const others=[...new Set(assigneesM(t).filter(Boolean).filter(n=>!p||n!==p.s))]
+    .map(findMember).filter(Boolean).map(m=>m.id);
+  await notifyActivity(t.id,data.id,p?p.id:null,others);
 }
 async function saveRequestRow(q,kind){
   const p=findPerson(q.from)||{};
@@ -644,6 +652,7 @@ function App(){
       .on('postgres_changes',{event:'*',schema:'public',table:'requests'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'notices'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'task_notifications'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'task_activity_notifications'},refetch)
       .subscribe();
     return ()=>{clearTimeout(t);sb.removeChannel(ch);};
   },[session]);
@@ -734,11 +743,11 @@ function App(){
     needExt,
     /* opening a notification always jumps to the real signed-in user's own task, regardless of
        whatever role "Preview As" is currently simulating — the notification IS theirs (RLS-scoped) */
-    openNotif:n=>{markNotifRead(n.id).catch(console.error);n.read_at=new Date().toISOString();R();
+    openNotif:n=>{markNotifRead(n).catch(console.error);n.read_at=new Date().toISOString();R();
       const idx=tasks.findIndex(x=>x.id===n.task_id);if(idx>=0)setSheet({kind:'update',idx});else setSheet(null);},
-    markAllNotifsSeen:()=>{const ids=notifs.filter(n=>!n.read_at).map(n=>n.id);
-      if(!ids.length)return;markAllNotifsRead(ids).catch(console.error);
-      notifs.forEach(n=>{if(!n.read_at)n.read_at=new Date().toISOString();});R();},
+    markAllNotifsSeen:()=>{const unread=notifs.filter(n=>!n.read_at);
+      if(!unread.length)return;markAllNotifsRead(unread).catch(console.error);
+      unread.forEach(n=>{n.read_at=new Date().toISOString();});R();},
   };
 
   return <>
@@ -1095,10 +1104,13 @@ function NotifSheet({ctx,acts,close}){
     <div style={{maxHeight:400,overflowY:'auto'}}>
       {ctx.notifs.length?ctx.notifs.map(n=>{
         const t=tasks.find(x=>x.id===n.task_id);
-        return <div key={n.id} className="task" style={{cursor:'pointer',opacity:n.read_at?0.55:1}} onClick={()=>acts.openNotif(n)}>
-          <div className="stripe" style={{background:n.kind==='overdue'?'var(--red)':'var(--amber)'}}/>
-          <div className="tt">{t?t.t:'(task removed)'}</div>
-          <div className="meta">{n.kind==='overdue'?'Overdue':'Due today'} · {fmtD(n.for_date)}</div>
+        const isAct=n.source==='activity';
+        const entry=isAct&&t&&t.log?t.log.find(x=>x.id===n.task_log_id):null;
+        const actor=isAct?(ALL_PEOPLE.find(p=>p.id===n.actor_staff_id)||{}).n:null;
+        return <div key={n.source+n.id} className="task" style={{cursor:'pointer',opacity:n.read_at?0.55:1}} onClick={()=>acts.openNotif(n)}>
+          <div className="stripe" style={{background:isAct?'var(--accent)':n.kind==='overdue'?'var(--red)':'var(--amber)'}}/>
+          <div className="tt">{isAct?(actor||'Someone')+' updated “'+(t?t.t:'a task')+'”':(t?t.t:'(task removed)')}</div>
+          <div className="meta">{isAct?(entry?'“'+(entry.text.length>60?entry.text.slice(0,60)+'…':entry.text)+'” · ':'')+fmtDateTime(n.created_at):(n.kind==='overdue'?'Overdue':'Due today')+' · '+fmtD(n.for_date)}</div>
         </div>;
       }):<div className="empty">No notifications</div>}
     </div>
@@ -1362,7 +1374,7 @@ function UpdateSheet({ctx,idx,close}){
     t.progress=st;
     if(note.trim()){
       t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
-      t.log.push({by:ctx.r.name,when:fmtD(iso(TODAY)),text:note.trim()});
+      t.log.push({by:ctx.r.name,when:fmtDateTime(new Date()),text:note.trim()});
       t.note=note.trim();
       logTask(t,ctx.r.name,note.trim()).catch(console.error);
     }
@@ -1451,7 +1463,7 @@ function ReopenSheet({ctx,idx,close}){
     t.date=pickd.iso;t.due='Due '+fmtD(pickd.iso);
     t.reopened={by:ctx.r.name,comment:cmt.trim()};
     t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
-    t.log.push({by:ctx.r.name,when:fmtD(iso(TODAY)),text:'Reopened — '+(cmt.trim()||'not up to the mark')});
+    t.log.push({by:ctx.r.name,when:fmtDateTime(new Date()),text:'Reopened — '+(cmt.trim()||'not up to the mark')});
     if(cmt.trim())t.note=cmt.trim();
     saveTask(t).catch(console.error);logTask(t,ctx.r.name,'Reopened — '+(cmt.trim()||'not up to the mark')).catch(console.error);
     close();ctx.R();ctx.say('Task reopened ↻ · '+t.who+' notified with your comment');};
