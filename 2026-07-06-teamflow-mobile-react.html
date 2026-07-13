@@ -769,7 +769,8 @@ function TaskCard({o,ctx,acts}){
     <div className="meta"><span className="who">{t.init}</span> {t.who}{t.coWho&&t.coWho.length?' + '+t.coWho.join(' + '):''} · {BUCKETS[t.bucket]||t.bucket}
       <span className="tag2 gray">{TYPES[t.type||'work'].e} {TYPES[t.type||'work'].l}</span>
       {t.recur?<span className="tag2 blue">↻ {recurLabel(t.recur,t.recurOn)}</span>:null}</div>
-    {t.selfAssigned?<div className="meta" style={{marginTop:5}}><span className="tag2 green">🙋 Self-assigned</span>{t.instructedBy?<span className="tag2 amber">📣 As per {t.instructedBy}</span>:null}</div>:null}
+    {t.selfAssigned?<div className="meta" style={{marginTop:5}}><span className="tag2 green">🙋 Self-assigned</span>{t.instructedBy?<span className="tag2 amber">📣 As per {t.instructedBy}</span>:null}</div>
+      :t.instructedBy?<div className="meta" style={{marginTop:5}}><span className="tag2 gray">📣 Assigned by {t.instructedBy}</span></div>:null}
     {t.origin?<div className="meta" style={{marginTop:5}}><span className={'tag2 '+(t.origin==='issue'?'amber':'blue')}>{t.origin==='issue'?'🔧 Reported issue':'📦 Supply request'}{t.reportedBy?' · by '+t.reportedBy:''}</span></div>:null}
     {t.extReq?<div className="meta" style={{marginTop:5}}><span className="tag2 amber">⏳ Extension requested → {t.extReq.label||t.extReq.newDate}</span></div>:null}
     {!t.done&&t.coWho&&t.coWho.length&&(t.doneBy||[]).length?<div className="meta" style={{marginTop:5}}>
@@ -905,7 +906,8 @@ function Cal({ctx,personal,allowFilter}){
       {evs.slice(0,3).map(o=>{const dd=new Date(o.t.date+'T00:00:00');const od=!o.t.done&&dd<TODAY&&!sameDay(dd,TODAY);
         return <div key={o.i} className="calev" style={{background:bucketColor(o.t.bucket),opacity:o.t.done?.55:1,textDecoration:o.t.done?'line-through':undefined,boxShadow:od?'0 0 0 1.5px var(--red)':undefined}}
           onClick={()=>ctx.setSheet({kind:'event',idx:o.i})}>{o.t.done?'✓ ':''}{gist(o.t.t)}</div>;})}
-      {evs.length>3?<div className="calmore">+{evs.length-3} more</div>:null}
+      {evs.length>3?<div className="calmore" style={{cursor:'pointer'}}
+        onClick={()=>ctx.setSheet({kind:'day',day:new Date(y,m,d),events:evs})}>+{evs.length-3} more</div>:null}
     </div>);
   }
   function ics(){
@@ -1043,6 +1045,7 @@ function Sheets({ctx,acts,sheet}){
       {sheet.kind==='reopen'&&<ReopenSheet ctx={ctx} idx={sheet.idx} close={close}/>}
       {sheet.kind==='reassign'&&<ReassignSheet ctx={ctx} idx={sheet.idx} close={close}/>}
       {sheet.kind==='event'&&<EventSheet ctx={ctx} idx={sheet.idx} close={close}/>}
+      {sheet.kind==='day'&&<DaySheet ctx={ctx} day={sheet.day} events={sheet.events} close={close}/>}
     </div>
   </div>;
 }
@@ -1440,12 +1443,26 @@ function EventSheet({ctx,idx,close}){
     <div className="sub">{stat} · {t.due||t.date}</div>
     <div className="field"><div className="k">Assigned to</div><div className="v">
       <span className="who" style={{marginRight:6}}>{t.init||''}</span>{t.who}{t.coWho&&t.coWho.length?' + '+t.coWho.join(' + '):''}{m.dept?' · '+m.dept:''}{m.role?' ('+m.role+')':''}</div></div>
+    {!t.selfAssigned&&t.instructedBy?<div className="field"><div className="k">Assigned by</div><div className="v">{t.instructedBy}</div></div>:null}
     <div className="field"><div className="k">Department</div><div className="v">
       <span className="ldot" style={{display:'inline-block',background:bucketColor(t.bucket),marginRight:6}}/>{BUCKETS[t.bucket]||t.bucket||'—'}</div></div>
     <div className="field"><div className="k">Type</div><div className="v">{TYPES[t.type||'work'].e} {TYPES[t.type||'work'].l}</div></div>
     {t.recur?<div className="field"><div className="k">Repeats</div><div className="v">↻ {recurLabel(t.recur,t.recurOn)} — next created on completion</div></div>:null}
     {t.note?<div className="field"><div className="k">Note</div><div className="v" style={{fontWeight:500}}>“{t.note}”</div></div>:null}
     {!t.done?<button className="send" onClick={()=>{ctx.setSheet({kind:'update',idx});}}>Update / Done ✓</button>:null}
+  </>;
+}
+function DaySheet({ctx,day,events,close}){
+  return <>
+    <h3>{day.toLocaleDateString('en',{weekday:'short'})+' · '+day.toLocaleDateString('en',{day:'numeric',month:'short'})}</h3>
+    <div className="sub">{events.length} task{events.length!==1?'s':''}</div>
+    <div style={{maxHeight:360,overflowY:'auto'}}>
+      {events.map(o=><div key={o.i} className="task" style={{cursor:'pointer'}} onClick={()=>ctx.setSheet({kind:'event',idx:o.i})}>
+        <div className="stripe" style={{background:bucketColor(o.t.bucket)}}/>
+        <div className="tt" style={{textDecoration:o.t.done?'line-through':undefined}}>{o.t.done?'✓ ':''}{o.t.t}</div>
+        <div className="meta"><span className="who">{o.t.init}</span> {o.t.who}{o.t.coWho&&o.t.coWho.length?' + '+o.t.coWho.join(' + '):''} · {BUCKETS[o.t.bucket]||o.t.bucket}</div>
+      </div>)}
+    </div>
   </>;
 }
 
