@@ -2364,7 +2364,7 @@ function QuickCapture({ctx,close}){
         </div></div>
         <div className="fieldrow"><div className="k">Department</div><div className="v">
           <span className="editchip" onClick={()=>setPick(pick==='bucket'?null:'bucket')}>{BUCKETS[bucket]||bucket} <I n="chevd" s={13}/></span>
-          {pick==='bucket'?<div className="pickrow">{realDeptKeys().map(k=><button key={k} className={'pk'+(k===bucket?' cur':'')}
+          {pick==='bucket'?<div className="pickrow">{realDeptKeys(ctx.scope).map(k=><button key={k} className={'pk'+(k===bucket?' cur':'')}
             onClick={()=>{setBucket(k);setBucketSugg(false);setPick(null);}}>{BUCKETS[k]}</button>)}</div>:null}
         </div></div>
         <div className="fieldrow"><div className="k">Priority</div><div className="v">
