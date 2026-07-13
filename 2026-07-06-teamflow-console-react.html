@@ -2233,7 +2233,7 @@ function QuickCapture({ctx,close}){
     if(named.length){setWhos(named);setWhoSugg(false);setWhoWhy(named.length>1?'all named in your sentence — joint task':'named in your sentence');}
     else{const s=suggestWho(guessType(low),ctx.scope);if(s&&(whoSugg||!whos.length)){setWhos([s.s]);setWhoSugg(true);setWhoWhy(s.why);}}
     const gt=guessType(low);setType(gt);
-    if(bucketSugg)setBucket(guessBucket(low));
+    if(bucketSugg){const gb=guessBucket(low),allowed=realDeptKeys(ctx.scope);setBucket(allowed.includes(gb)?gb:(allowed[0]||gb));}
     const gd=guessDate(low);
     if(gd){setWhen(gd.date);setWhenSugg(false);setWhenWhy(gd.why);}
     else if(whenSugg||!when){const s=suggestDue(gt);setWhen(s.date);setWhenSugg(true);setWhenWhy(s.why);}

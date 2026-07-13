@@ -1086,7 +1086,8 @@ function TaskSheet({ctx,close}){
   function understood(p){
     const gt=typeByUser.current?type:guessType(p.raw);
     if(!typeByUser.current)setType(gt);
-    const bucket=guessBucket(p.raw);
+    const guessedBucket=guessBucket(p.raw),allowedDepts=realDeptKeys(ctx.scope);
+    const bucket=allowedDepts.includes(guessedBucket)?guessedBucket:(allowedDepts[0]||guessedBucket);
     let whos=p.whos.slice(),whoSugg=false,whoWhy='';
     if(ctx.role==='worker'){whos=[ctx.r.self];whoWhy='assigned to yourself';}
     else if(whos.length>1){whoWhy='joint task — named in your sentence';}
