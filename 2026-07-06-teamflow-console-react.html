@@ -2418,7 +2418,7 @@ function ReportsView({ctx}){
       </div>
     </div>
     <div className="grid2">
-      <div className="panel"><h3>{fw==='all'?'Completion by employee':'Completion by department — '+(byShort(fw)||{n:fw}).n}</h3><Bars rows={byEmp}/></div>
+      <div className="panel"><h3>{fw==='all'?'Completion by employee':'Completion by department — '+(byShort(fw)||{n:fw}).n}</h3><Bars pct rows={byEmp}/></div>
       <div className="panel"><h3>Tasks by type</h3>
         <Bars rows={Object.keys(TYPES).map(k=>[TYPES[k],mine.filter(t=>(t.type||'work')===k).length]).filter(r=>r[1]>0)}/></div>
     </div>
