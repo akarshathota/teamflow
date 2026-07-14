@@ -595,6 +595,7 @@ function guessBucket(t){t=t.toLowerCase();
   if(/\b(repair|fix|broken|leak|clean|service|maintain)\b/.test(t))return 'maintenance';
   return 'administration';}
 function guessDate(t){t=t.toLowerCase();const d=new Date(TODAY);
+  const abs=guessAbsoluteDate(t);if(abs)return abs;
   if(/\btoday|urgent|asap|immediately\b/.test(t))return{date:iso(d),why:/urgent|asap|immediately/.test(t)?'sounds urgent — set for today':'you said today'};
   if(/\btomorrow\b/.test(t)){d.setDate(d.getDate()+1);return{date:iso(d),why:'you said tomorrow'};}
   if(/\bfriday\b/.test(t)){const df=(5-d.getDay()+7)%7||7;d.setDate(d.getDate()+df);return{date:iso(d),why:'you said Friday'};}
@@ -2417,7 +2418,16 @@ function QuickCapture({ctx,close}){
     if(named.length){setWhos(named);setWhoSugg(false);setWhoWhy(named.length>1?'all named in your sentence — joint task':'named in your sentence');}
     else{const s=suggestWho(guessType(low),ctx.scope);if(s&&(whoSugg||!whos.length)){setWhos([s.s]);setWhoSugg(true);setWhoWhy(s.why);}}
     const gt=guessType(low);setType(gt);
-    if(bucketSugg){const gb=guessBucket(low),allowed=realDeptKeys(ctx.scope);setBucket(allowed.includes(gb)?gb:(allowed[0]||gb));}
+    /* the assignee's own real department is a stronger signal than keywords in freeform text —
+       prefer it whenever exactly one person is named (a joint task could span departments, so
+       keyword-guessing stays the fallback there, same as when no one's named at all). */
+    if(bucketSugg){
+      const allowed=realDeptKeys(ctx.scope);
+      let gb;
+      if(named.length===1){const person=byShort(named[0]);gb=person&&LABEL_TO_BUCKET[person.dept]?LABEL_TO_BUCKET[person.dept]:guessBucket(low);}
+      else gb=guessBucket(low);
+      setBucket(allowed.includes(gb)?gb:(allowed[0]||gb));
+    }
     const gd=guessDate(low);
     if(gd){setWhen(gd.date);setWhenSugg(false);setWhenWhy(gd.why);}
     else if(whenSugg||!when){const s=suggestDue(gt);setWhen(s.date);setWhenSugg(true);setWhenWhy(s.why);}

@@ -36,6 +36,29 @@ const fmtDateTime=t=>{if(!t)return '';const x=new Date(t);
 const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const ord=n=>{const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);};
+/* explicit calendar dates in free text ("20th July", "July 20", "on the 5th of August") -> an
+   ISO date string. Checked before relative-phrase guessing (today/tomorrow/next week/etc. in
+   each app's own guessDate/parseText) since a named date is a more certain signal than those.
+   Rolls into next year if the day/month already passed this year (mentioning "5 January" in
+   December means next January, not four months ago). Returns null if no explicit date phrase
+   is found — callers keep their existing relative-phrase fallback unchanged. */
+function guessAbsoluteDate(t){
+  const MON='(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+  let m=t.match(new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?'+MON+'\\b','i')),day,monTxt;
+  if(m){day=+m[1];monTxt=m[2];}
+  else{
+    m=t.match(new RegExp('\\b'+MON+'\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b','i'));
+    if(!m)return null;
+    monTxt=m[1];day=+m[2];
+  }
+  if(day<1||day>31)return null;
+  const mi=MONTHS.findIndex(mm=>mm.toLowerCase()===monTxt.slice(0,3).toLowerCase());
+  if(mi<0)return null;
+  const today0=new Date(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate());
+  let d=new Date(TODAY.getFullYear(),mi,day);
+  if(d<today0)d=new Date(TODAY.getFullYear()+1,mi,day);
+  return {date:iso(d),why:'you said '+day+' '+MONTHS[mi]};
+}
 const recurLabel=(recur,on)=>{if(!recur)return '';
   if(recur==='weekly'&&on!=null)return 'Weekly · '+DOW[on];
   if(recur==='monthly'&&on!=null)return 'Monthly · '+ord(on);

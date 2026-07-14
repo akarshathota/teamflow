@@ -501,8 +501,10 @@ function whenToDate(when){const w=(when||'').toLowerCase();const d=new Date(TODA
 function parseText(txt){
   const low=txt.toLowerCase();
   const whos=MEMBERS.filter(m=>new RegExp('\\b'+m.n.toLowerCase()+'\\b').test(low)).map(m=>m.n);
-  let when=null;
-  if(low.includes('today'))when='Today · 5:00 PM';
+  let when=null,dateIso=null,dateWhy=null;
+  const abs=guessAbsoluteDate(low);
+  if(abs){dateIso=abs.date;dateWhy=abs.why;}
+  else if(low.includes('today'))when='Today · 5:00 PM';
   else if(low.includes('tomorrow'))when='Tomorrow · 9:00 AM';
   else if(low.includes('friday'))when='Friday · 5:00 PM';
   else if(low.includes('this week'))when='This week';
@@ -516,7 +518,7 @@ function parseText(txt){
   let task=txt.replace(/^(please\s+)?(tell|ask|remind|get)\s+\w+(\s+and\s+\w+)*\s+(to\s+)?/i,'').replace(/^\w+\s+should\s+/i,'');
   task=task.replace(END,'').replace(END,'').replace(/[,.]\s*$/,'').trim()||txt;
   task=task.charAt(0).toUpperCase()+task.slice(1);
-  return {raw:txt,task,whos,when,recur,recurOn};
+  return {raw:txt,task,whos,when,dateIso,dateWhy,recur,recurOn};
 }
 const SAMPLES=[
   "The projector in the science lab is broken and needs fixing",
@@ -1172,16 +1174,26 @@ function TaskSheet({ctx,close}){
   function understood(p){
     const gt=typeByUser.current?type:guessType(p.raw);
     if(!typeByUser.current)setType(gt);
-    const guessedBucket=guessBucket(p.raw),allowedDepts=realDeptKeys(ctx.scope);
-    const bucket=allowedDepts.includes(guessedBucket)?guessedBucket:(allowedDepts[0]||guessedBucket);
+    const allowedDepts=realDeptKeys(ctx.scope);
     let whos=p.whos.slice(),whoSugg=false,whoWhy='';
     if(ctx.role==='worker'){whos=[ctx.r.self];whoWhy='assigned to yourself';}
     else if(whos.length>1){whoWhy='joint task — named in your sentence';}
     else if(whos.length===1){whoWhy='named in your sentence';}
-    else{const s=suggestAssignee(gt,bucket);whos=[s.n];whoSugg=true;whoWhy=s.reason;}
+    /* the assignee's own real department is a stronger signal than keywords in the raw text —
+       prefer it whenever exactly one person is named; a joint task could span departments, so
+       keyword-guessing stays the fallback there, same as when no one's named yet. */
+    let guessedBucket;
+    if(whos.length===1){const m=findMember(whos[0]);guessedBucket=m&&LABEL_TO_BUCKET[m.dept]?LABEL_TO_BUCKET[m.dept]:guessBucket(p.raw);}
+    else guessedBucket=guessBucket(p.raw);
+    const bucket=allowedDepts.includes(guessedBucket)?guessedBucket:(allowedDepts[0]||guessedBucket);
+    if(!whos.length){const s=suggestAssignee(gt,bucket);whos=[s.n];whoSugg=true;whoWhy=s.reason;}
     let when=p.when,whenSugg=false,whenWhy='';
-    if(!when){const s=suggestDue(gt,p.raw);when=s.when;whenSugg=true;whenWhy=s.reason;}
-    let dateIso=whenToDate(when);
+    let dateIso;
+    if(p.dateIso){dateIso=p.dateIso;whenWhy=p.dateWhy||'you named a date in your sentence';}
+    else{
+      if(!when){const s=suggestDue(gt,p.raw);when=s.when;whenSugg=true;whenWhy=s.reason;}
+      dateIso=whenToDate(when);
+    }
     const timeHM=guessTime(p.raw)||labelToTime(when)||'';
     const recur=p.recur||null;
     let recurOn=p.recurOn!=null?p.recurOn:(recur?defaultRecurOn(recur,dateIso):null);
