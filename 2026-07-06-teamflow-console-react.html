@@ -137,12 +137,6 @@
   .trow:hover{border-color:var(--accent-border);box-shadow:var(--sh-md)}
   .trow.done{opacity:.6}
   .trow.done .tt{text-decoration:line-through;color:var(--muted)}
-  .donebtn{width:26px;height:26px;border-radius:50%;border:2px solid #c9c6b8;background:var(--card);cursor:pointer;flex:0 0 auto;
-    display:flex;align-items:center;justify-content:center;color:transparent}
-  .donebtn:hover{border-color:var(--green);color:#c9c6b8}
-  .donebtn.on{background:var(--green);border-color:var(--green);color:#fff}
-  .donebtn.armed{border-color:var(--amber);background:var(--amber-soft);color:var(--amber);animation:blink 1.2s infinite}
-  .donebtn svg{width:14px;height:14px;stroke-width:3}
   .trow .body{flex:1;min-width:0}
   .trow .tt{font-size:14px;font-weight:600;line-height:1.35}
   .trow .meta{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted);margin-top:5px;flex-wrap:wrap}
@@ -909,15 +903,6 @@ function App(){
   }
 
   /* actions */
-  const quickDone=i=>{const t=tasks[i];
-    if(t.status==='done'){setDrawerIdx(i);say('To reopen, set a new due date in the task panel');return;}
-    if(t.completionPending){say('Already submitted — waiting for approval');return;}
-    const r=submitOrComplete(t);
-    persistComplete(t,r.nd);
-    R();
-    if(r.pending){const bp=byShort(t.who);say('Marked complete — waiting for approval'+(bp&&bp.boss?' from '+bp.boss.split(' ')[0]:''));return;}
-    say(r.nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(r.nd)
-      :t.coWho&&t.coWho.length?'Marked done for all assignees':'Task marked done');};
   const remindPerson=s=>{const p=byShort(s);say('Reminder sent to '+(p?p.n.split(' ')[0]:s));};
   const approveReq=i=>{const r=requests[i];if(!r||r.kind!=='request')return;
     if(!canApprove(r.from)){say('Only the department boss can approve this');return;}
@@ -1001,7 +986,7 @@ function App(){
   }
 
   const ctx={role,view,setView,say,R,scope,shorts,viewer,treeRoot,mine,canApprove,canAssignIssue,bossChain,previewing,
-    quickDone,remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,approveCompletion,rejectCompletion,
+    remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,approveCompletion,rejectCompletion,
     setDrawerIdx,setModal,setResetTarget,exportCSV,printReport,qReqs,qExts,qCompletions,attentionList,
     notifs,openNotif,markAllNotifsSeen,lastCronRun,activityLog};
 
@@ -1157,23 +1142,7 @@ function TagsFor({t}){
 }
 function TaskRow({t,i,ctx}){
   const p=byShort(t.who),od=isOverdue(t),dn=t.status==='done';
-  /* mis-click guard: a bare tap only "arms" the button (brief amber pulse); the actual
-     quickDone(i) only fires on a second tap within the window. Already-resolved states (done,
-     or already submitted for approval) skip the arming — quickDone(i) itself handles those with
-     its own message, so there's nothing to confirm. */
-  const [armed,setArmed]=useState(false);
-  const armTimer=useRef();
-  useEffect(()=>()=>clearTimeout(armTimer.current),[]);
-  const onDoneClick=e=>{
-    e.stopPropagation();
-    if(dn||t.completionPending){ctx.quickDone(i);return;}
-    if(!armed){setArmed(true);armTimer.current=setTimeout(()=>setArmed(false),2200);return;}
-    clearTimeout(armTimer.current);setArmed(false);
-    ctx.quickDone(i);
-  };
   return <div className={'trow'+(dn?' done':'')} onClick={()=>ctx.setDrawerIdx(i)}>
-    <button className={'donebtn'+(dn?' on':'')+(armed?' armed':'')} onClick={onDoneClick}
-      aria-label={armed?'Tap again to confirm':'Mark done'} title={armed?'Tap again to confirm':undefined}><I n="check"/></button>
     <div className="body">
       <div className="tt">{t.t}</div>
       <div className="meta">

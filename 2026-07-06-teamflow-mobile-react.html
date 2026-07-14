@@ -1433,8 +1433,9 @@ function UpdateSheet({ctx,idx,close}){
   const [st,setSt]=useState('done');
   const [note,setNote]=useState('');
   const [files,setFiles]=useState([]);
-  /* mis-click guard for the "Mark done ✓" send button — mirrors console's donebtn arm/confirm
-     pattern. The Done tab is pre-selected by default, so the very first tap on this sheet could
+  /* mis-click guard for the "Mark done ✓" send button — arm/confirm pattern (console dropped its
+     row-level equivalent; this is now the only mis-click guard in either app). The Done tab is
+     pre-selected by default, so the very first tap on this sheet could
      otherwise complete a task with zero real confirmation; a first tap just arms it (label flips
      to "Tap again to confirm"), the second tap within the window actually calls save(). */
   const [armed,setArmed]=useState(false);
