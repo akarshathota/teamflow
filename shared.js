@@ -41,15 +41,24 @@ const ord=n=>{const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]
    each app's own guessDate/parseText) since a named date is a more certain signal than those.
    Rolls into next year if the day/month already passed this year (mentioning "5 January" in
    December means next January, not four months ago). Returns null if no explicit date phrase
-   is found — callers keep their existing relative-phrase fallback unchanged. */
+   is found — callers keep their existing relative-phrase fallback unchanged.
+   "may" is excluded from the general day-first pattern (e.g. "20th May") since it collides with
+   the modal verb — "class 3 may need a substitute" would otherwise misparse "3 may" as a date.
+   Bare digit-before-"may" only counts as a date with an explicit "of" ("3rd of May"); "May 20" /
+   "May 3rd" (month-first) stay unambiguous either way, since the modal verb is never followed
+   directly by a number, so that form doesn't need the same guard. */
 function guessAbsoluteDate(t){
-  const MON='(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
-  let m=t.match(new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?'+MON+'\\b','i')),day,monTxt;
-  if(m){day=+m[1];monTxt=m[2];}
+  const MI='jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?';
+  let m=t.match(new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+of\\s+may\\b','i')),day,monTxt;
+  if(m){day=+m[1];monTxt='may';}
   else{
-    m=t.match(new RegExp('\\b'+MON+'\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b','i'));
-    if(!m)return null;
-    monTxt=m[1];day=+m[2];
+    m=t.match(new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?('+MI+')\\b','i'));
+    if(m){day=+m[1];monTxt=m[2];}
+    else{
+      m=t.match(new RegExp('\\b(may|'+MI+')\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b','i'));
+      if(!m)return null;
+      monTxt=m[1];day=+m[2];
+    }
   }
   if(day<1||day>31)return null;
   const mi=MONTHS.findIndex(mm=>mm.toLowerCase()===monTxt.slice(0,3).toLowerCase());
