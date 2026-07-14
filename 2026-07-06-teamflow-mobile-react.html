@@ -166,7 +166,7 @@
   .calhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
   .calhead button{border:none;background:#f1f0e9;width:30px;height:30px;border-radius:7px;cursor:pointer;color:var(--ink2);display:flex;align-items:center;justify-content:center}
   .calmon{font-weight:700;font-size:15px;font-family:'Bricolage Grotesque',sans-serif}
-  .calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .calgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
   .caldow{text-align:center;font-size:10px;font-weight:700;color:var(--muted);padding:2px 0}
   .calcell{min-height:50px;background:#f7f6f1;border-radius:6px;padding:3px}
   .calcell.empty2{background:transparent}
@@ -320,7 +320,8 @@ function rowToMobileTask(row,assignRows,byId,logRows){
     selfAssigned:row.self_assigned||undefined,instructedBy:row.instructed_by||undefined,
     origin:row.origin||undefined,
     files:row.files&&row.files.length?row.files:undefined,
-    recur:row.recur||undefined,recurOn:row.recur_on!=null?row.recur_on:undefined};
+    recur:row.recur||undefined,recurOn:row.recur_on!=null?row.recur_on:undefined,
+    completionPending:row.completion_pending||undefined};
   if(row.ext_new_date)t.extReq={newDate:row.ext_new_date,label:extLabel(row.ext_new_date),reason:row.ext_reason||''};
   if(row.reopened_by)t.reopened={by:(byId[row.reopened_by]||{name:''}).name,comment:row.reopened_comment||''};
   const logs=logRows.filter(l=>l.task_id===row.id);
@@ -364,7 +365,7 @@ function mobileTaskRow(t){
     due_date:t.date||null,due_time:null,note:t.note||'',
     recur:t.recur||null,recur_on:t.recurOn!=null?t.recurOn:null,
     self_assigned:!!t.selfAssigned,instructed_by:t.instructedBy||null,origin:t.origin||null,
-    files:t.files||[],done_on:t.doneOn||null,
+    files:t.files||[],done_on:t.doneOn||null,completion_pending:!!t.completionPending,
     ext_new_date:(t.extReq&&t.extReq.newDate)||null,ext_reason:(t.extReq&&t.extReq.reason)||null,
     reopened_by:(t.reopened&&findPerson(t.reopened.by))?findPerson(t.reopened.by).id:null,
     reopened_comment:(t.reopened&&t.reopened.comment)||null};
@@ -711,10 +712,14 @@ function App(){
   const waitN=role==='worker'?0
     :(canAssignIssues(role)?pendingIssues.length:0)
     +pendingReqs.filter(q=>canApproveFrom(role,q.from,person.s)).length
-    +tasks.filter(t=>t.extReq&&canApproveFrom(role,t.who,person.s)).length;
+    +tasks.filter(t=>t.extReq&&canApproveFrom(role,t.who,person.s)).length
+    +tasks.filter(t=>t.completionPending&&canApproveFrom(role,t.who,person.s)).length;
 
   const switchRole=v=>{setPreviewRole(v);const rr=ROLES[v];if(!rr.tabs.includes(page))setPage(rr.tabs[0]);setSheet(null);};
-  const ctx={role,r,scope,mine,say,R,setSheet,setPage,page,notifs};
+  /* previewing/realSelf: same real-signed-in-vs-Preview-As distinction the console keeps on ctx
+     (ctx.previewing/ctx.viewer there) — needed so UpdateSheet's open->inprogress auto-transition
+     (Issue 4) checks the REAL logged-in person, not whichever role is currently being simulated. */
+  const ctx={role,r,scope,mine,say,R,setSheet,setPage,page,notifs,previewing,realSelf:myPerson.s};
 
   const needExt=t=>{if(t.done||!t.date)return false;const lim=new Date(TODAY);lim.setDate(lim.getDate()+2);return t.date<=iso(lim);};
 
@@ -745,6 +750,23 @@ function App(){
     rejectExt:i=>{const t=tasks[i];if(!t||!t.extReq)return;delete t.extReq;R();
       saveTask(t).catch(console.error);
       say('Extension rejected — original due date stands');},
+    /* completion-approval actions — same shape as approveExt/rejectExt above, just for the
+       completionPending marker instead of extReq. Approving is the only place that actually runs
+       the done-flip + recurrence spawn (spawnNextRecur); a rejected completion should never have
+       already generated its next occurrence. */
+    approveCompletion:i=>{const t=tasks[i];if(!t||!t.completionPending)return;
+      delete t.completionPending;
+      if(t.coWho&&t.coWho.length)t.doneBy=assigneesM(t).slice();
+      t.done=true;t.doneWhen='just now';delete t.extReq;
+      const nd=spawnNextRecur(t);
+      persistComplete(t,nd);R();
+      say(nd?'Completion approved ✓ · next '+RECURS[t.recur].toLowerCase()+' on '+fmtD(nd):'Completion approved — task closed ✓');},
+    rejectCompletion:i=>{const t=tasks[i];if(!t||!t.completionPending)return;
+      /* leaves status as-is (inprogress, from the bump at submission time) rather than forcing it
+         back to open — same "still-open/in-progress" behavior as console's rejectCompletion. */
+      delete t.completionPending;t.doneBy=[];R();
+      saveTask(t).catch(console.error);
+      say('Completion rejected — sent back to '+t.who.split(' ')[0]);},
     needExt,
     /* opening a notification always jumps to the real signed-in user's own task, regardless of
        whatever role "Preview As" is currently simulating — the notification IS theirs (RLS-scoped) */
@@ -833,6 +855,7 @@ function TaskCard({o,ctx,acts}){
       :t.instructedBy?<div className="meta" style={{marginTop:5}}><span className="tag2 gray">📣 Assigned by {t.instructedBy}</span></div>:null}
     {t.origin?<div className="meta" style={{marginTop:5}}><span className={'tag2 '+(t.origin==='issue'?'amber':'blue')}>{t.origin==='issue'?'🔧 Reported issue':'📦 Supply request'}{t.reportedBy?' · by '+t.reportedBy:''}</span></div>:null}
     {t.extReq?<div className="meta" style={{marginTop:5}}><span className="tag2 amber">⏳ Extension requested → {t.extReq.label||t.extReq.newDate}</span></div>:null}
+    {t.completionPending?<div className="meta" style={{marginTop:5}}><span className="tag2 amber">⏳ Completion pending approval</span></div>:null}
     {!t.done&&t.coWho&&t.coWho.length&&(t.doneBy||[]).length?<div className="meta" style={{marginTop:5}}>
       <span className="tag2 green">✓ Done: {(t.doneBy||[]).join(', ')}</span>
       <span className="tag2 amber">⏳ Pending: {assigneesM(t).filter(a=>!(t.doneBy||[]).includes(a)).join(', ')}</span></div>:null}
@@ -856,9 +879,19 @@ function TaskCard({o,ctx,acts}){
 /* ============ home ============ */
 function Home({ctx,acts}){
   const exts=tasks.map((t,i)=>({t,i})).filter(o=>o.t.extReq&&canApproveFrom(ctx.role,o.t.who,ctx.r.self));
+  const completions=tasks.map((t,i)=>({t,i})).filter(o=>o.t.completionPending&&canApproveFrom(ctx.role,o.t.who,ctx.r.self));
   const reqs=pendingReqs.map((q,qi)=>({q,qi})).filter(o=>canApproveFrom(ctx.role,o.q.from,ctx.r.self));
   return <div>
     {ctx.role!=='worker'?<>
+      {completions.length?<><div className="sec">Completion approvals</div>
+        {completions.map(o=><div className="task" key={'c'+o.i}>
+          <span className="pill today">⏳ Marked done — approve?</span>
+          <div className="tt">{o.t.t}</div>
+          <div className="meta"><span className="who">{o.t.init}</span> {o.t.who} submitted this as complete{o.t.instructedBy?' · assigned by '+o.t.instructedBy:''}</div>
+          <div className="cardbtns">
+            <button className="btn primary" onClick={()=>acts.approveCompletion(o.i)}>Approve ✓</button>
+            <button className="btn ghost" onClick={()=>acts.rejectCompletion(o.i)}><I n="x" s={16}/></button>
+          </div></div>)}</>:null}
       {exts.length?<><div className="sec">Time extension requests</div>
         {exts.map(o=><div className="task" key={'x'+o.i}>
           <span className="pill today">⏳ Extension request</span>
@@ -1400,6 +1433,24 @@ function UpdateSheet({ctx,idx,close}){
   const [st,setSt]=useState('done');
   const [note,setNote]=useState('');
   const [files,setFiles]=useState([]);
+  /* mis-click guard for the "Mark done ✓" send button — mirrors console's donebtn arm/confirm
+     pattern. The Done tab is pre-selected by default, so the very first tap on this sheet could
+     otherwise complete a task with zero real confirmation; a first tap just arms it (label flips
+     to "Tap again to confirm"), the second tap within the window actually calls save(). */
+  const [armed,setArmed]=useState(false);
+  const armTimer=useRef();
+  useEffect(()=>()=>clearTimeout(armTimer.current),[]);
+  useEffect(()=>{setArmed(false);},[st]);
+  /* Issue 4: opening your own assigned task moves it open -> inprogress automatically. Gated on
+     the REAL signed-in person (ctx.realSelf/ctx.previewing, not whatever role Preview As is
+     currently simulating) genuinely being an assignee (hasWhoM, same helper used everywhere
+     else). Mount-time effect keyed on idx, not on every place a task can be opened. */
+  useEffect(()=>{
+    const tk=tasks[idx];
+    if(tk&&!ctx.previewing&&hasWhoM(tk,ctx.realSelf)&&!tk.done&&!tk.progress){
+      tk.progress='inprogress';saveTask(tk).catch(console.error);ctx.R();
+    }
+  },[idx]);
   if(!t)return null;
   const logs=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
   const pickF=async e=>{
@@ -1410,6 +1461,7 @@ function UpdateSheet({ctx,idx,close}){
     catch(err){console.error(err);ctx.say('Upload failed — try again');}
   };
   const save=()=>{
+    if(st==='done'&&t.completionPending){ctx.say('Already submitted — waiting for approval');close();return;}
     t.progress=st;
     if(note.trim()){
       t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
@@ -1423,10 +1475,18 @@ function UpdateSheet({ctx,idx,close}){
       if(t.coWho&&t.coWho.length&&assigneesM(t).includes(self)){
         t.doneBy=[...new Set([...(t.doneBy||[]),self])];
         const pending=assigneesM(t).filter(a=>!t.doneBy.includes(a));
-        if(!pending.length){t.done=true;t.doneWhen='just now';delete t.extReq;const nd=spawnNextRecur(t);persistComplete(t,nd);close();ctx.R();ctx.say(nd?'Everyone finished ✓ · next '+RECURS[t.recur].toLowerCase()+' on '+fmtD(nd):'Everyone finished — task completed ✓');return;}
+        if(!pending.length){
+          /* completion-approval gate, mirroring console: a self-assigned task has no natural
+             "assigner" to approve, so it still completes instantly. Anything assigned by someone
+             else waits for approval instead — spawnNextRecur only runs once approveCompletion
+             actually approves it (acts.approveCompletion), so a rejected completion never leaves
+             an already-spawned next occurrence behind. */
+          if(!t.selfAssigned){t.progress='inprogress';t.completionPending=true;saveTask(t).catch(console.error);close();ctx.R();ctx.say('Everyone confirmed — waiting for approval');return;}
+          t.done=true;t.doneWhen='just now';delete t.extReq;const nd=spawnNextRecur(t);persistComplete(t,nd);close();ctx.R();ctx.say(nd?'Everyone finished ✓ · next '+RECURS[t.recur].toLowerCase()+' on '+fmtD(nd):'Everyone finished — task completed ✓');return;}
         t.done=false;saveTask(t).catch(console.error);close();ctx.R();ctx.say('Your part done ✓ — pending with '+pending.join(', '));return;
       }
       if(t.coWho&&t.coWho.length)t.doneBy=assigneesM(t).slice();
+      if(!t.selfAssigned){t.progress='inprogress';t.completionPending=true;saveTask(t).catch(console.error);close();ctx.R();ctx.say('Marked complete — waiting for approval');return;}
       t.done=true;t.doneWhen='just now';delete t.extReq;
       const nd=spawnNextRecur(t);
       persistComplete(t,nd);
@@ -1441,6 +1501,7 @@ function UpdateSheet({ctx,idx,close}){
     <div className="sub">{t.t}</div>
     {t.prio==='high'?<span className="tag2 red" style={{marginTop:6,display:'inline-block'}}>🔴 High priority</span>
       :t.prio==='med'?<span className="tag2 amber" style={{marginTop:6,display:'inline-block'}}>🟡 Medium priority</span>:null}
+    {t.completionPending?<div className="notepv" style={{color:'var(--amber)',fontStyle:'normal',marginTop:8}}>⏳ Completion pending approval — waiting for your manager to review.</div>:null}
     <div className="modetabs">
       {[['inprogress','🔧 In progress'],['done','✓ Done']].map(([k,l])=>
         <button key={k} className={'mtab'+(st===k?' on':'')} onClick={()=>setSt(k)}>{l}</button>)}
@@ -1462,7 +1523,13 @@ function UpdateSheet({ctx,idx,close}){
       setFiles(files.filter((_,i)=>i!==ix));
       removeAttachment(f.path).catch(console.error);
     }}/>)}</div>:null}
-    <button className="send" onClick={save}>{st==='done'?'Mark done ✓':'Save update'}</button>
+    <button className="send" onClick={()=>{
+      if(st==='done'&&!t.completionPending){
+        if(!armed){setArmed(true);armTimer.current=setTimeout(()=>setArmed(false),2200);return;}
+        clearTimeout(armTimer.current);setArmed(false);
+      }
+      save();
+    }}>{st==='done'?(t.completionPending?'Mark done ✓':(armed?'Tap again to confirm ✓':'Mark done ✓')):'Save update'}</button>
   </>;
 }
 function ExtSheet({ctx,idx,close}){

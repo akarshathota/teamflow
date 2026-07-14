@@ -104,7 +104,7 @@
   .kpi .bar i{display:block;height:100%;border-radius:4px}
   .pulsedot{position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:50%;background:var(--red);border:2px solid var(--card);animation:blink 1.2s infinite}
   @keyframes blink{50%{opacity:.35}}
-  .grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:16px}
+  .grid2{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px}
   .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:var(--sh-sm);margin-bottom:16px}
   .panel h3{margin:0 0 14px;font-size:14.5px;font-weight:700;display:flex;align-items:center;gap:8px}
   .h-row{display:flex;align-items:center;justify-content:space-between;margin:0 0 14px}
@@ -141,6 +141,7 @@
     display:flex;align-items:center;justify-content:center;color:transparent}
   .donebtn:hover{border-color:var(--green);color:#c9c6b8}
   .donebtn.on{background:var(--green);border-color:var(--green);color:#fff}
+  .donebtn.armed{border-color:var(--amber);background:var(--amber-soft);color:var(--amber);animation:blink 1.2s infinite}
   .donebtn svg{width:14px;height:14px;stroke-width:3}
   .trow .body{flex:1;min-width:0}
   .trow .tt{font-size:14px;font-weight:600;line-height:1.35}
@@ -168,7 +169,7 @@
   .empty b{color:var(--ink2)}
 
   /* three-column Tasks layout */
-  .cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:start}
+  .cols3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start}
   .colpanel{display:flex;flex-direction:column}
   .col-head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
   .col-head h3{margin:0;font-size:14.5px;font-weight:700;flex:1}
@@ -213,7 +214,7 @@
   .calhead{display:flex;align-items:center;gap:12px;margin-bottom:14px}
   .calhead .navb{border:none;background:#efeee7;width:32px;height:32px;border-radius:8px;cursor:pointer;color:var(--ink2);display:flex;align-items:center;justify-content:center}
   .calmon{font-weight:700;font-size:16px;min-width:150px;font-family:'Bricolage Grotesque',sans-serif}
-  .calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .calgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
   .caldow{text-align:center;font-size:11px;font-weight:700;color:var(--muted);padding:4px 0}
   .calcell{min-height:104px;background:#fbfaf7;border:1px solid var(--line);border-radius:8px;padding:6px;cursor:pointer}
   .calcell:hover{border-color:var(--accent-border)}
@@ -289,7 +290,7 @@
   .org-checklist{display:flex;flex-direction:column;gap:9px;margin:12px 20px;max-height:220px;overflow-y:auto}
   .org-check-row{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink);cursor:pointer}
   .org-check-row input{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
-  .org-role-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 20px}
+  .org-role-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 20px}
   .org-role-grid button{border:1.5px solid var(--line);background:var(--card);border-radius:9px;padding:14px 8px;font-family:inherit;
     font-size:13px;font-weight:700;color:var(--ink);cursor:pointer}
   .org-role-grid button:hover{border-color:var(--accent);background:var(--accent-soft)}
@@ -364,7 +365,7 @@
     .search{width:170px}
   }
   @media (max-width:760px){
-    .kpis{grid-template-columns:repeat(2,1fr)}
+    .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
     .topbar{flex-wrap:wrap;gap:10px;padding:12px 16px}
     .stripbar,.view{padding-left:16px;padding-right:16px}
     .strip{flex-wrap:wrap}
@@ -437,7 +438,8 @@ function rowToTask(row,assignRows,logRows){
     doneBy:doneBy.length?doneBy:undefined,
     selfAssigned:row.self_assigned||undefined,instructedBy:row.instructed_by||undefined,
     origin:row.origin||undefined,files:row.files&&row.files.length?row.files:undefined,
-    recur:row.recur||undefined,recurOn:row.recur_on!=null?row.recur_on:undefined};
+    recur:row.recur||undefined,recurOn:row.recur_on!=null?row.recur_on:undefined,
+    completionPending:row.completion_pending||undefined};
   if(row.ext_new_date)t.extReq={newDate:row.ext_new_date,reason:row.ext_reason||""};
   if(row.reopened_by)t.reopened={by:byId2Name(row.reopened_by),comment:row.reopened_comment||""};
   const logs=logRows.filter(l=>l.task_id===row.id);
@@ -482,7 +484,7 @@ function taskRow(t){
     status:t.status,due_date:t.date||null,due_time:t.time||null,note:t.note||'',
     recur:t.recur||null,recur_on:t.recurOn!=null?t.recurOn:null,
     self_assigned:!!t.selfAssigned,instructed_by:t.instructedBy||null,origin:t.origin||null,
-    files:t.files||[],done_on:t.doneOn||null,
+    files:t.files||[],done_on:t.doneOn||null,completion_pending:!!t.completionPending,
     ext_new_date:(t.extReq&&t.extReq.newDate)||null,ext_reason:(t.extReq&&t.extReq.reason)||null,
     reopened_by:(t.reopened&&byName(t.reopened.by))?byName(t.reopened.by).id:null,
     reopened_comment:(t.reopened&&t.reopened.comment)||null};
@@ -624,6 +626,23 @@ function completeTask(t){
   tasks.push({t:t.t,who:t.who,coWho:t.coWho?t.coWho.slice():undefined,type:t.type,bucket:t.bucket,
     prio:t.prio,date:nd,time:t.time||null,status:'open',note:'',recur:t.recur,recurOn:t.recurOn,selfAssigned:t.selfAssigned,instructedBy:t.instructedBy});
   return nd;}
+/* completion-approval gate, mirroring the extension-request pattern (t.extReq): a self-assigned
+   task has no natural "assigner" to approve, so it still completes instantly via completeTask().
+   Anything assigned by someone else instead gets flagged completion_pending and waits in the
+   queue — status stays whatever it currently is (bumped to inprogress if it was still open) so it
+   keeps showing up everywhere that already filters on status!=='done'. The recurring-task spawn
+   inside completeTask() is deliberately NOT run here — it only fires once completion is actually
+   approved (approveCompletion below), so a rejected completion never leaves behind an already-
+   spawned next occurrence. Returns {pending:true} or {pending:false,nd} (nd = next recur date, if
+   any) so callers can share one result shape with the pre-existing completeTask() call sites. */
+function submitOrComplete(t){
+  if(!t.selfAssigned){
+    if(t.status==='open')t.status='inprogress';
+    t.completionPending=true;
+    return {pending:true};
+  }
+  return {pending:false,nd:completeTask(t)};
+}
 function suggestFixer(text){const t=(text||'').toLowerCase();
   if(/fan|light|electric|wiring|socket|projector|power/.test(t))return{s:'Hari',why:'handles electrical work'};
   if(/tap|leak|water|pipe|plumb|toilet|drain/.test(t))return{s:'Suresh',why:'handles plumbing work'};
@@ -872,6 +891,7 @@ function App(){
   const done=mine.filter(t=>t.status==='done').length;
   const qReqs=requests.map((r,i)=>({r,i})).filter(o=>shorts.includes(o.r.from));
   const qExts=tasks.map((t,i)=>({t,i})).filter(o=>o.t.extReq&&inScope(o.t,shorts));
+  const qCompletions=tasks.map((t,i)=>({t,i})).filter(o=>o.t.completionPending&&inScope(o.t,shorts));
   const reqN=qReqs.filter(o=>o.r.kind==='request').length;
   const issN=qReqs.filter(o=>o.r.kind==='issue').length;
 
@@ -891,9 +911,12 @@ function App(){
   /* actions */
   const quickDone=i=>{const t=tasks[i];
     if(t.status==='done'){setDrawerIdx(i);say('To reopen, set a new due date in the task panel');return;}
-    const nd=completeTask(t);
-    persistComplete(t,nd);
-    R();say(nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd)
+    if(t.completionPending){say('Already submitted — waiting for approval');return;}
+    const r=submitOrComplete(t);
+    persistComplete(t,r.nd);
+    R();
+    if(r.pending){const bp=byShort(t.who);say('Marked complete — waiting for approval'+(bp&&bp.boss?' from '+bp.boss.split(' ')[0]:''));return;}
+    say(r.nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(r.nd)
       :t.coWho&&t.coWho.length?'Marked done for all assignees':'Task marked done');};
   const remindPerson=s=>{const p=byShort(s);say('Reminder sent to '+(p?p.n.split(' ')[0]:s));};
   const approveReq=i=>{const r=requests[i];if(!r||r.kind!=='request')return;
@@ -926,6 +949,17 @@ function App(){
     delete t.extReq;R();
     saveTask(t).catch(console.error);
     say('Extension rejected — original due date stands');};
+  const approveCompletion=i=>{const t=tasks[i];if(!t||!t.completionPending)return;
+    if(!canApprove(t.who)){say('Only the department boss can approve this');return;}
+    delete t.completionPending;
+    const nd=completeTask(t);
+    persistComplete(t,nd);R();
+    say(nd?'Completion approved · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'Completion approved — task closed');};
+  const rejectCompletion=i=>{const t=tasks[i];if(!t||!t.completionPending)return;
+    if(!canApprove(t.who)){say('Only the department boss can decide this');return;}
+    delete t.completionPending;t.doneBy=[];R();
+    saveTask(t).catch(console.error);
+    say('Completion rejected — sent back to '+(byShort(t.who)||{n:t.who}).n.split(' ')[0]);};
 
   /* opening a notification always jumps to the real signed-in user's own task list, regardless of
      whatever role "Preview As" is currently simulating — the notification IS theirs (RLS-scoped) */
@@ -966,9 +1000,9 @@ function App(){
     setTimeout(()=>{pr.style.display='none';document.title=ot;},300);
   }
 
-  const ctx={role,view,setView,say,R,scope,shorts,viewer,treeRoot,mine,canApprove,canAssignIssue,bossChain,
-    quickDone,remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,
-    setDrawerIdx,setModal,setResetTarget,exportCSV,printReport,qReqs,qExts,attentionList,
+  const ctx={role,view,setView,say,R,scope,shorts,viewer,treeRoot,mine,canApprove,canAssignIssue,bossChain,previewing,
+    quickDone,remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,approveCompletion,rejectCompletion,
+    setDrawerIdx,setModal,setResetTarget,exportCSV,printReport,qReqs,qExts,qCompletions,attentionList,
     notifs,openNotif,markAllNotifsSeen,lastCronRun,activityLog};
 
   return <div className="app">
@@ -1118,12 +1152,28 @@ function TagsFor({t}){
     {(t.log&&t.log.length)||t.note?<span className="tag teal"><I n="note" s={11}/> {t.log?t.log.length:1}</span>:null}
     {t.files&&t.files.length?<span className="tag gray"><I n="clip" s={11}/> {t.files.length}</span>:null}
     {t.extReq?<span className="tag amber"><I n="clock" s={11}/> ext → {fmtDate(t.extReq.newDate)}</span>:null}
+    {t.completionPending?<span className="tag amber"><I n="clock" s={11}/> Completion pending approval</span>:null}
   </>;
 }
 function TaskRow({t,i,ctx}){
   const p=byShort(t.who),od=isOverdue(t),dn=t.status==='done';
+  /* mis-click guard: a bare tap only "arms" the button (brief amber pulse); the actual
+     quickDone(i) only fires on a second tap within the window. Already-resolved states (done,
+     or already submitted for approval) skip the arming — quickDone(i) itself handles those with
+     its own message, so there's nothing to confirm. */
+  const [armed,setArmed]=useState(false);
+  const armTimer=useRef();
+  useEffect(()=>()=>clearTimeout(armTimer.current),[]);
+  const onDoneClick=e=>{
+    e.stopPropagation();
+    if(dn||t.completionPending){ctx.quickDone(i);return;}
+    if(!armed){setArmed(true);armTimer.current=setTimeout(()=>setArmed(false),2200);return;}
+    clearTimeout(armTimer.current);setArmed(false);
+    ctx.quickDone(i);
+  };
   return <div className={'trow'+(dn?' done':'')} onClick={()=>ctx.setDrawerIdx(i)}>
-    <button className={'donebtn'+(dn?' on':'')} onClick={e=>{e.stopPropagation();ctx.quickDone(i);}} aria-label="Mark done"><I n="check"/></button>
+    <button className={'donebtn'+(dn?' on':'')+(armed?' armed':'')} onClick={onDoneClick}
+      aria-label={armed?'Tap again to confirm':'Mark done'} title={armed?'Tap again to confirm':undefined}><I n="check"/></button>
     <div className="body">
       <div className="tt">{t.t}</div>
       <div className="meta">
@@ -1156,7 +1206,7 @@ function Dashboard({ctx,open,over,today,done}){
   const [loadBucket,setLoadBucket]=useState('all');
   const segs=deliveryStats(mine);
   const segTot=segs.reduce((a,x)=>a+x.v,0);
-  const pend=ctx.qReqs.length+ctx.qExts.length;
+  const pend=ctx.qReqs.length+ctx.qExts.length+ctx.qCompletions.length;
   const bTot=mine.length||1;
   const bRows=Object.keys(BUCKETS).map(k=>({k,c:mine.filter(t=>t.bucket===k).length})).filter(o=>o.c).sort((a,b)=>b.c-a.c);
   const wStaff=ctx.scope.filter(p=>inDept(p,loadBucket));
@@ -1171,7 +1221,7 @@ function Dashboard({ctx,open,over,today,done}){
     ['Due today',today,'var(--amber)','var(--amber-soft)','clock',open?today/open*100:0],
     ['Completed',done,'var(--green)','var(--green-soft)','check',100]];
   const pIss=ctx.qReqs.filter(o=>o.r.kind==='issue').length;
-  const pApp=ctx.qReqs.filter(o=>o.r.kind==='request').length+ctx.qExts.length;
+  const pApp=ctx.qReqs.filter(o=>o.r.kind==='request').length+ctx.qExts.length+ctx.qCompletions.length;
   return <div className="view">
     <div className="kpis">
       {KP.map(([l,n,c,cs,ic,p])=><div className="kpi" key={l}>
@@ -1240,10 +1290,20 @@ function Dashboard({ctx,open,over,today,done}){
 function QueuePanel({ctx}){
   const head=maintHead();
   const [sel,setSel]=useState({});
-  const total=ctx.qReqs.length+ctx.qExts.length;
+  const total=ctx.qReqs.length+ctx.qExts.length+ctx.qCompletions.length;
   return <div className="panel" id="dashReq">
     <div className="h-row"><h3><I n="tool" c="var(--amber)"/>Incoming reports & requests</h3><span className="tag amber">{total?total+' waiting':'clear'}</span></div>
     {total?<>
+      {ctx.qCompletions.map(o=>{const t=o.t,p=byShort(t.who),can=ctx.canApprove(t.who);
+        return <div className="attn" key={'c'+o.i}>
+          <div className="ring" style={{background:'var(--green)'}}><I n="check" c="#fff"/></div>
+          <div style={{flex:1,minWidth:0}}>
+            <div className="nm">{t.t} <span className="tag green">Completion</span></div>
+            <div className="rs">{p?p.n:t.who} marked this done{t.instructedBy?' · assigned by '+t.instructedBy:''} · approver: {p&&p.boss?p.boss.split(' ')[0]+' (dept boss)':'—'}</div></div>
+          <div className="act">{can?<><button className="linkbtn" onClick={()=>ctx.approveCompletion(o.i)}>Approve</button>
+            <button className="linkbtn mut" onClick={()=>ctx.rejectCompletion(o.i)}>Reject</button></>
+            :<span className="rs" style={{whiteSpace:'nowrap'}}>Waiting for {p&&p.boss?p.boss.split(' ')[0]:'manager'}</span>}</div>
+        </div>;})}
       {ctx.qExts.map(o=>{const t=o.t,p=byShort(t.who),can=ctx.canApprove(t.who);
         return <div className="attn" key={'e'+o.i}>
           <div className="ring" style={{background:'var(--blue)'}}><I n="clock" c="#fff"/></div>
@@ -1286,7 +1346,7 @@ function QueuePanel({ctx}){
             <button className="linkbtn mut" onClick={()=>ctx.declineReq(o.i)}>Decline</button></>
             :<span className="rs" style={{whiteSpace:'nowrap'}}>Waiting for {p&&p.boss?p.boss.split(' ')[0]:'manager'}</span>}</div>
         </div>;})}
-    </>:<Empty t="Queue is clear" s="Supply requests wait here for approval; maintenance issues go straight to the maintenance head; extension requests to the dept boss."/>}
+    </>:<Empty t="Queue is clear" s="Supply requests wait here for approval; maintenance issues go straight to the maintenance head; extension and completion requests go to the dept boss."/>}
   </div>;
 }
 
@@ -1424,6 +1484,17 @@ function Drawer({ctx,idx}){
   const [reNote,setReNote]=useState('');
   const [pendingDone,setPendingDone]=useState(false);
   useEffect(()=>{setNote('');setReassign(false);setReDate('');setReNote('');setPendingDone(tasks[idx]&&tasks[idx].status==='done');},[idx]);
+  /* Issue 4: opening your own assigned task moves it open -> inprogress automatically. Gated on
+     the REAL signed-in viewer (ctx.previewing false, not a Preview As simulation) genuinely being
+     an assignee (hasWho, the same helper used everywhere else) — an admin/manager just reviewing
+     someone else's task, or a Preview As persona, must not trigger this. Mount-time effect keyed
+     on idx, not on every place a task can be opened, per the brief. */
+  useEffect(()=>{
+    const tk=tasks[idx];
+    if(tk&&!ctx.previewing&&hasWho(tk,ctx.viewer.s)&&tk.status==='open'){
+      tk.status='inprogress';saveTask(tk).catch(console.error);ctx.R();
+    }
+  },[idx]);
   if(!t)return null;
   const p=byShort(t.who),od=isOverdue(t);
   const tl=[{w:'Assigned to '+assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),d:fmtDate(t.date)+' due date set'}];
@@ -1442,10 +1513,12 @@ function Drawer({ctx,idx}){
       <div className="segs">{['open','inprogress','done'].map(s=>{
         const active=s==='done'?pendingDone:(!pendingDone&&(t.status===s||(s==='inprogress'&&t.status==='partial')));
         return <button key={s} className={active?'on':''} onClick={()=>{
+          if(t.completionPending){ctx.say('Already submitted — waiting for approval');return;}
           if(s==='done'){setPendingDone(true);return;}
           setPendingDone(false);t.status=s;delete t.doneOn;saveTask(t).catch(console.error);ctx.say('Status → '+ST[s].l);ctx.R();
         }}>{ST[s].l}</button>;})}</div>
-      {pendingDone&&t.status!=='done'?<div className="whysm" style={{margin:'6px 20px 0'}}>Click OK below to close the task.</div>:null}
+      {t.completionPending?<div className="whysm" style={{margin:'6px 20px 0',color:'var(--amber)'}}>⏳ Completion pending approval{(byShort(t.who)||{}).boss?' — waiting for '+byShort(t.who).boss.split(' ')[0]:''}.</div>
+        :pendingDone&&t.status!=='done'?<div className="whysm" style={{margin:'6px 20px 0'}}>Click OK below to close the task.</div>:null}
       {t.coWho&&t.coWho.length?<>
         <div className="dr-sec">Completion — each member confirms</div>
         {assignees(t).map(a=>{const q=byShort(a);const dn=(t.doneBy||[]).includes(a);
@@ -1453,8 +1526,13 @@ function Drawer({ctx,idx}){
             <div className="k"><span className="avex">{q?q.av:'?'}</span></div>
             <div className="v" style={{flex:1}}>{q?q.n:a}</div>
             <button className={'btn '+(dn?'primary':'ghost')} style={{padding:'6px 12px',minHeight:0}}
-              onClick={()=>{t.doneBy=dn?(t.doneBy||[]).filter(x=>x!==a):[...(t.doneBy||[]),a];
-                if(assignees(t).every(x=>(t.doneBy||[]).includes(x))){const nd=completeTask(t);persistComplete(t,nd);ctx.say(nd?'All done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'All members done — task completed');}
+              onClick={()=>{
+                if(t.completionPending){ctx.say('Already submitted — waiting for approval');return;}
+                t.doneBy=dn?(t.doneBy||[]).filter(x=>x!==a):[...(t.doneBy||[]),a];
+                if(assignees(t).every(x=>(t.doneBy||[]).includes(x))){
+                  const r=submitOrComplete(t);persistComplete(t,r.nd);
+                  ctx.say(r.pending?'All confirmed — waiting for approval':(r.nd?'All done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(r.nd):'All members done — task completed'));
+                }
                 else{if(t.status==='done'){t.status='open';delete t.doneOn;}setPendingDone(false);saveTask(t).catch(console.error);}
                 ctx.R();}}>{dn?'✓ Done':'Pending'}</button>
           </div>;})}
@@ -1480,6 +1558,7 @@ function Drawer({ctx,idx}){
         <div className="v">{assignees(t).map(a=>{const q=byShort(a);return <React.Fragment key={a}><span className="avex">{q?q.av:'?'}</span>{q?q.n:a}</React.Fragment>;})}
         {t.coWho&&t.coWho.length?<span className="tag teal">joint</span>:<span className="roletag">{p?p.dept:''}</span>}</div></div>
       {!t.selfAssigned&&t.instructedBy?<div className="kv"><div className="k">Assigned by</div><div className="v">{t.instructedBy}</div></div>:null}
+      {t.completionPending?<div className="kv"><div className="k">Completion</div><div className="v"><span className="tag amber"><I n="clock" s={11}/> Pending approval</span></div></div>:null}
       {reassign?<div className="kv"><div className="k">Move to</div><div className="v" style={{flex:1}}>
         <select className="fsel" style={{width:'100%'}} defaultValue="" onChange={e=>{if(!e.target.value)return;t.who=e.target.value;t.coWho=undefined;saveTask(t).catch(console.error);ctx.R();ctx.say('Reassigned to '+byShort(e.target.value).n);setReassign(false);}}>
           <option value="">Choose a person…</option>
@@ -1531,7 +1610,11 @@ function Drawer({ctx,idx}){
       <button className="btn ghost" style={{flex:1}} onClick={()=>ctx.remindPerson(t.who)}><I n="bell"/>Remind</button>
       <button className="btn ghost" style={{flex:1}} onClick={()=>setReassign(!reassign)}><I n="redo"/>Reassign</button>
       <button className="btn primary" style={{flex:1}} onClick={()=>{
-        if(pendingDone&&t.status!=='done'){const nd=completeTask(t);persistComplete(t,nd);ctx.R();ctx.setDrawerIdx(-1);ctx.say(nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'Task marked done');}
+        if(t.completionPending){ctx.setDrawerIdx(-1);return;}
+        if(pendingDone&&t.status!=='done'){
+          const r=submitOrComplete(t);persistComplete(t,r.nd);ctx.R();ctx.setDrawerIdx(-1);
+          ctx.say(r.pending?'Marked complete — waiting for approval':(r.nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(r.nd):'Task marked done'));
+        }
         else ctx.setDrawerIdx(-1);
       }}><I n="check"/>OK</button>
     </div>
