@@ -1735,7 +1735,7 @@ function OrgNode({person,onNodeClick,canM,chainSiblings}){
         {person.role==='Manager'?<div className="odept">{person.dept}
           {canM?<span className="org-edit-dept" title="Rename department" onClick={e=>{e.stopPropagation();onNodeClick(person,'rename-dept');}}>✎</span>:null}
         </div>:null}
-        {person.role==='Team Lead'?(person.subDept?
+        {(person.role==='Team Lead'||person.role==='Team Member')?(person.subDept?
           <div className="odept">{person.subDept}
             {canM?<span className="org-edit-dept" title="Edit sub-department" onClick={e=>{e.stopPropagation();onNodeClick(person,'rename-subdept');}}>✎</span>:null}
           </div>
@@ -1872,7 +1872,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <select value={f.deptId||(depts[0]||{}).id||''} onChange={e=>setF({...f,deptId:e.target.value})}>
           {depts.map(d=><option key={d.id} value={d.id}>{d.dept}{d.n?' — '+d.n:''}</option>)}
         </select>
-        {step==='add-lead'?<>
+        {(step==='add-lead'||step==='add-jrm')?<>
           <label>Sub-department name</label>
           <input value={f.subDept||''} onChange={e=>setF({...f,subDept:e.target.value})} placeholder="e.g. Network Support (optional)"/>
         </>:null}
@@ -1883,7 +1883,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           const name=(f.name||'').trim();
           const deptId=f.deptId||(depts[0]||{}).id;
           const deptHead=depts.find(d=>d.id===deptId);
-          const subDept=step==='add-lead'?(f.subDept||'').trim()||undefined:undefined;
+          const subDept=(step==='add-lead'||step==='add-jrm')?(f.subDept||'').trim()||undefined:undefined;
           if(!name){setErr('Enter a name.');return;}
           if(!deptHead){setErr('Pick a department.');return;}
           const dbRole=step==='add-jrm'?'Team Member':step==='add-lead'?'Team Lead':'Teacher';
@@ -1974,26 +1974,26 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
     const {target}=oaCtx;
     const openCount=tasks.filter(t=>t.status!=='done'&&assignees(t).includes(target.s)).length;
     const candidateCount=STAFF.filter(p=>p.role!=='Administrator'&&p.id!==target.id).length;
-    const canMerge=target.role==='Team Lead';
-    const mergeCandidates=canMerge?STAFF.filter(p=>p.role==='Team Lead'&&p.dept===target.dept&&p.id!==target.id):[];
+    const canMerge=target.role==='Team Lead'||target.role==='Team Member';
+    const mergeCandidates=canMerge?STAFF.filter(p=>p.role===target.role&&p.dept===target.dept&&p.id!==target.id):[];
     return <ModalShell close={close} err={err} title={canMerge?'Replace, promote, or merge?':'Replace or promote?'}>
       <div className="org-info-box">Exported {(TIER_LABEL[target.role]||target.role).toLowerCase()} data for "{target.n}" as a CSV — one row per pending task, with status, due date, attached files, and full activity log.
         {openCount?<> They have <b>{openCount} pending task{openCount===1?'':'s'}</b> — reassign those separately if they don't move with whoever fills this position.</>:null}</div>
       <div className="org-action-grid">
         <button onClick={()=>setStep('remove-replace-name')}>Replace<small>Bring in someone new</small></button>
         <button disabled={!candidateCount} onClick={()=>setStep('remove-promote-pick')}>Promote<small>{candidateCount?'Anyone in the org':'No one to promote'}</small></button>
-        {canMerge?<button disabled={!mergeCandidates.length} onClick={()=>setStep('remove-merge-pick')}>Merge<small>{mergeCandidates.length?'Fold into another Team Lead':'No other Team Lead in '+target.dept}</small></button>:null}
+        {canMerge?<button disabled={!mergeCandidates.length} onClick={()=>setStep('remove-merge-pick')}>Merge<small>{mergeCandidates.length?'Fold into another '+TIER_LABEL[target.role]:'No other '+TIER_LABEL[target.role]+' in '+target.dept}</small></button>:null}
       </div>
       <div className="qc-actions"><button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button></div>
     </ModalShell>;
   }
   if(step==='remove-merge-pick'){
     const {target}=oaCtx;
-    const mergeCandidates=STAFF.filter(p=>p.role==='Team Lead'&&p.dept===target.dept&&p.id!==target.id);
+    const mergeCandidates=STAFF.filter(p=>p.role===target.role&&p.dept===target.dept&&p.id!==target.id);
     const absorber=byId(f.mergeId||mergeCandidates[0].id);
     return <ModalShell close={close} err={err} title={'Merge '+target.n+"'s team into…"}
       sub={"Everyone reporting to "+target.n+" moves to whoever you pick, and "+target.n+"'s account is removed. "+
-        (target.subDept?'"'+target.subDept+'" is dropped — the sub-department keeps the absorbing Team Lead\'s own name.':'No sub-department name to carry over.')}>
+        (target.subDept?'"'+target.subDept+'" is dropped — the sub-department keeps the absorbing '+TIER_LABEL[target.role]+"'s own name.":'No sub-department name to carry over.')}>
       <div className="mf"><label>Merge into</label>
         <select value={f.mergeId||mergeCandidates[0].id} onChange={e=>setF({...f,mergeId:e.target.value})}>
           {mergeCandidates.map(c=><option key={c.id} value={c.id}>{personLabel(c)}</option>)}
