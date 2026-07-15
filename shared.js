@@ -179,6 +179,23 @@ async function notifyActivity(taskId,logId,actorId,staffIds){
   const {error}=await sb.from('task_activity_notifications').insert(rows);
   if(error)console.error(error);
 }
+/* Edits a task_log row's text — the "fix a typo within 2 minutes of posting" feature. Real
+   enforcement lives in the log_update RLS policy (author_id = auth_staff_id() AND now() -
+   created_at < interval '2 minutes'); this is just the client call, and it deliberately does NOT
+   swallow a rejected update the way saveTask does — the caller needs to know the write failed
+   (most likely because the window closed) so it can tell the user, not pretend it worked.
+   Chains .select().single() rather than a bare .update() — confirmed live against this project's
+   own Supabase instance that a bare .update().eq() returns success (204, no error) even when RLS
+   silently matches zero rows (e.g. the window already expired), because Postgres/PostgREST only
+   errors on a REJECTED write (with_check failing on a row that WAS matched), not on a write that
+   matched nothing at all. .single() forces exactly one row back, so "0 rows" becomes a real
+   PGRST116 error instead of a false "it worked". Returns {ok:true} on success or {ok:false,error}
+   on failure. */
+async function editLogEntry(logId,newText){
+  const {error}=await sb.from('task_log').update({body:newText}).eq('id',logId).select().single();
+  if(error){console.error(error);return {ok:false,error};}
+  return {ok:true};
+}
 const IMG_EXT=/\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 /* toast state + auto-dismiss timer — identical in both apps down to the 2400ms, just renamed
    local variables. `ctx.say(...)`/`useToast()` return the same {toast,say} shape either way. */

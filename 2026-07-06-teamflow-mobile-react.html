@@ -341,7 +341,7 @@ function rowToMobileTask(row,assignRows,byId,logRows){
   /* author_id is the only real column on task_log — there is no author_name. Resolve it through
      the byId map (id -> {name,short,initials}) already built for this pass; "Earlier" is the
      fallback for the rare null-author row (e.g. pre-author-tracking data), not the default. */
-  if(logs.length)t.log=logs.map(l=>({id:l.id,by:l.author_id&&byId[l.author_id]?byId[l.author_id].name:'Earlier',when:fmtDateTime(l.created_at),text:l.body}));
+  if(logs.length)t.log=logs.map(l=>({id:l.id,by:l.author_id&&byId[l.author_id]?byId[l.author_id].name:'Earlier',when:fmtDateTime(l.created_at),text:l.body,createdAt:l.created_at}));
   return t;
 }
 async function loadAll(){
@@ -406,6 +406,7 @@ async function logTask(t,authorName,text){
   const others=[...new Set(assigneesM(t).filter(Boolean).filter(n=>!p||n!==p.s))]
     .map(findMember).filter(Boolean).map(m=>m.id);
   await notifyActivity(t.id,data.id,p?p.id:null,others);
+  return data;
 }
 async function saveRequestRow(q,kind){
   const p=findPerson(q.from)||{};
@@ -1477,6 +1478,8 @@ function UpdateSheet({ctx,idx,close}){
      to "Tap again to confirm"), the second tap within the window actually calls save(). */
   const [armed,setArmed]=useState(false);
   const armTimer=useRef();
+  const [editingLogId,setEditingLogId]=useState(null);
+  const [editText,setEditText]=useState('');
   useEffect(()=>()=>clearTimeout(armTimer.current),[]);
   useEffect(()=>{setArmed(false);},[st]);
   /* Issue 4: opening your own assigned task moves it open -> inprogress automatically. Gated on
@@ -1503,9 +1506,10 @@ function UpdateSheet({ctx,idx,close}){
     t.progress=st;
     if(note.trim()){
       t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
-      t.log.push({by:ctx.r.name,when:fmtDateTime(new Date()),text:note.trim()});
+      const entry={by:ctx.r.name,when:fmtDateTime(new Date()),text:note.trim(),createdAt:new Date().toISOString()};
+      t.log.push(entry);
       t.note=note.trim();
-      logTask(t,ctx.r.name,note.trim()).catch(console.error);
+      logTask(t,ctx.r.name,note.trim()).then(row=>{if(row)entry.id=row.id;ctx.R();}).catch(console.error);
     }
     if(files.length)t.files=(t.files||[]).concat(files);
     if(st==='done'){
@@ -1547,8 +1551,27 @@ function UpdateSheet({ctx,idx,close}){
     {logs.length?<div style={{marginBottom:10}}>
       <div className="sec" style={{margin:'0 0 6px'}}>Job log</div>
       <div style={{maxHeight:140,overflowY:'auto'}}>
-        {logs.map((x,ix)=><div key={ix} className="notepv" style={{marginTop:6}}>“{x.text}”
-          <div style={{fontSize:11,color:'var(--muted)',fontStyle:'normal',marginTop:3}}>{x.by}{x.when?' · '+x.when:''}</div></div>)}
+        {logs.map((x,ix)=>{
+          const canEditEntry=x.id&&!ctx.previewing&&x.by===ctx.r.name&&x.createdAt&&(Date.now()-new Date(x.createdAt).getTime()<2*60*1000);
+          if(editingLogId&&x.id&&x.id===editingLogId){
+            return <div key={x.id} className="notepv" style={{marginTop:6,fontStyle:'normal'}}>
+              <textarea className="typein" rows={2} value={editText} onChange={e=>setEditText(e.target.value)}/>
+              <div style={{display:'flex',gap:6,marginTop:6}}>
+                <button className="btn primary" style={{flex:'0 0 auto',minHeight:32,padding:'6px 12px'}} onClick={async()=>{
+                  const txt=editText.trim();
+                  if(!txt){ctx.say('Write something first');return;}
+                  const res=await editLogEntry(x.id,txt);
+                  if(res.ok){x.text=txt;setEditingLogId(null);ctx.R();ctx.say('Log entry updated');}
+                  else ctx.say("Can't edit — the 2-minute window has closed");
+                }}>Save</button>
+                <button className="btn ghost" style={{flex:'0 0 auto',minHeight:32,padding:'6px 12px'}} onClick={()=>setEditingLogId(null)}>Cancel</button>
+              </div>
+            </div>;
+          }
+          return <div key={x.id||ix} className="notepv" style={{marginTop:6}}>“{x.text}”
+            {canEditEntry?<span style={{cursor:'pointer',marginLeft:6,fontStyle:'normal'}} title="Edit entry" onClick={()=>{setEditingLogId(x.id);setEditText(x.text);}}>✎</span>:null}
+            <div style={{fontSize:11,color:'var(--muted)',fontStyle:'normal',marginTop:3}}>{x.by}{x.when?' · '+x.when:''}</div></div>;
+        })}
       </div>
     </div>:null}
     <textarea className="typein" rows={3} value={note} onChange={e=>setNote(e.target.value)} placeholder="Add an update to the job log (optional) — what did you do?"/>
@@ -1612,9 +1635,12 @@ function ReopenSheet({ctx,idx,close}){
     t.date=pickd.iso;t.due='Due '+fmtD(pickd.iso);
     t.reopened={by:ctx.r.name,comment:cmt.trim()};
     t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
-    t.log.push({by:ctx.r.name,when:fmtDateTime(new Date()),text:'Reopened — '+(cmt.trim()||'not up to the mark')});
+    const reopenText='Reopened — '+(cmt.trim()||'not up to the mark');
+    const reopenEntry={by:ctx.r.name,when:fmtDateTime(new Date()),text:reopenText,createdAt:new Date().toISOString()};
+    t.log.push(reopenEntry);
     if(cmt.trim())t.note=cmt.trim();
-    saveTask(t).catch(console.error);logTask(t,ctx.r.name,'Reopened — '+(cmt.trim()||'not up to the mark')).catch(console.error);
+    saveTask(t).catch(console.error);
+    logTask(t,ctx.r.name,reopenText).then(row=>{if(row)reopenEntry.id=row.id;ctx.R();}).catch(console.error);
     close();ctx.R();ctx.say('Task reopened ↻ · '+t.who+' notified with your comment');};
   return <>
     <h3>Reopen task</h3>

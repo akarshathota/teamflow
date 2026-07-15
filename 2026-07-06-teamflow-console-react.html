@@ -440,7 +440,7 @@ function rowToTask(row,assignRows,logRows){
   /* author_id is the only real column on task_log — there is no author_name. Resolve it through
      the same byId2Name lookup reopened_by uses just above; "Earlier" is the fallback for the rare
      null-author row (e.g. pre-author-tracking data), not the default for every row. */
-  if(logs.length)t.log=logs.map(l=>({id:l.id,by:l.author_id?(byId2Name(l.author_id)||"Earlier"):"Earlier",when:fmtDateTime(l.created_at),text:l.body}));
+  if(logs.length)t.log=logs.map(l=>({id:l.id,by:l.author_id?(byId2Name(l.author_id)||"Earlier"):"Earlier",when:fmtDateTime(l.created_at),text:l.body,createdAt:l.created_at}));
   return t;
 }
 let byId2Name=()=>"";
@@ -506,6 +506,7 @@ async function logTask(t,authorName,text){
   const others=[...new Set(assignees(t).filter(Boolean).filter(s=>!author||s!==author.s))]
     .map(byShort).filter(Boolean).map(p=>p.id);
   await notifyActivity(t.id,data.id,author?author.id:null,others);
+  return data;
 }
 async function saveRequest(r){
   const from=byShort(r.from);
@@ -1483,7 +1484,9 @@ function Drawer({ctx,idx}){
   const [pendingDone,setPendingDone]=useState(false);
   const [extDate,setExtDate]=useState('');
   const [extReason,setExtReason]=useState('');
-  useEffect(()=>{setNote('');setReassign(false);setReDate('');setReNote('');setPendingDone(tasks[idx]&&tasks[idx].status==='done');setExtDate('');setExtReason('');},[idx]);
+  const [editingLogId,setEditingLogId]=useState(null);
+  const [editText,setEditText]=useState('');
+  useEffect(()=>{setNote('');setReassign(false);setReDate('');setReNote('');setPendingDone(tasks[idx]&&tasks[idx].status==='done');setExtDate('');setExtReason('');setEditingLogId(null);setEditText('');},[idx]);
   /* Issue 4: opening your own assigned task moves it open -> inprogress automatically. Gated on
      the REAL signed-in viewer (ctx.previewing false, not a Preview As simulation) genuinely being
      an assignee (hasWho, the same helper used everywhere else) — an admin/manager just reviewing
@@ -1500,7 +1503,7 @@ function Drawer({ctx,idx}){
   const tl=[{w:'Assigned to '+assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),d:fmtDate(t.date)+' due date set'}];
   if(t.status==='inprogress'||t.status==='partial')tl.push({w:'Marked '+ST[t.status].l.toLowerCase(),d:'from mobile'});
   const logs=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
-  logs.forEach(x=>tl.push({w:'“'+x.text+'”',d:(x.by?x.by.split(' ')[0]:'')+(x.when?' · '+x.when:'')}));
+  logs.forEach(x=>tl.push({w:'“'+x.text+'”',d:(x.by?x.by.split(' ')[0]:'')+(x.when?' · '+x.when:''),logEntry:x}));
   if(t.extReq)tl.push({w:'Extension requested → '+fmtDate(t.extReq.newDate),d:t.extReq.reason||'pending approval'});
   if(t.reopened)tl.push({w:'Reopened by '+t.reopened.by.split(' ')[0]+(t.reopened.comment?' — “'+t.reopened.comment+'”':''),d:'new due '+fmtDate(t.date)});
   if(t.coWho&&t.coWho.length&&(t.doneBy||[]).length&&t.status!=='done')tl.push({w:'Done by '+(t.doneBy||[]).map(a=>(byShort(a)||{n:a}).n.split(' ')[0]).join(', '),d:'waiting on '+assignees(t).filter(a=>!(t.doneBy||[]).includes(a)).map(a=>(byShort(a)||{n:a}).n.split(' ')[0]).join(', ')});
@@ -1547,9 +1550,12 @@ function Drawer({ctx,idx}){
           setPendingDone(false);t.status='open';t.date=reDate;delete t.doneOn;t.doneBy=[];
           t.reopened={by:ctx.viewer.n,comment:reNote.trim()};
           t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
-          t.log.push({by:ctx.viewer.n,when:fmtDateTime(new Date()),text:'Reopened — '+(reNote.trim()||'not up to the mark')});
+          const reopenText='Reopened — '+(reNote.trim()||'not up to the mark');
+          const reopenEntry={by:ctx.viewer.n,when:fmtDateTime(new Date()),text:reopenText,createdAt:new Date().toISOString()};
+          t.log.push(reopenEntry);
           if(reNote.trim())t.note=reNote.trim();
-          saveTask(t).catch(console.error);logTask(t,ctx.viewer.n,'Reopened — '+(reNote.trim()||'not up to the mark')).catch(console.error);
+          saveTask(t).catch(console.error);
+          logTask(t,ctx.viewer.n,reopenText).then(row=>{if(row)reopenEntry.id=row.id;ctx.R();}).catch(console.error);
           ctx.R();ctx.say('Task reopened — new due '+fmtDate(t.date)+' · assignee notified');}}>
           <I n="redo"/>Reopen task</button>
       </>:null}
@@ -1592,9 +1598,11 @@ function Drawer({ctx,idx}){
       <button className="btn soft" style={{marginTop:9}} onClick={()=>{
         const txt=note.trim(); if(!txt){ctx.say('Write something first');return;}
         t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
-        t.log.push({by:ctx.viewer.n,when:fmtDateTime(new Date()),text:txt});
+        const entry={by:ctx.viewer.n,when:fmtDateTime(new Date()),text:txt,createdAt:new Date().toISOString()};
+        t.log.push(entry);
         t.note=txt;setNote('');
-        saveTask(t).catch(console.error);logTask(t,ctx.viewer.n,txt).catch(console.error);
+        saveTask(t).catch(console.error);
+        logTask(t,ctx.viewer.n,txt).then(row=>{if(row)entry.id=row.id;ctx.R();}).catch(console.error);
         ctx.R();ctx.say('Added to the job log');}}><I n="note"/>Add to log</button>
       <div className="dr-sec">Attachments — files & proof of work</div>
       {t.files&&t.files.length?<div className="filelist" style={{marginTop:0,marginBottom:8}}>{t.files.map((x,ix)=><FileChip key={ix} x={x} onRemove={()=>{
@@ -1620,7 +1628,28 @@ function Drawer({ctx,idx}){
           </label>)}
       </div>
       <div className="dr-sec">Activity</div>
-      <div className="timeline">{tl.map((x,ix)=><div className="tl" key={ix}>{x.w}<div className="when">{x.d}</div></div>)}</div>
+      <div className="timeline">{tl.map((x,ix)=>{
+        const le=x.logEntry;
+        const canEditEntry=le&&le.id&&!ctx.previewing&&le.by===ctx.viewer.n&&le.createdAt&&(Date.now()-new Date(le.createdAt).getTime()<2*60*1000);
+        if(editingLogId&&le&&le.id===editingLogId){
+          return <div className="tl" key={ix}>
+            <textarea className="dr-note" style={{minHeight:56,marginTop:0}} value={editText} onChange={e=>setEditText(e.target.value)} autoFocus/>
+            <div style={{display:'flex',gap:6,marginTop:6}}>
+              <button className="btn soft" style={{padding:'5px 12px',minHeight:0,flex:'0 0 auto'}} onClick={async()=>{
+                const txt=editText.trim();
+                if(!txt){ctx.say('Write something first');return;}
+                const res=await editLogEntry(le.id,txt);
+                if(res.ok){le.text=txt;setEditingLogId(null);ctx.R();ctx.say('Log entry updated');}
+                else ctx.say("Can't edit — the 2-minute window has closed");
+              }}>Save</button>
+              <button className="btn ghost" style={{padding:'5px 12px',minHeight:0,flex:'0 0 auto'}} onClick={()=>setEditingLogId(null)}>Cancel</button>
+            </div>
+          </div>;
+        }
+        return <div className="tl" key={ix}>{x.w}
+          {canEditEntry?<span className="org-edit-dept" title="Edit entry" onClick={()=>{setEditingLogId(le.id);setEditText(le.text);}}>✎</span>:null}
+          <div className="when">{x.d}</div></div>;
+      })}</div>
     </div>
     <div className="dr-actions">
       <button className="btn ghost" style={{flex:1}} onClick={()=>ctx.remindPerson(t.who)}><I n="bell"/>Remind</button>
