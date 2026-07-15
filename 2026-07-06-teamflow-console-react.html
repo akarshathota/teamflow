@@ -542,6 +542,8 @@ const byShort=s=>STAFF.find(x=>x.s===s);
 const byName=n=>STAFF.find(x=>x.n===n);
 const assignees=t=>[t.who].concat(t.coWho||[]);
 const hasWho=(t,s)=>assignees(t).includes(s);
+const needExt=t=>{if(t.status==='done'||!t.date)return false;const lim=new Date(TODAY);lim.setDate(lim.getDate()+2);return t.date<=iso(lim);};
+const dayAfter=dstr=>{const d=new Date(dstr+'T00:00:00');d.setDate(d.getDate()+1);return iso(d);};
 const inScope=(t,sh)=>assignees(t).some(a=>sh.includes(a));
 /* a person's own org department, not which task buckets happen to be tagged on their tasks —
    otherwise a stray task tagged into another department made that person show up there too */
@@ -1479,7 +1481,9 @@ function Drawer({ctx,idx}){
   const [reDate,setReDate]=useState('');
   const [reNote,setReNote]=useState('');
   const [pendingDone,setPendingDone]=useState(false);
-  useEffect(()=>{setNote('');setReassign(false);setReDate('');setReNote('');setPendingDone(tasks[idx]&&tasks[idx].status==='done');},[idx]);
+  const [extDate,setExtDate]=useState('');
+  const [extReason,setExtReason]=useState('');
+  useEffect(()=>{setNote('');setReassign(false);setReDate('');setReNote('');setPendingDone(tasks[idx]&&tasks[idx].status==='done');setExtDate('');setExtReason('');},[idx]);
   /* Issue 4: opening your own assigned task moves it open -> inprogress automatically. Gated on
      the REAL signed-in viewer (ctx.previewing false, not a Preview As simulation) genuinely being
      an assignee (hasWho, the same helper used everywhere else) — an admin/manager just reviewing
@@ -1567,6 +1571,22 @@ function Drawer({ctx,idx}){
       {t.recur?<div className="kv"><div className="k">Repeats</div><div className="v"><span className="tag teal">↻ {recurLabel(t.recur,t.recurOn)}</span><span style={{fontWeight:500,color:'var(--muted)',fontSize:12.5}}>next created on completion</span></div></div>:null}
       {t.selfAssigned?<div className="kv"><div className="k">Origin</div><div className="v"><span className="tag green">Self-logged</span>{t.instructedBy?' as per '+t.instructedBy:''}</div></div>:null}
       {t.extReq?<div className="kv"><div className="k">Extension</div><div className="v">asks {fmtDate(t.extReq.newDate)}{t.extReq.reason?' — “'+t.extReq.reason+'”':''}</div></div>:null}
+      {!t.extReq&&needExt(t)&&!ctx.previewing&&hasWho(t,ctx.viewer.s)?<>
+        <div className="dr-sec">Request extension</div>
+        <div className="kv"><div className="k">New due</div><div className="v" style={{flex:1}}>
+          <input type="date" className="fsel" style={{width:'100%'}} value={extDate}
+            min={t.date&&dayAfter(t.date)>iso(TODAY)?dayAfter(t.date):iso(TODAY)}
+            onChange={e=>setExtDate(e.target.value)}/></div></div>
+        <textarea className="dr-note" value={extReason} onChange={e=>setExtReason(e.target.value)} placeholder="Why do you need more time? (sent to your boss for approval)"/>
+        <button className="btn ghost" style={{marginTop:9}} onClick={()=>{
+          if(!extDate){ctx.say('Pick a new due date first');return;}
+          if(t.date&&extDate<=t.date){ctx.say('New date must be after the current due date');return;}
+          t.extReq={newDate:extDate,reason:extReason.trim()};
+          saveTask(t).catch(console.error);
+          setExtDate('');setExtReason('');
+          ctx.R();ctx.say('Extension request sent — waiting for approval ⏳');}}>
+          <I n="clock"/>Request extension</button>
+      </>:null}
       <div className="dr-sec">Job log — notes & updates</div>
       <textarea className="dr-note" value={note} onChange={e=>setNote(e.target.value)} placeholder="Add an update — progress, blockers, instructions… (kept forever, visible to assignee and boss)"/>
       <button className="btn soft" style={{marginTop:9}} onClick={()=>{

@@ -882,12 +882,13 @@ function TaskCard({o,ctx,acts}){
     {t.note?<div className="notepv">“{t.note}”</div>:null}
     {t.files&&t.files.length?<div className="attrow">{t.files.map((f,ix)=><FileChip key={ix} f={f}/>)}</div>:null}
     <div className="meta" style={{marginTop:5}}>{t.done?'Closed'+(t.doneWhen?' · '+t.doneWhen:''):t.due}</div>
-    {!t.done?<div className="cardbtns">
+    {!t.done?<div className="cardbtns" style={{flexWrap:'wrap'}}>
       <button className="btn primary" onClick={()=>ctx.setSheet({kind:'update',idx:i})}>Update / Done</button>
       {ctx.role!=='worker'?<>
         <button className="btn ghost" title="Send reminder" onClick={()=>acts.remind(i)}><I n="bell" s={18}/></button>
         <button className="btn ghost" title="Reassign" onClick={()=>ctx.setSheet({kind:'reassign',idx:i})}><I n="redo" s={18}/></button>
-      </>:acts.needExt(t)&&!t.extReq?<button className="btn ghost" title="Request extension" onClick={()=>ctx.setSheet({kind:'ext',idx:i})} style={{fontSize:18}}>⏳</button>:null}
+      </>:null}
+      {acts.needExt(t)&&!t.extReq&&hasWhoM(t,ctx.realSelf)&&!ctx.previewing?<button className="btn ghost" title="Request extension" onClick={()=>ctx.setSheet({kind:'ext',idx:i})} style={{fontSize:18}}>⏳</button>:null}
     </div>:t.done&&ctx.role!=='worker'?<div className="cardbtns">
       <button className="btn ghost" style={{flex:1}} onClick={()=>ctx.setSheet({kind:'reopen',idx:i})}><I n="redo" s={16}/>&nbsp;Reopen — not up to the mark</button>
     </div>:null}
@@ -1574,10 +1575,13 @@ function ExtSheet({ctx,idx,close}){
   const [pickd,setPickd]=useState(null);
   const [reason,setReason]=useState('');
   if(!t)return null;
+  const dayAfter=(dstr)=>{const d=new Date(dstr+'T00:00:00');d.setDate(d.getDate()+1);return iso(d);};
   const opts=[1,2,3,7].map(n=>{const d=new Date(TODAY);d.setDate(d.getDate()+n);
-    return {iso:iso(d),label:d.toLocaleDateString('en',{weekday:'short'})+' · '+d.toLocaleDateString('en',{day:'numeric',month:'short'})+(n===1?' (tomorrow)':n===7?' (next week)':'')};});
+    return {iso:iso(d),label:d.toLocaleDateString('en',{weekday:'short'})+' · '+d.toLocaleDateString('en',{day:'numeric',month:'short'})+(n===1?' (tomorrow)':n===7?' (next week)':'')};}).filter(o=>!t.date||o.iso>t.date);
   const send=()=>{
+    if(ctx.previewing||!hasWhoM(t,ctx.realSelf)){ctx.say("You can't request an extension on someone else's task");close();return;}
     if(!pickd){ctx.say('Pick a new date first');return;}
+    if(t.date&&pickd.iso<=t.date){ctx.say('New date must be after the current due date');return;}
     t.extReq={newDate:pickd.iso,label:pickd.label,reason:reason.trim(),from:ctx.r.name};
     saveTask(t).catch(console.error);
     close();ctx.R();ctx.say('Extension request sent to '+(bossesFor(ctx.role).slice(-1)[0]||'your manager')+' ⏳');};
@@ -1588,7 +1592,7 @@ function ExtSheet({ctx,idx,close}){
     <div className="sec" style={{margin:'10px 2px 8px'}}>New due date</div>
     <div className="picker" style={{marginTop:0}}>
       {opts.map(o=><button key={o.iso} className={'pickchip'+(pickd&&pickd.iso===o.iso?' cur':'')} onClick={()=>setPickd(o)}>{o.label}</button>)}
-      <input type="date" className="selsel" style={{flex:'1 1 100%'}} min={iso(TODAY)} value={pickd&&pickd.custom?pickd.iso:''} aria-label="Pick any date"
+      <input type="date" className="selsel" style={{flex:'1 1 100%'}} min={t.date&&dayAfter(t.date)>iso(TODAY)?dayAfter(t.date):iso(TODAY)} value={pickd&&pickd.custom?pickd.iso:''} aria-label="Pick any date"
         onChange={e=>{const v=e.target.value;if(!v)return;setPickd({iso:v,label:new Date(v+'T00:00:00').toLocaleDateString('en',{weekday:'short'})+' · '+fmtD(v),custom:true});}}/>
     </div>
     <textarea className="typein" rows={2} style={{marginTop:12}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Why do you need more time? (optional)"/>
