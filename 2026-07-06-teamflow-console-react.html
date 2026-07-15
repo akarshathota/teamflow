@@ -1379,7 +1379,7 @@ function TasksView({ctx}){
   const [deptFb,setDeptFb]=useState('all');
   const [exportFor,setExportFor]=useState(null);
 
-  const showDept=ctx.role==='srm'||ctx.role==='mgmt';
+  const showDept=ctx.role==='admin'||ctx.role==='srm'||ctx.role==='mgmt';
   const isManagerTier=ctx.role==='srm';
   const bossLabelOf=n=>BOSS_LABEL[n]||n;
 
