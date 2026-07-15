@@ -1051,6 +1051,11 @@ function Topbar({ctx,searchRef}){
   const [q,setQ]=useState('');
   const [bellOpen,setBellOpen]=useState(false);
   const unread=ctx.notifs.filter(n=>!n.read_at);
+  // same composition as QueuePanel's own "N waiting" count (ctx.qReqs/qExts/qCompletions are the
+  // exact same live arrays QueuePanel renders) — folded into the bell badge so the two numbers can
+  // never disagree.
+  const queueN=ctx.qReqs.length+ctx.qExts.length+ctx.qCompletions.length;
+  const badgeN=unread.length+queueN;
   const TITLES={dashboard:"Dashboard",tasks:"Tasks",calendar:"Team calendar",people:"People & roles",reports:"Reports"};
   const ql=q.trim().toLowerCase();
   const tHits=ql?tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)&&(o.t.t.toLowerCase().includes(ql)||assignees(o.t).some(a=>byShort(a)&&byShort(a).n.toLowerCase().includes(ql)))).slice(0,5):[];
@@ -1077,6 +1082,14 @@ function Topbar({ctx,searchRef}){
         <div className="m">{isAct?(entry?'“'+(entry.text.length>60?entry.text.slice(0,60)+'…':entry.text)+'” · ':'')+fmtDateTime(n.created_at):(n.kind==='overdue'?'Overdue':'Due today')+' · '+fmtDate(n.for_date)}</div></div>
     </div>;
   };
+  // "Needs your approval" item — deliberately simpler than notifItem (no read/unread dimming,
+  // no per-source routing): just closes the bell and sends the viewer to the Dashboard, where
+  // QueuePanel already has the full Approve/Reject/Assign UI for whichever item this is.
+  const queueItem=(key,color,title,meta)=>
+    <div key={key} className="sd-item" onClick={()=>{setBellOpen(false);ctx.setView('dashboard');}}>
+      <span className="avex" style={{background:color,color:'#fff'}}>•</span>
+      <div><div className="t">{title}</div><div className="m">{meta}</div></div>
+    </div>;
   return <div className="topbar">
     <h1>{TITLES[ctx.view]}</h1>
     {cronStatus?<span className={'chip-s '+(cronStatus.ok?'green':'red')} style={{marginLeft:10}} title="check-due-tasks daily cron health">{cronStatus.text}</span>:null}
@@ -1098,13 +1111,27 @@ function Topbar({ctx,searchRef}){
       </div>
       <div className="searchwrap">
         <button className="btn ghost bell-btn" onClick={()=>setBellOpen(o=>!o)} aria-label="Notifications">
-          <I n="bell"/>{unread.length?<span className="bell-badge">{unread.length>9?'9+':unread.length}</span>:null}
+          <I n="bell"/>{badgeN?<span className="bell-badge">{badgeN>9?'9+':badgeN}</span>:null}
         </button>
         {bellOpen?<div className="searchdrop" style={{width:320}}>
           <div className="sd-head" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <span>Notifications</span>
             {unread.length?<span style={{cursor:'pointer',textTransform:'none',fontWeight:600,color:'var(--accent-ink)'}} onClick={()=>ctx.markAllNotifsSeen()}>Mark all read</span>:null}
           </div>
+          {/* Same title as the Dashboard's own panel, and deliberately not "Needs your approval" —
+              ctx.qReqs/qExts/qCompletions is QueuePanel's broader-scope list (everything visible to
+              this viewer), not filtered down to only items they personally can act on; QueuePanel
+              itself shows "Waiting for X" instead of buttons for the ones that aren't theirs, so the
+              bell shouldn't claim otherwise. Not notification rows: no read/unread state, and they
+              resolve themselves (vanish next refetch) once approved/rejected/assigned. A tap just
+              jumps to the Dashboard where QueuePanel's real Approve/Reject UI already lives, rather
+              than duplicating it here. */}
+          {queueN?<div className="sd-head">Incoming reports & requests</div>:null}
+          {ctx.qCompletions.map(o=>queueItem('qc'+o.i,'var(--green)',o.t.t,(byShort(o.t.who)||{n:o.t.who}).n+' marked this done — needs approval'))}
+          {ctx.qExts.map(o=>queueItem('qx'+o.i,'var(--blue)',o.t.t,(byShort(o.t.who)||{n:o.t.who}).n+' asks '+fmtDate(o.t.date)+' → '+fmtDate(o.t.extReq.newDate)))}
+          {ctx.qReqs.map(o=>queueItem('qr'+o.i,o.r.kind==='issue'?'var(--amber)':'var(--accent)',
+            (o.r.kind==='issue'?'Maintenance issue: ':'Supply request: ')+o.r.t,
+            'From '+(byShort(o.r.from)||{n:o.r.from}).n))}
           {ctx.notifs.length?(()=>{
             const list=ctx.notifs.slice(0,20);
             const attn=list.filter(n=>n.source!=='activity');
@@ -1115,7 +1142,7 @@ function Topbar({ctx,searchRef}){
               {act.length?<div className="sd-head">Activity</div>:null}
               {act.map(notifItem)}
             </>;
-          })():<div className="sd-empty">No notifications</div>}
+          })():(queueN?null:<div className="sd-empty">No notifications</div>)}
         </div>:null}
       </div>
       <button className="btn primary" onClick={()=>ctx.setModal(true)}><I n="plus"/>New task</button>

@@ -285,6 +285,19 @@ const bossesFor=role=>CHAIN.filter(c=>c.rank<ROLES[role].rank).map(c=>c.label);
    is actually viewing (real login or Preview As person), passed in by each call site. */
 const canApproveFrom=(role,from,viewerShort)=>{const p=findPerson(from);return role==='admin'||role==='mgmt'||!!(p&&p.boss===viewerShort);};
 const canAssignIssues=role=>role==='admin'||role==='mgmt'||role==='jrm'; /* jrm = Vikram, maintenance head */
+/* single source of truth for "items needing this viewer's approval/assignment" — same shape Home
+   builds inline (completions/exts/reqs wrapped as {t,i}/{q,qi} for its action buttons, issues left
+   as the raw pendingIssues array since assignIssue takes a plain pendingIssues index). Also used by
+   NotifSheet's bell "Needs your approval" group so the two screens can't drift apart from each
+   other — same arrays, same filters, just rendered differently. */
+function approvalQueue(role,self){
+  return {
+    completions:tasks.map((t,i)=>({t,i})).filter(o=>o.t.completionPending&&canApproveFrom(role,o.t.who,self)),
+    exts:tasks.map((t,i)=>({t,i})).filter(o=>o.t.extReq&&canApproveFrom(role,o.t.who,self)),
+    reqs:pendingReqs.map((q,qi)=>({q,qi})).filter(o=>canApproveFrom(role,o.q.from,self)),
+    issues:canAssignIssues(role)?pendingIssues:[]
+  };
+}
 
 /* every staff row, incl. Priya/Rajesh/Anita-the-manager — for resolving requesters/approvers.
    MEMBERS (Teachers + the maintenance Team Member) is just the assignable operational subset. */
@@ -709,17 +722,19 @@ function App(){
   const openN=mine.filter(o=>!o.t.done).length;
   const overN=mine.filter(o=>!o.t.done&&o.t.date&&o.t.date<iso(TODAY)).length;
   const todayN=mine.filter(o=>!o.t.done&&o.t.date===iso(TODAY)).length;
-  const waitN=role==='worker'?0
-    :(canAssignIssues(role)?pendingIssues.length:0)
-    +pendingReqs.filter(q=>canApproveFrom(role,q.from,person.s)).length
-    +tasks.filter(t=>t.extReq&&canApproveFrom(role,t.who,person.s)).length
-    +tasks.filter(t=>t.completionPending&&canApproveFrom(role,t.who,person.s)).length;
+  /* role==='worker' (Teacher) is force-zeroed rather than relying on canApproveFrom/canAssignIssues
+     alone — a Teacher/worker has no approval authority over anyone, ever, by design, and this stays
+     true even if some future data quirk made those filters return non-empty for one. Both waitN
+     (badge count) and the bell's "Needs your approval" group (ctx.approvalQueue) come from this same
+     zeroed object for a worker, so they can never disagree. */
+  const aq=role==='worker'?{completions:[],exts:[],reqs:[],issues:[]}:approvalQueue(role,person.s);
+  const waitN=aq.completions.length+aq.exts.length+aq.reqs.length+aq.issues.length;
 
   const switchRole=v=>{setPreviewRole(v);const rr=ROLES[v];if(!rr.tabs.includes(page))setPage(rr.tabs[0]);setSheet(null);};
   /* previewing/realSelf: same real-signed-in-vs-Preview-As distinction the console keeps on ctx
      (ctx.previewing/ctx.viewer there) — needed so UpdateSheet's open->inprogress auto-transition
      (Issue 4) checks the REAL logged-in person, not whichever role is currently being simulated. */
-  const ctx={role,r,scope,mine,say,R,setSheet,setPage,page,notifs,previewing,realSelf:myPerson.s};
+  const ctx={role,r,scope,mine,say,R,setSheet,setPage,page,notifs,previewing,realSelf:myPerson.s,waitN,approvalQueue:aq};
 
   const needExt=t=>{if(t.done||!t.date)return false;const lim=new Date(TODAY);lim.setDate(lim.getDate()+2);return t.date<=iso(lim);};
 
@@ -785,7 +800,10 @@ function App(){
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <button className="bell-btn" onClick={()=>setSheet({kind:'notifs'})} aria-label="Notifications">
             <I n="bell" s={20}/>
-            {notifs.filter(n=>!n.read_at).length?<span className="bell-badge">{notifs.filter(n=>!n.read_at).length>9?'9+':notifs.filter(n=>!n.read_at).length}</span>:null}
+            {/* badge = unread notifs + waitN (same composition Home's approval sections and the
+                bell's "Needs your approval" group render — see approvalQueue()), so this number
+                always matches what tapping through actually shows. */}
+            {(notifs.filter(n=>!n.read_at).length+waitN)?<span className="bell-badge">{(notifs.filter(n=>!n.read_at).length+waitN)>9?'9+':(notifs.filter(n=>!n.read_at).length+waitN)}</span>:null}
           </button>
           <div className="av">{r.av}</div>
         </div>
@@ -878,9 +896,9 @@ function TaskCard({o,ctx,acts}){
 
 /* ============ home ============ */
 function Home({ctx,acts}){
-  const exts=tasks.map((t,i)=>({t,i})).filter(o=>o.t.extReq&&canApproveFrom(ctx.role,o.t.who,ctx.r.self));
-  const completions=tasks.map((t,i)=>({t,i})).filter(o=>o.t.completionPending&&canApproveFrom(ctx.role,o.t.who,ctx.r.self));
-  const reqs=pendingReqs.map((q,qi)=>({q,qi})).filter(o=>canApproveFrom(ctx.role,o.q.from,ctx.r.self));
+  // ctx.approvalQueue is the single source of truth (see approvalQueue()) — also feeds the bell's
+  // "Needs your approval" group and the waitN badge count, so all three can't drift apart.
+  const {completions,exts,reqs,issues:pendingIssuesQ}=ctx.approvalQueue;
   return <div>
     {ctx.role!=='worker'?<>
       {completions.length?<><div className="sec">Completion approvals</div>
@@ -902,8 +920,8 @@ function Home({ctx,acts}){
             <button className="btn primary" onClick={()=>acts.approveExt(o.i)}>Approve ⏳</button>
             <button className="btn ghost" onClick={()=>acts.rejectExt(o.i)}><I n="x" s={16}/></button>
           </div></div>)}</>:null}
-      {pendingIssues.length&&canAssignIssues(ctx.role)?<><div className="sec">Maintenance issues — assign</div>
-        {pendingIssues.map((q,qi)=>{const sug=suggestFixer(q.t);
+      {pendingIssuesQ.length?<><div className="sec">Maintenance issues — assign</div>
+        {pendingIssuesQ.map((q,qi)=>{const sug=suggestFixer(q.t);
           return <div className="task" key={'i'+qi}>
             <span className="pill today">🔧 Maintenance issue</span>
             <div className="tt">{q.t}</div>
@@ -1160,17 +1178,35 @@ function NotifSheet({ctx,acts,close}){
   };
   const attn=ctx.notifs.filter(n=>n.source!=='activity');
   const act=ctx.notifs.filter(n=>n.source==='activity');
+  // "Needs your approval" — the same live queue Home's action sections render (ctx.approvalQueue,
+  // see approvalQueue()), surfaced here too. These aren't notification rows (no read/unread state,
+  // nothing to mark read) and they resolve themselves once acted on, so a tap just sends the viewer
+  // to Home where the real Approve/Reject/Assign buttons live, rather than duplicating them here.
+  const {completions:qC,exts:qX,reqs:qR,issues:qI}=ctx.approvalQueue;
+  const queueTotal=qC.length+qX.length+qR.length+qI.length;
+  const toHome=()=>{ctx.setPage('home');close();};
+  const queueItem=(key,color,title,meta)=>
+    <div key={key} className="task" style={{cursor:'pointer'}} onClick={toHome}>
+      <div className="stripe" style={{background:color}}/>
+      <div className="tt">{title}</div>
+      <div className="meta">{meta}</div>
+    </div>;
   return <>
     <h3>Notifications
       {unread.length?<span style={{float:'right',fontSize:12.5,fontWeight:600,color:'var(--accent-ink)',cursor:'pointer'}} onClick={acts.markAllNotifsSeen}>Mark all read</span>:null}
     </h3>
     <div style={{maxHeight:400,overflowY:'auto'}}>
+      {queueTotal?<div className="sec">Needs your approval</div>:null}
+      {qC.map(o=>queueItem('qc'+o.i,'var(--green)',o.t.t,o.t.who+' marked this done — needs approval'))}
+      {qX.map(o=>queueItem('qx'+o.i,'var(--blue)',o.t.t,o.t.who+' requests extension → '+(o.t.extReq.label||o.t.extReq.newDate)))}
+      {qI.map((q,qi)=>queueItem('qi'+qi,'var(--amber)','Maintenance issue: '+q.t,'Reported by '+q.from))}
+      {qR.map(o=>queueItem('qr'+o.qi,'var(--accent)','Supply request: '+o.q.t,'From '+o.q.from))}
       {ctx.notifs.length?<>
         {attn.length?<div className="sec">Needs attention</div>:null}
         {attn.map(notifItem)}
         {act.length?<div className="sec">Activity</div>:null}
         {act.map(notifItem)}
-      </>:<MobileEmpty icon={<I n="bell" s={26}/>} t="You're all caught up" s="Overdue alerts, due-today reminders, and task activity will show up here."/>}
+      </>:(queueTotal?null:<MobileEmpty icon={<I n="bell" s={26}/>} t="You're all caught up" s="Overdue alerts, due-today reminders, and task activity will show up here."/>)}
     </div>
   </>;
 }
