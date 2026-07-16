@@ -905,19 +905,23 @@ function Home({ctx,acts}){
     {ctx.role!=='worker'?<>
       {completions.length?<><div className="sec">Completion approvals</div>
         {completions.map(o=><div className="task" key={'c'+o.i}>
-          <span className="pill today">⏳ Marked done — approve?</span>
-          <div className="tt">{o.t.t}</div>
-          <div className="meta"><span className="who">{o.t.init}</span> {o.t.who} submitted this as complete{o.t.instructedBy?' · assigned by '+o.t.instructedBy:''}</div>
+          <div style={{cursor:'pointer'}} onClick={()=>ctx.setSheet({kind:'update',idx:o.i})}>
+            <span className="pill today">⏳ Marked done — approve?</span>
+            <div className="tt">{o.t.t}</div>
+            <div className="meta"><span className="who">{o.t.init}</span> {o.t.who} submitted this as complete{o.t.instructedBy?' · assigned by '+o.t.instructedBy:''}</div>
+          </div>
           <div className="cardbtns">
             <button className="btn primary" onClick={()=>acts.approveCompletion(o.i)}>Approve ✓</button>
             <button className="btn ghost" onClick={()=>acts.rejectCompletion(o.i)}><I n="x" s={16}/></button>
           </div></div>)}</>:null}
       {exts.length?<><div className="sec">Time extension requests</div>
         {exts.map(o=><div className="task" key={'x'+o.i}>
-          <span className="pill today">⏳ Extension request</span>
-          <div className="tt">{o.t.t}</div>
-          <div className="meta"><span className="who">{o.t.init}</span> {o.t.who} · due {o.t.due||o.t.date} → <b>{o.t.extReq.label||o.t.extReq.newDate}</b></div>
-          {o.t.extReq.reason?<div className="notepv">“{o.t.extReq.reason}”</div>:null}
+          <div style={{cursor:'pointer'}} onClick={()=>ctx.setSheet({kind:'update',idx:o.i})}>
+            <span className="pill today">⏳ Extension request</span>
+            <div className="tt">{o.t.t}</div>
+            <div className="meta"><span className="who">{o.t.init}</span> {o.t.who} · due {o.t.due||o.t.date} → <b>{o.t.extReq.label||o.t.extReq.newDate}</b></div>
+            {o.t.extReq.reason?<div className="notepv">“{o.t.extReq.reason}”</div>:null}
+          </div>
           <div className="cardbtns">
             <button className="btn primary" onClick={()=>acts.approveExt(o.i)}>Approve ⏳</button>
             <button className="btn ghost" onClick={()=>acts.rejectExt(o.i)}><I n="x" s={16}/></button>

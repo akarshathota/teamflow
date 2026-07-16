@@ -1296,7 +1296,7 @@ function QueuePanel({ctx}){
       {ctx.qCompletions.map(o=>{const t=o.t,p=byShort(t.who),can=ctx.canApprove(t.who);
         return <div className="attn" key={'c'+o.i}>
           <div className="ring" style={{background:'var(--green)'}}><I n="check" c="#fff"/></div>
-          <div style={{flex:1,minWidth:0}}>
+          <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={()=>ctx.setDrawerIdx(o.i)} title="Open task to review before deciding">
             <div className="nm">{t.t} <span className="tag green">Completion</span></div>
             <div className="rs">{p?p.n:t.who} marked this done{t.instructedBy?' · assigned by '+t.instructedBy:''} · approver: {p&&p.boss?p.boss.split(' ')[0]+' (dept boss)':'—'}</div></div>
           <div className="act">{can?<><button className="linkbtn" onClick={()=>ctx.approveCompletion(o.i)}>Approve</button>
@@ -1306,7 +1306,7 @@ function QueuePanel({ctx}){
       {ctx.qExts.map(o=>{const t=o.t,p=byShort(t.who),can=ctx.canApprove(t.who);
         return <div className="attn" key={'e'+o.i}>
           <div className="ring" style={{background:'var(--blue)'}}><I n="clock" c="#fff"/></div>
-          <div style={{flex:1,minWidth:0}}>
+          <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={()=>ctx.setDrawerIdx(o.i)} title="Open task to review before deciding">
             <div className="nm">{t.t} <span className="tag blue">Extension</span></div>
             <div className="rs">{p?p.n:t.who} asks {fmtDate(t.date)} → <b>{fmtDate(t.extReq.newDate)}</b>{t.extReq.reason?' · “'+t.extReq.reason+'”':''} · approver: {p&&p.boss?p.boss.split(' ')[0]+' (dept boss)':'—'}</div></div>
           <div className="act">{can?<><button className="linkbtn" onClick={()=>ctx.approveExt(o.i)}>Approve</button>
