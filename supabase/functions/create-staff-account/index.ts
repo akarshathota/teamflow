@@ -77,6 +77,13 @@ Deno.serve(async (req) => {
     const bossName = body.boss || null;
     const phone = body.phone || null;
     const email = String(body.email || "").trim().toLowerCase();
+    // Optional caller-supplied username for non-admin-tier roles (Staff/Jr Manager/Team Lead/
+    // Director/Sr. Manager — everyone whose login is username-based, not email-based). Same
+    // normalization update-staff-login already applies to a post-creation username change, so a
+    // name typed here behaves identically whether it's set now or fixed later via Change login.
+    // Left blank (the default, and the only option before this), behavior is unchanged: auto-derive
+    // from short_name below.
+    const requestedUsername = String(body.username || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 
     if (!name || !CONSOLE_ROLES.includes(role) || !department) {
       return json({ error: "name, a valid role, and department are required" }, 400);
@@ -114,8 +121,15 @@ Deno.serve(async (req) => {
       let i = 2;
       while (takenShort.has(shortName)) shortName = parts[0] + (parts[1] ? parts[1][0] : "") + i++;
     }
-    let username = shortName.toLowerCase(), j = 2;
-    while (takenUser.has(username)) username = shortName.toLowerCase() + j++;
+    let username: string;
+    if (requestedUsername) {
+      if (takenUser.has(requestedUsername)) return json({ error: "That username is already taken" }, 409);
+      username = requestedUsername;
+    } else {
+      username = shortName.toLowerCase();
+      let j = 2;
+      while (takenUser.has(username)) username = shortName.toLowerCase() + j++;
+    }
 
     const loginEmail = ADMIN_TIER.includes(role) ? email : `${username}@teamflow.demo`;
     const password = randomPassword();

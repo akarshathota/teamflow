@@ -1769,13 +1769,13 @@ function personLabel(p){
   if(p.role==='Management'||p.role==='Director')return tier+' — '+p.n;
   return tier+' — '+p.n+' ('+p.dept+')';
 }
-async function createStaffAccount({name,role,department,subDept,boss,phone,email}){
+async function createStaffAccount({name,role,department,subDept,boss,phone,email,username}){
   const {data:{session}}=await sb.auth.getSession();
   const resp=await fetch('https://fumggrcamegejihenkhb.supabase.co/functions/v1/create-staff-account',{
     method:'POST',
     headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token,
       apikey:'sb_publishable_bEqR06srB99BHHdvLQy14g_-pLZPWwJ'},
-    body:JSON.stringify({name,role,department,subDept:subDept||null,boss:boss||null,phone:phone||null,email:email||null})});
+    body:JSON.stringify({name,role,department,subDept:subDept||null,boss:boss||null,phone:phone||null,email:email||null,username:username||null})});
   const j=await resp.json();
   if(!resp.ok)throw new Error(j.error||'Could not create account');
   return j;
@@ -1935,6 +1935,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
     return <ModalShell close={close} err={err} title="Add a Director" sub="Sits between Management and Sr. Manager, overseeing whichever departments are assigned to them. Assign departments to this Director from 'Add a department', or from an existing department's card once added.">
       <div className="mf">
         <label>Name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Priya Nair" autoFocus/>
+        <label>Username (optional)</label><input value={f.username||''} onChange={e=>setF({...f,username:e.target.value})} placeholder="auto-generated from name if left blank"/>
       </div>
       <div className="qc-actions">
         <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
@@ -1946,7 +1947,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           setBusy(true);setErr('');
           try{
             const dept=boss.dept||'Administration';
-            const j=await createStaffAccount({name,role:'Director',department:dept,boss:boss.n});
+            const j=await createStaffAccount({name,role:'Director',department:dept,boss:boss.n,username:(f.username||'').trim()||undefined});
             STAFF.push({n:j.name,s:j.short_name,role:'Director',dept,boss:boss.n,bossId:boss.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
             ctx.R();say('Added Director '+name);setBusy(false);setResult(j);
           }catch(e){setBusy(false);setErr(e.message);}
@@ -1965,6 +1966,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           {availDepts.map(d=><option key={d}>{d}</option>)}</select>
         :<div className="whysm" style={{margin:0}}>Every department already has a Sr. Manager.</div>}
         <label>Sr. Manager name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Priya Nair"/>
+        <label>Username (optional)</label><input value={f.username||''} onChange={e=>setF({...f,username:e.target.value})} placeholder="auto-generated from name if left blank"/>
         {directorOpts.length?<><label>Reports to</label>
           <select value={f.bossId||'mgmt'} onChange={e=>setF({...f,bossId:e.target.value})}>
             <option value="mgmt">Management</option>
@@ -1980,7 +1982,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           setBusy(true);setErr('');
           try{
             const boss=(f.bossId&&f.bossId!=='mgmt')?byId(f.bossId):mgmtMembers()[0];
-            const j=await createStaffAccount({name,role:'Manager',department:dept,boss:boss.n});
+            const j=await createStaffAccount({name,role:'Manager',department:dept,boss:boss.n,username:(f.username||'').trim()||undefined});
             STAFF.push({n:j.name,s:j.short_name,role:'Manager',dept,boss:boss.n,bossId:boss.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
             ctx.R();say('Added department "'+dept+'" with Sr. Manager '+name+(boss.role==='Director'?' — reporting to '+boss.n:''));setBusy(false);setResult(j);
           }catch(e){setBusy(false);setErr(e.message);}
@@ -1997,6 +1999,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
     return <ModalShell close={close} err={err} title={titles[step]} sub={subs[step]}>
       <div className="mf">
         <label>Name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Deepa Iyer" autoFocus/>
+        <label>Username (optional)</label><input value={f.username||''} onChange={e=>setF({...f,username:e.target.value})} placeholder="auto-generated from name if left blank"/>
         <label>Department</label>
         <select value={f.deptId||(depts[0]||{}).id||''} onChange={e=>setF({...f,deptId:e.target.value})}>
           {depts.map(d=><option key={d.id} value={d.id}>{d.dept}{d.n?' — '+d.n:''}</option>)}
@@ -2030,7 +2033,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           }
           setBusy(true);setErr('');
           try{
-            const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,subDept,boss:attachPoint.n});
+            const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,subDept,boss:attachPoint.n,username:(f.username||'').trim()||undefined});
             STAFF.push({n:j.name,s:j.short_name,role:dbRole,dept:deptHead.dept,subDept,boss:attachPoint.n,bossId:attachPoint.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
             ctx.R();say('Added '+TIER_LABEL[dbRole]+' '+name+' under '+deptHead.dept);setBusy(false);setResult(j);
           }catch(e){setBusy(false);setErr(e.message);}
@@ -2053,7 +2056,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
           setBusy(true);setErr('');
           try{
-            const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,subDept,boss:attachPoint.n});
+            const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,subDept,boss:attachPoint.n,username:(f.username||'').trim()||undefined});
             const newPerson={n:j.name,s:j.short_name,role:dbRole,dept:deptHead.dept,subDept,boss:attachPoint.n,bossId:attachPoint.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null};
             STAFF.push(newPerson);
             const moved=candidates.filter(c=>checked[c.id]!==false);
@@ -2296,12 +2299,47 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
     const {person}=oaCtx;
     return <ModalShell close={close} err={err} title={person.n} sub={(TIER_LABEL[person.role]||person.role)+(person.dept?' · '+person.dept:'')}>
       <div className="mf" style={{display:'flex',flexDirection:'column',gap:8}}>
+        <button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('edit-name');}}>Edit name</button>
         {person.authId?<button className="btn soft" onClick={()=>{close();ctx.setResetTarget(person);}}><I n="key" s={15}/>Reset password</button>:null}
         {person.authId?<button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('change-login');}}><I n="redo" s={15}/>Change login</button>:null}
         {person.role==='Manager'?<button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('reassign-boss');}}><I n="redo" s={15}/>Change who they report to</button>:null}
         {person.tempCovering?<button className="btn soft" onClick={()=>{setOaCtx({person});setStep('revert-name');}}>Revert to their original role</button>:null}
       </div>
       <div className="qc-actions"><button className="btn soft" style={{flex:1}} onClick={close}>Close</button></div>
+    </ModalShell>;
+  }
+  if(step==='edit-name'){
+    const {person}=oaCtx;
+    return <ModalShell close={close} err={err} title={'Rename '+person.n} sub="Updates their display name everywhere in the app. Their username/login, short name, and task history are unaffected.">
+      <div className="mf">
+        <label>Name</label><input value={f.name!==undefined?f.name:person.n} onChange={e=>setF({...f,name:e.target.value})} autoFocus/>
+      </div>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={()=>setStep('person-detail')}>Back</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+          const newName=(f.name!==undefined?f.name:person.n).trim();
+          if(!newName){setErr('Enter a name.');return;}
+          if(newName===person.n){close();return;}
+          if(STAFF.some(p=>p.id!==person.id&&p.n===newName)){setErr('Someone else already has that name.');return;}
+          setBusy(true);setErr('');
+          try{
+            const parts=newName.split(/\s+/);
+            const initials=parts.map(p=>p[0]).join('').slice(0,2).toUpperCase();
+            const oldName=person.n;
+            await updateStaffFields(person.id,{name:newName,initials});
+            /* .boss on every STAFF entry is a client-side cached copy of the boss's full NAME
+               (derived at load time from boss_id — see rowsToStaff), used by descendants()/
+               directReports() for the org-tree walk. It isn't a DB column, so renaming the DB row
+               doesn't touch it — every direct report's cached .boss string must be rewritten here
+               or their branch of the tree silently detaches until the next full reload. boss_id
+               itself (the real FK) is untouched, and short_name is untouched, so nothing else
+               (task assignees, historical instructedBy strings, admin_activity_log) is affected. */
+            person.n=newName;person.av=initials;
+            STAFF.filter(p=>p.boss===oldName).forEach(p=>{p.boss=newName;});
+            ctx.R();say('Renamed '+oldName+' to '+newName);setBusy(false);close();
+          }catch(e){setBusy(false);setErr(e.message);}
+        }}>{busy?'Saving…':'Save'}</button>
+      </div>
     </ModalShell>;
   }
   if(step==='reassign-boss'){
