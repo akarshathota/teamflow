@@ -173,25 +173,30 @@ async function markAllNotifsRead(ns){
     ids2.length?sb.from('task_activity_notifications').update({read_at:now}).in('id',ids2):null
   ]);
 }
-/* one task_activity_notifications row per recipient in `staffIds`, for the freshly-inserted
+/* One task_activity_notifications row per recipient in `staffIds`, for the freshly-inserted
    task_log row `logId` on `taskId`, attributed to `actorId`. No-op when there's no one else to
    notify (solo/self-assigned task) — genuinely identical logic both apps need right after their
-   own task_log insert. */
+   own task_log insert.
+   Inserted one row at a time, not batched — task_in_scope's RLS check is per-recipient (e.g. a
+   task's instructedBy is a frozen string set at creation time, so it can point at someone who's
+   since moved out of the assignee's real boss_id chain, the same staleness dept-mismatch already
+   guards against). A single multi-row INSERT is all-or-nothing in Postgres: one recipient failing
+   RLS would silently swallow the notification for every OTHER valid recipient too. Individual
+   inserts mean a stale recipient just fails on their own row. */
 async function notifyActivity(taskId,logId,actorId,staffIds){
-  if(!staffIds.length)return;
-  const rows=staffIds.map(staff_id=>({staff_id,task_id:taskId,task_log_id:logId,actor_staff_id:actorId}));
-  const {error}=await sb.from('task_activity_notifications').insert(rows);
-  if(error)console.error(error);
+  await Promise.all(staffIds.map(staff_id=>
+    sb.from('task_activity_notifications').insert({staff_id,task_id:taskId,task_log_id:logId,actor_staff_id:actorId})
+      .then(({error})=>{if(error)console.error(error);})));
 }
 /* Lightweight sibling of notifyActivity for events that already have their own synthesized
    Activity-timeline line (status change, extension request/approve/reject, completion submit/
    approve/reject, reassignment) — deliberately does NOT touch task_log, just a short system-
-   written `label`, so the timeline doesn't end up rendering the same event twice. */
+   written `label`, so the timeline doesn't end up rendering the same event twice. Same
+   one-row-at-a-time reasoning as notifyActivity above. */
 async function notifyEvent(taskId,actorId,label,staffIds){
-  if(!staffIds.length)return;
-  const rows=staffIds.map(staff_id=>({staff_id,task_id:taskId,actor_staff_id:actorId,label}));
-  const {error}=await sb.from('task_activity_notifications').insert(rows);
-  if(error)console.error(error);
+  await Promise.all(staffIds.map(staff_id=>
+    sb.from('task_activity_notifications').insert({staff_id,task_id:taskId,actor_staff_id:actorId,label})
+      .then(({error})=>{if(error)console.error(error);})));
 }
 /* Edits a task_log row's text — the "fix a typo within 2 minutes of posting" feature. Real
    enforcement lives in the log_update RLS policy (author_id = auth_staff_id() AND now() -
