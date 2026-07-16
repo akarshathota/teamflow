@@ -729,12 +729,13 @@ function App(){
      since it has "no real backing person" of its own. Resolving Preview As to a real current
      holder of that role (mirroring the console's roleRep()) fixes both: real logins already got
      their own name/team here, Preview As now gets a real one too instead of Anita's fictional
-     roster. worker just needs [person.s] (no Teacher has reports here); srm/jrm walk the real
-     boss_id chain via descendantsM(). Preserves each role's original self-inclusion behavior
-     exactly (srm includes the person themself in their own team, jrm does not) rather than
-     unifying them, since that's an existing behavioral distinction, not something this fix was
-     asked to change. admin/mgmt stay on ALL_STAFF unchanged — that's already role-based, not
-     position-based, so it was never broken. */
+     roster. worker just needs [person.s] (no Teacher has reports here); every other non-admin/
+     mgmt role prepends the person themself before the descendantsM() walk — confirmed live that
+     a jrm/lead with no reports (descendantsM returns []) otherwise gets scope=[], which silently
+     hides their own directly-assigned tasks from every list/counter that reads ctx.mine. Matches
+     console's scope=[viewer].concat(descendants(...)), which never had this asymmetry. admin/mgmt
+     stay on ALL_STAFF unchanged — that's already role-based, not position-based, so it was never
+     broken. */
   const previewing=role!==myRoleKey;
   const person=previewing?(ALL_PEOPLE.find(p=>DB_ROLE_TO_KEY[p.role]===role)||myPerson):myPerson;
   const r={...ROLES[role],name:person.n,
@@ -746,8 +747,7 @@ function App(){
     // hardcoded one (e.g. "Manager · Academic + Admin" regardless of who was previewed).
     org:(role==='admin'||role==='mgmt')?ROLES[role].org:person.role+' · '+(person.department||''),
     team:role==='worker'?[person.s]
-      :(role==='srm'||role==='dir')?[person.s].concat(descendantsM(person.s).map(p=>p.s))
-      :(role==='jrm'||role==='lead')?descendantsM(person.s).map(p=>p.s)
+      :(role==='srm'||role==='dir'||role==='jrm'||role==='lead')?[person.s].concat(descendantsM(person.s).map(p=>p.s))
       :ROLES[role].team};
   const scope=r.team;
   const mine=tasks.map((t,i)=>({t,i})).filter(o=>assigneesM(o.t).some(a=>scope.includes(a)));
