@@ -742,7 +742,8 @@ function App(){
   /* actions shared */
   const acts={
     remind:i=>say('Reminder sent to '+assigneesM(tasks[i]).join(' & ')+' 🔔'),
-    approveReq:qi=>{const q=pendingReqs.splice(qi,1)[0];if(!q)return;
+    approveReq:qi=>{if(previewing){say("You're previewing — switch back to approve for real");return;}
+      const q=pendingReqs.splice(qi,1)[0];if(!q)return;
       const s=suggestAssignee('purchase','accounts');
       const nt={t:"Buy: "+q.t,who:s.n,init:s.i,due:"This week",date:whenToDate("this week"),
         bucket:"accounts",type:"purchase",done:false,origin:"request",
@@ -751,33 +752,39 @@ function App(){
       R();
       saveTask(nt).catch(console.error);deleteRequestRow(q).catch(console.error);
       say('Approved · '+s.n+' (procurement · accounts) will buy 📦');},
-    declineReq:qi=>{const q=pendingReqs.splice(qi,1)[0];if(q){R();deleteRequestRow(q).catch(console.error);say('Request declined — '+q.from.split(' ')[0]+' will be notified');}},
-    assignIssue:(qi,who)=>{const q=pendingIssues.splice(qi,1)[0];if(!q)return;const m=findMember(who);
+    declineReq:qi=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
+      const q=pendingReqs.splice(qi,1)[0];if(q){R();deleteRequestRow(q).catch(console.error);say('Request declined — '+q.from.split(' ')[0]+' will be notified');}},
+    assignIssue:(qi,who)=>{if(previewing){say("You're previewing — switch back to assign for real");return;}
+      const q=pendingIssues.splice(qi,1)[0];if(!q)return;const m=findMember(who);
       const nt={t:q.t,who:m.n,init:m.i,due:"Tomorrow · 9:00 AM",date:whenToDate("tomorrow"),
         bucket:"maintenance",type:"repair",done:false,origin:"issue",note:'Reported by '+q.from,files:q.files};
       tasks.unshift(nt);
       R();
       saveTask(nt).catch(console.error);deleteRequestRow(q).catch(console.error);
       say('Assigned to '+who+' 🔧 · notified in TeamFlow');},
-    approveExt:i=>{const t=tasks[i];if(!t||!t.extReq)return;
+    approveExt:i=>{if(previewing){say("You're previewing — switch back to approve for real");return;}
+      const t=tasks[i];if(!t||!t.extReq)return;
       t.date=t.extReq.newDate;t.due='Due '+fmtD(t.extReq.newDate);delete t.extReq;R();
       saveTask(t).catch(console.error);
       say('Extension approved ⏳ · assignee notified');},
-    rejectExt:i=>{const t=tasks[i];if(!t||!t.extReq)return;delete t.extReq;R();
+    rejectExt:i=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
+      const t=tasks[i];if(!t||!t.extReq)return;delete t.extReq;R();
       saveTask(t).catch(console.error);
       say('Extension rejected — original due date stands');},
     /* completion-approval actions — same shape as approveExt/rejectExt above, just for the
        completionPending marker instead of extReq. Approving is the only place that actually runs
        the done-flip + recurrence spawn (spawnNextRecur); a rejected completion should never have
        already generated its next occurrence. */
-    approveCompletion:i=>{const t=tasks[i];if(!t||!t.completionPending)return;
+    approveCompletion:i=>{if(previewing){say("You're previewing — switch back to approve for real");return;}
+      const t=tasks[i];if(!t||!t.completionPending)return;
       delete t.completionPending;
       if(t.coWho&&t.coWho.length)t.doneBy=assigneesM(t).slice();
       t.done=true;t.doneWhen='just now';delete t.extReq;
       const nd=spawnNextRecur(t);
       persistComplete(t,nd);R();
       say(nd?'Completion approved ✓ · next '+RECURS[t.recur].toLowerCase()+' on '+fmtD(nd):'Completion approved — task closed ✓');},
-    rejectCompletion:i=>{const t=tasks[i];if(!t||!t.completionPending)return;
+    rejectCompletion:i=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
+      const t=tasks[i];if(!t||!t.completionPending)return;
       /* leaves status as-is (inprogress, from the bump at submission time) rather than forcing it
          back to open — same "still-open/in-progress" behavior as console's rejectCompletion. */
       delete t.completionPending;t.doneBy=[];R();
@@ -1106,7 +1113,7 @@ function Notices({ctx}){
     <div className="sec" style={{marginTop:16}}>Recent</div>
     {notices.map((n,ix)=><div className="task" key={ix}>
       <div className="tt" style={{marginTop:0}}>{n.t}</div>
-      <div className="meta" style={{marginBottom:4}}>{n.d} · sent to 15 staff</div>
+      <div className="meta" style={{marginBottom:4}}>{n.d} · sent to {ALL_PEOPLE.length} staff</div>
       <div style={{fontSize:13.5,color:'var(--ink2)',lineHeight:1.45}}>{n.b}</div></div>)}
   </div>;
 }

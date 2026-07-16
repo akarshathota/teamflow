@@ -907,7 +907,8 @@ function App(){
 
   /* actions */
   const remindPerson=s=>{const p=byShort(s);say('Reminder sent to '+(p?p.n.split(' ')[0]:s));};
-  const approveReq=i=>{const r=requests[i];if(!r||r.kind!=='request')return;
+  const approveReq=i=>{if(previewing){say("You're previewing — switch back to approve for real");return;}
+    const r=requests[i];if(!r||r.kind!=='request')return;
     if(!canApprove(r.from)){say('Only the department boss can approve this');return;}
     const s=suggestWho('purchase',scope);const d=new Date(TODAY);d.setDate(d.getDate()+4);
     const nt={t:r.t,who:s?s.s:r.from,type:'purchase',bucket:'accounts',prio:'med',date:iso(d),status:'open',
@@ -916,10 +917,12 @@ function App(){
     requests.splice(i,1);R();
     saveTask(nt).catch(console.error);deleteRequestRow(r).catch(console.error);
     say('Request approved · '+(s?byShort(s.s).n:'')+' (procurement, Accounts department) will procure');};
-  const declineReq=i=>{const r=requests[i];if(!r)return;requests.splice(i,1);R();
+  const declineReq=i=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
+    const r=requests[i];if(!r)return;requests.splice(i,1);R();
     deleteRequestRow(r).catch(console.error);
     say((r.kind==='issue'?'Issue':'Request')+' declined — '+(byShort(r.from)||{n:r.from}).n.split(' ')[0]+' will be notified');};
-  const assignIssue=(i,who)=>{const r=requests[i];if(!r||!who)return;
+  const assignIssue=(i,who)=>{if(previewing){say("You're previewing — switch back to assign for real");return;}
+    const r=requests[i];if(!r||!who)return;
     const d=new Date(TODAY);d.setDate(d.getDate()+1);
     const nt={t:r.t,who,type:'repair',bucket:'maintenance',prio:'high',date:iso(d),status:'open',
       note:'Reported by '+(byShort(r.from)||{}).n+(r.note?' — “'+r.note+'”':''),origin:'issue',files:r.files};
@@ -927,23 +930,27 @@ function App(){
     requests.splice(i,1);R();
     saveTask(nt).catch(console.error);deleteRequestRow(r).catch(console.error);
     say('Issue assigned to '+byShort(who).n+' · notified in TeamFlow');};
-  const approveExt=i=>{const t=tasks[i];if(!t||!t.extReq)return;
+  const approveExt=i=>{if(previewing){say("You're previewing — switch back to approve for real");return;}
+    const t=tasks[i];if(!t||!t.extReq)return;
     if(!canApprove(t.who)){say('Only the department boss can approve this');return;}
     t.date=t.extReq.newDate;delete t.extReq;R();
     saveTask(t).catch(console.error);
     say('Extension approved — new due date '+fmtDate(t.date)+' · assignee notified');};
-  const rejectExt=i=>{const t=tasks[i];if(!t||!t.extReq)return;
+  const rejectExt=i=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
+    const t=tasks[i];if(!t||!t.extReq)return;
     if(!canApprove(t.who)){say('Only the department boss can decide this');return;}
     delete t.extReq;R();
     saveTask(t).catch(console.error);
     say('Extension rejected — original due date stands');};
-  const approveCompletion=i=>{const t=tasks[i];if(!t||!t.completionPending)return;
+  const approveCompletion=i=>{if(previewing){say("You're previewing — switch back to approve for real");return;}
+    const t=tasks[i];if(!t||!t.completionPending)return;
     if(!canApprove(t.who)){say('Only the department boss can approve this');return;}
     delete t.completionPending;
     const nd=completeTask(t);
     persistComplete(t,nd);R();
     say(nd?'Completion approved · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'Completion approved — task closed');};
-  const rejectCompletion=i=>{const t=tasks[i];if(!t||!t.completionPending)return;
+  const rejectCompletion=i=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
+    const t=tasks[i];if(!t||!t.completionPending)return;
     if(!canApprove(t.who)){say('Only the department boss can decide this');return;}
     delete t.completionPending;t.doneBy=[];R();
     saveTask(t).catch(console.error);

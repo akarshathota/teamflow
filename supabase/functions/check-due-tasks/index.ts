@@ -37,6 +37,7 @@ Deno.serve(async (req) => {
     .from("tasks")
     .select("id, title, due_date")
     .neq("status", "done")
+    .eq("completion_pending", false)
     .lte("due_date", today);
   if (error) return json({ error: error.message }, 500);
 
