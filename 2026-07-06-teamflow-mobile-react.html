@@ -282,12 +282,17 @@ const ROLES={
   worker:{name:"Hari Charan",org:"Teacher",av:"H",team:["Hari"],self:"Hari",
     tabs:["alltasks","calendar","notices"],admin:false,billing:false,canPost:false,brief:""}
 };
-/* Walks the REAL boss_id chain upward from a real person (by short name), collecting a
-   "Name (Role)" label for every real boss above them. Replaces a static 4-name/4-rank array that
-   only ever covered the original demo data — same bug class already fixed once for
-   canApproveFrom below (its own comment explains: the old map "silently failed for anyone hired
-   since" the first ~10 demo names). admin/mgmt are org-wide with no meaningful single boss chain
-   here. seen guards against a bad boss_id cycle ever infinite-looping the UI. */
+/* Walks the REAL boss_id chain upward from a real person (by short name), collecting
+   {n: raw name, label: "Name (Role)"} for every real boss above them. Replaces a static
+   4-name/4-rank array that only ever covered the original demo data — same bug class already
+   fixed once for canApproveFrom below (its own comment explains: the old map "silently failed for
+   anyone hired since" the first ~10 demo names). admin/mgmt are org-wide with no meaningful single
+   boss chain here. seen guards against a bad boss_id cycle ever infinite-looping the UI.
+   Returns {n,label} pairs rather than a single formatted string — n is what gets stored in
+   instructedBy (must equal a real staff.n/short name for findPerson/concernedForM to resolve it
+   later), label is the "(Role)" decoration for display only. Storing the formatted label directly
+   was the same bug console's BOSS_LABEL had: it broke instructedBy matching for anyone the label
+   applied to. */
 const bossesFor=(role,self)=>{
   if(role==='admin'||role==='mgmt'||!self)return [];
   const out=[],seen=new Set();
@@ -295,7 +300,7 @@ const bossesFor=(role,self)=>{
   while(cur&&cur.boss&&!seen.has(cur.boss)){
     seen.add(cur.boss);
     const boss=findPerson(cur.boss);
-    out.push(boss?boss.n+' ('+boss.role+')':cur.boss);
+    out.push(boss?{n:boss.n,label:boss.n+' ('+boss.role+')'}:{n:cur.boss,label:cur.boss});
     cur=boss;
   }
   return out;
@@ -1010,7 +1015,7 @@ function WorkerPending({ctx}){
     {myR.map((q,ix)=><div className="task" key={'wr'+ix}>
       <span className="pill today">⏳ Waiting approval</span>
       <div className="tt">📦 {q.t}</div>
-      <div className="meta">Sent to {bossesFor('worker',ctx.r.self).slice(-1)[0]}{q.note?' · “'+q.note+'”':''}</div>
+      <div className="meta">Sent to {bossesFor('worker',ctx.r.self).slice(-1)[0]?.label}{q.note?' · “'+q.note+'”':''}</div>
     </div>)}
   </>;
 }
@@ -1035,7 +1040,7 @@ function AllTasks({ctx,acts}){
     {ctx.role!=='worker'&&mode==='mine'&&bosses.length?<select className="selsel" style={{marginBottom:12}} value={fboss} onChange={e=>setFboss(e.target.value)}>
       <option value="all">All bosses</option>
       <option value="self">Own initiative</option>
-      {bosses.map(b=><option key={b} value={b}>{b}</option>)}
+      {bosses.map(b=><option key={b.n} value={b.n}>{b.label}</option>)}
     </select>:null}
     <div className="sec">All tasks</div>
     <div className="typechips" style={{overflowX:'auto',flexWrap:'nowrap'}}>
@@ -1422,7 +1427,7 @@ function TaskSheet({ctx,close}){
       {bosses.length?<div className="field"><div className="k">On instruction of</div><div className="v">
         <select className="selsel" value={instruct} onChange={e=>setInstruct(e.target.value)}>
           <option value="">No one — own initiative</option>
-          {bosses.map(b=><option key={b} value={b}>{b}</option>)}
+          {bosses.map(b=><option key={b.n} value={b.n}>{b.label}</option>)}
         </select></div></div>:null}
       <div className="field"><div className="k">When</div><div className="v">
         <span className="chipbtn" onClick={()=>setPick(pick==='when'?null:'when')}>{dueLabel(cur.dateIso,cur.timeHM)}</span>
@@ -1677,7 +1682,7 @@ function RequestSheet({ctx,close}){
     pendingReqs.unshift(nq);
     close();ctx.R();
     saveRequestRow(nq,'request').catch(console.error);
-    ctx.say('Request sent to '+(bossesFor(ctx.role,ctx.r.self).slice(-1)[0]||'your manager')+' for approval 📦');};
+    ctx.say('Request sent to '+(bossesFor(ctx.role,ctx.r.self).slice(-1)[0]?.label||'your manager')+' for approval 📦');};
   return <>
     <h3>Request supplies</h3>
     <div className="sub">What do you need? Your manager approves it in one tap.</div>
@@ -1832,7 +1837,7 @@ function ExtSheet({ctx,idx,close}){
     t.extReq={newDate:pickd.iso,label:pickd.label,reason:reason.trim(),from:ctx.r.name};
     saveTask(t).catch(console.error);
     notifyEvent(t.id,ctx.r.id,'requested an extension to '+fmtD(pickd.iso),concernedForM(t,ctx.r.self));
-    close();ctx.R();ctx.say('Extension request sent to '+(bossesFor(ctx.role,ctx.r.self).slice(-1)[0]||'your manager')+' ⏳');};
+    close();ctx.R();ctx.say('Extension request sent to '+(bossesFor(ctx.role,ctx.r.self).slice(-1)[0]?.label||'your manager')+' ⏳');};
   return <>
     <h3>Request time extension</h3>
     <div className="sub">{t.t}</div>

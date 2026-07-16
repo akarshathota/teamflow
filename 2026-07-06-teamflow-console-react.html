@@ -549,7 +549,12 @@ const BOSS_LABEL={"Akarsh":"Akarsh (Admin)","Rajesh Menon":"Rajesh (Management)"
    else (every real boss in the org today, Director or otherwise). Module-scope so every caller
    (TasksView, QuickCapture) shares one fallback instead of each reimplementing it — QuickCapture's
    New Task modal used to index BOSS_LABEL raw with no fallback, silently rendering blank dropdown
-   options and misattributing the task to the viewer instead of the real boss picked. */
+   options and misattributing the task to the viewer instead of the real boss picked.
+   Display-only — never store this in instructedBy. It used to leak into the "On instruction of"
+   <option value> and the create-task fallback, so instructedBy for Akarsh ended up literally
+   "Akarsh (Admin)" instead of "Akarsh"; byName's exact match against staff.n then silently failed
+   for every such task, so Akarsh (or anyone else BOSS_LABEL covers) never made it into
+   concernedFor's notification recipients. Confirmed live: 5 real tasks had this before the fix. */
 const bossLabelOf=n=>BOSS_LABEL[n]||n;
 const SCOPE_WORD={admin:"all teams",mgmt:"org-wide",dir:"your departments",srm:"your teams",jrm:"your team",lead:"your team"};
 
@@ -1477,7 +1482,7 @@ function TasksView({ctx}){
         <div className="col-toprow">
           <select className="fsel" style={{flex:1}} value={fboss} onChange={e=>setFboss(e.target.value)}>
             <option value="all">All</option>
-            {ctx.bossChain.map(n=><option key={n} value={bossLabelOf(n)}>{bossLabelOf(n)}</option>)}
+            {ctx.bossChain.map(n=><option key={n} value={n}>{bossLabelOf(n)}</option>)}
           </select>
         </div>
         <div className="scrollbox col-scroll">
@@ -2986,7 +2991,7 @@ function QuickCapture({ctx,close}){
     // stayed empty for the common case and only ever worked for the rare manual-relay one.
     const nt={t:cleanTask(clean),who:list[0],coWho:list.length>1?list.slice(1):undefined,
       type,bucket,prio,recur,recurOn:recur?recurOn:null,date:when||iso(TODAY),time:dueTime||null,status:'open',note:note.trim(),
-      selfAssigned:mode==='self',instructedBy:mode==='self'?null:(boss||bossLabelOf(ctx.viewer.n))};
+      selfAssigned:mode==='self',instructedBy:mode==='self'?null:(boss||ctx.viewer.n)};
     tasks.unshift(nt);
     close();ctx.R();
     saveTask(nt).catch(console.error);
@@ -3102,7 +3107,7 @@ function QuickCapture({ctx,close}){
           <label>On instruction of</label>
           <select value={boss} onChange={e=>setBoss(e.target.value)}>
             <option value="">No one — own initiative</option>
-            {ctx.bossChain.map(n=><option key={n} value={bossLabelOf(n)}>{bossLabelOf(n)}</option>)}
+            {ctx.bossChain.map(n=><option key={n} value={n}>{bossLabelOf(n)}</option>)}
           </select>
           <label>Note (optional)</label>
           <textarea rows={2} value={note} onChange={e=>setNote(e.target.value)} placeholder="Any details…"/>
