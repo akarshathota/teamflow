@@ -499,15 +499,22 @@ async function syncAssignees(t){
       done_at:(t.doneBy||[]).includes(s)?new Date().toISOString():null}:null;}).filter(Boolean);
   if(rows.length)await sb.from('task_assignees').insert(rows);
 }
+/* Every assignee AND the instructor/boss (t.instructedBy — almost always an ancestor of the
+   assignee in the real boss_id chain, since you can only assign work to someone in your own
+   downward scope, and your own bosses are ancestors of your reports too) count as "concerned" —
+   not just co-assignees. Excludes the poster themselves. */
+function concernedFor(t,excludeShort){
+  const names=new Set(assignees(t).filter(Boolean));
+  if(t.instructedBy){const ip=byName(t.instructedBy);if(ip)names.add(ip.s);}
+  if(excludeShort)names.delete(excludeShort);
+  return [...names].map(byShort).filter(Boolean).map(p=>p.id);
+}
 async function logTask(t,authorName,text){
   if(!t.id)return;
   const author=byName(authorName);
   const {data,error}=await sb.from('task_log').insert({task_id:t.id,author_id:author?author.id:null,body:text}).select().single();
   if(error){console.error(error);return;}
-  /* notify every OTHER assignee — not the poster themselves */
-  const others=[...new Set(assignees(t).filter(Boolean).filter(s=>!author||s!==author.s))]
-    .map(byShort).filter(Boolean).map(p=>p.id);
-  await notifyActivity(t.id,data.id,author?author.id:null,others);
+  await notifyActivity(t.id,data.id,author?author.id:null,concernedFor(t,author?author.s:null));
   return data;
 }
 async function saveRequest(r){
@@ -944,12 +951,14 @@ function App(){
     if(!canApprove(t.who)){say('Only the department boss can approve this');return;}
     t.date=t.extReq.newDate;delete t.extReq;R();
     saveTask(t).catch(console.error);
+    notifyEvent(t.id,viewer.id,'approved the extension — new due '+fmtDate(t.date),concernedFor(t,viewer.s));
     say('Extension approved — new due date '+fmtDate(t.date)+' · assignee notified');};
   const rejectExt=i=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
     const t=tasks[i];if(!t||!t.extReq)return;
     if(!canApprove(t.who)){say('Only the department boss can decide this');return;}
     delete t.extReq;R();
     saveTask(t).catch(console.error);
+    notifyEvent(t.id,viewer.id,'rejected the extension request',concernedFor(t,viewer.s));
     say('Extension rejected — original due date stands');};
   const approveCompletion=i=>{if(previewing){say("You're previewing — switch back to approve for real");return;}
     const t=tasks[i];if(!t||!t.completionPending)return;
@@ -957,12 +966,14 @@ function App(){
     delete t.completionPending;
     const nd=completeTask(t);
     persistComplete(t,nd);R();
+    notifyEvent(t.id,viewer.id,'approved completion',concernedFor(t,viewer.s));
     say(nd?'Completion approved · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'Completion approved — task closed');};
   const rejectCompletion=i=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
     const t=tasks[i];if(!t||!t.completionPending)return;
     if(!canApprove(t.who)){say('Only the department boss can decide this');return;}
     delete t.completionPending;t.doneBy=[];R();
     saveTask(t).catch(console.error);
+    notifyEvent(t.id,viewer.id,'rejected completion — sent back for rework',concernedFor(t,viewer.s));
     say('Completion rejected — sent back to '+(byShort(t.who)||{n:t.who}).n.split(' ')[0]);};
 
   /* opening a notification always jumps to the real signed-in user's own task list, regardless of
@@ -1095,11 +1106,12 @@ function Topbar({ctx,searchRef}){
   const notifItem=n=>{
     const t=tasks.find(x=>x.id===n.task_id);
     const isAct=n.source==='activity';
-    const entry=isAct&&t&&t.log?t.log.find(x=>x.id===n.task_log_id):null;
+    const entry=isAct&&n.task_log_id&&t&&t.log?t.log.find(x=>x.id===n.task_log_id):null;
+    const desc=entry?'“'+(entry.text.length>60?entry.text.slice(0,60)+'…':entry.text)+'” · ':n.label?n.label+' · ':'';
     return <div key={n.source+n.id} className="sd-item" style={{opacity:n.read_at?0.55:1}} onClick={()=>{setBellOpen(false);ctx.openNotif(n);}}>
       <span className="avex" style={{background:isAct?'var(--accent)':n.kind==='overdue'?'var(--red)':'var(--amber)',color:'#fff'}}>{isAct?'✎':n.kind==='overdue'?'!':'•'}</span>
       <div><div className="t">{isAct?(byId2Name(n.actor_staff_id)||'Someone')+' updated “'+(t?t.t:'a task')+'”':(t?t.t:'(task removed)')}</div>
-        <div className="m">{isAct?(entry?'“'+(entry.text.length>60?entry.text.slice(0,60)+'…':entry.text)+'” · ':'')+fmtDateTime(n.created_at):(n.kind==='overdue'?'Overdue':'Due today')+' · '+fmtDate(n.for_date)}</div></div>
+        <div className="m">{isAct?desc+fmtDateTime(n.created_at):(n.kind==='overdue'?'Overdue':'Due today')+' · '+fmtDate(n.for_date)}</div></div>
     </div>;
   };
   // "Needs your approval" item — deliberately simpler than notifItem (no read/unread dimming,
@@ -1512,7 +1524,9 @@ function Drawer({ctx,idx}){
   useEffect(()=>{
     const tk=tasks[idx];
     if(tk&&!ctx.previewing&&hasWho(tk,ctx.viewer.s)&&tk.status==='open'){
-      tk.status='inprogress';saveTask(tk).catch(console.error);ctx.R();
+      tk.status='inprogress';saveTask(tk).catch(console.error);
+      notifyEvent(tk.id,ctx.viewer.id,'marked in progress',concernedFor(tk,ctx.viewer.s));
+      ctx.R();
     }
   },[idx]);
   if(!t)return null;
@@ -1535,7 +1549,9 @@ function Drawer({ctx,idx}){
         return <button key={s} className={active?'on':''} onClick={()=>{
           if(t.completionPending){ctx.say('Already submitted — waiting for approval');return;}
           if(s==='done'){setPendingDone(true);return;}
-          setPendingDone(false);t.status=s;delete t.doneOn;saveTask(t).catch(console.error);ctx.say('Status → '+ST[s].l);ctx.R();
+          setPendingDone(false);t.status=s;delete t.doneOn;saveTask(t).catch(console.error);
+          notifyEvent(t.id,ctx.viewer.id,'marked '+ST[s].l.toLowerCase(),concernedFor(t,ctx.viewer.s));
+          ctx.say('Status → '+ST[s].l);ctx.R();
         }}>{ST[s].l}</button>;})}</div>
       {t.completionPending?<div className="whysm" style={{margin:'6px 20px 0',color:'var(--amber)'}}>⏳ Completion pending approval{(byShort(t.who)||{}).boss?' — waiting for '+byShort(t.who).boss.split(' ')[0]:''}.</div>
         :pendingDone&&t.status!=='done'?<div className="whysm" style={{margin:'6px 20px 0'}}>Click OK below to close the task.</div>:null}
@@ -1551,6 +1567,7 @@ function Drawer({ctx,idx}){
                 t.doneBy=dn?(t.doneBy||[]).filter(x=>x!==a):[...(t.doneBy||[]),a];
                 if(assignees(t).every(x=>(t.doneBy||[]).includes(x))){
                   const r=submitOrComplete(t);persistComplete(t,r.nd);
+                  notifyEvent(t.id,ctx.viewer.id,r.pending?'submitted for completion approval':'completed the task',concernedFor(t,ctx.viewer.s));
                   ctx.say(r.pending?'All confirmed — waiting for approval':(r.nd?'All done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(r.nd):'All members done — task completed'));
                 }
                 else{if(t.status==='done'){t.status='open';delete t.doneOn;}setPendingDone(false);saveTask(t).catch(console.error);}
@@ -1583,7 +1600,13 @@ function Drawer({ctx,idx}){
       {!t.selfAssigned&&t.instructedBy?<div className="kv"><div className="k">Assigned by</div><div className="v">{t.instructedBy}</div></div>:null}
       {t.completionPending?<div className="kv"><div className="k">Completion</div><div className="v"><span className="tag amber"><I n="clock" s={11}/> Pending approval</span></div></div>:null}
       {reassign?<div className="kv"><div className="k">Move to</div><div className="v" style={{flex:1}}>
-        <select className="fsel" style={{width:'100%'}} defaultValue="" onChange={e=>{if(!e.target.value)return;t.who=e.target.value;t.coWho=undefined;saveTask(t).catch(console.error);ctx.R();ctx.say('Reassigned to '+byShort(e.target.value).n);setReassign(false);}}>
+        <select className="fsel" style={{width:'100%'}} defaultValue="" onChange={e=>{if(!e.target.value)return;
+          const oldP=byShort(t.who),newP=byShort(e.target.value);
+          t.who=e.target.value;t.coWho=undefined;saveTask(t).catch(console.error);
+          const recipients=new Set(concernedFor(t,ctx.viewer.s));
+          if(oldP&&oldP.s!==ctx.viewer.s)recipients.add(oldP.id);
+          notifyEvent(t.id,ctx.viewer.id,'reassigned to '+(newP?newP.n:e.target.value),[...recipients]);
+          ctx.R();ctx.say('Reassigned to '+byShort(e.target.value).n);setReassign(false);}}>
           <option value="">Choose a person…</option>
           {ctx.scope.map(x=><option key={x.s} value={x.s}>{x.n} · {x.dept}</option>)}
         </select></div></div>:null}
@@ -1606,6 +1629,7 @@ function Drawer({ctx,idx}){
           if(t.date&&extDate<=t.date){ctx.say('New date must be after the current due date');return;}
           t.extReq={newDate:extDate,reason:extReason.trim()};
           saveTask(t).catch(console.error);
+          notifyEvent(t.id,ctx.viewer.id,'requested an extension to '+fmtDate(extDate),concernedFor(t,ctx.viewer.s));
           setExtDate('');setExtReason('');
           ctx.R();ctx.say('Extension request sent — waiting for approval ⏳');}}>
           <I n="clock"/>Request extension</button>
@@ -1674,7 +1698,9 @@ function Drawer({ctx,idx}){
       <button className="btn primary" style={{flex:1}} onClick={()=>{
         if(t.completionPending){ctx.setDrawerIdx(-1);return;}
         if(pendingDone&&t.status!=='done'){
-          const r=submitOrComplete(t);persistComplete(t,r.nd);ctx.R();ctx.setDrawerIdx(-1);
+          const r=submitOrComplete(t);persistComplete(t,r.nd);
+          notifyEvent(t.id,ctx.viewer.id,r.pending?'submitted for completion approval':'completed the task',concernedFor(t,ctx.viewer.s));
+          ctx.R();ctx.setDrawerIdx(-1);
           ctx.say(r.pending?'Marked complete — waiting for approval':(r.nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(r.nd):'Task marked done'));
         }
         else ctx.setDrawerIdx(-1);

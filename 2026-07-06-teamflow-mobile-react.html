@@ -420,15 +420,22 @@ async function syncAssignees(t){
       done_at:(t.doneBy||[]).includes(n)?new Date().toISOString():null}:null;}).filter(Boolean);
   if(rows.length)await sb.from('task_assignees').insert(rows);
 }
+/* Every assignee AND the instructor/boss (t.instructedBy — almost always an ancestor of the
+   assignee in the real boss_id chain) count as "concerned" — not just co-assignees. Excludes the
+   poster themselves. findPerson matches on either full name or short name, so it resolves both
+   assigneesM's short names and instructedBy's full-name string the same way. */
+function concernedForM(t,excludeShort){
+  const shorts=new Set(assigneesM(t).filter(Boolean));
+  if(t.instructedBy){const ip=findPerson(t.instructedBy);if(ip)shorts.add(ip.s);}
+  if(excludeShort)shorts.delete(excludeShort);
+  return [...shorts].map(findPerson).filter(Boolean).map(p=>p.id);
+}
 async function logTask(t,authorName,text){
   if(!t.id)return;
   const p=findPerson(authorName);
   const {data,error}=await sb.from('task_log').insert({task_id:t.id,author_id:p?p.id:null,body:text}).select().single();
   if(error){console.error(error);return;}
-  /* notify every OTHER assignee — not the poster themselves */
-  const others=[...new Set(assigneesM(t).filter(Boolean).filter(n=>!p||n!==p.s))]
-    .map(findMember).filter(Boolean).map(m=>m.id);
-  await notifyActivity(t.id,data.id,p?p.id:null,others);
+  await notifyActivity(t.id,data.id,p?p.id:null,concernedForM(t,p?p.s:null));
   return data;
 }
 async function saveRequestRow(q,kind){
@@ -790,10 +797,12 @@ function App(){
       const t=tasks[i];if(!t||!t.extReq)return;
       t.date=t.extReq.newDate;t.due='Due '+fmtD(t.extReq.newDate);delete t.extReq;R();
       saveTask(t).catch(console.error);
+      notifyEvent(t.id,r.id,'approved the extension — new due '+fmtD(t.date),concernedForM(t,r.self));
       say('Extension approved ⏳ · assignee notified');},
     rejectExt:i=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
       const t=tasks[i];if(!t||!t.extReq)return;delete t.extReq;R();
       saveTask(t).catch(console.error);
+      notifyEvent(t.id,r.id,'rejected the extension request',concernedForM(t,r.self));
       say('Extension rejected — original due date stands');},
     /* completion-approval actions — same shape as approveExt/rejectExt above, just for the
        completionPending marker instead of extReq. Approving is the only place that actually runs
@@ -806,6 +815,7 @@ function App(){
       t.done=true;t.doneWhen='just now';delete t.extReq;
       const nd=spawnNextRecur(t);
       persistComplete(t,nd);R();
+      notifyEvent(t.id,r.id,'approved completion',concernedForM(t,r.self));
       say(nd?'Completion approved ✓ · next '+RECURS[t.recur].toLowerCase()+' on '+fmtD(nd):'Completion approved — task closed ✓');},
     rejectCompletion:i=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
       const t=tasks[i];if(!t||!t.completionPending)return;
@@ -813,6 +823,7 @@ function App(){
          back to open — same "still-open/in-progress" behavior as console's rejectCompletion. */
       delete t.completionPending;t.doneBy=[];R();
       saveTask(t).catch(console.error);
+      notifyEvent(t.id,r.id,'rejected completion — sent back for rework',concernedForM(t,r.self));
       say('Completion rejected — sent back to '+t.who.split(' ')[0]);},
     needExt,
     /* opening a notification always jumps to the real signed-in user's own task, regardless of
@@ -1216,12 +1227,13 @@ function NotifSheet({ctx,acts,close}){
   const notifItem=n=>{
     const t=tasks.find(x=>x.id===n.task_id);
     const isAct=n.source==='activity';
-    const entry=isAct&&t&&t.log?t.log.find(x=>x.id===n.task_log_id):null;
+    const entry=isAct&&n.task_log_id&&t&&t.log?t.log.find(x=>x.id===n.task_log_id):null;
     const actor=isAct?(ALL_PEOPLE.find(p=>p.id===n.actor_staff_id)||{}).n:null;
+    const desc=entry?'“'+(entry.text.length>60?entry.text.slice(0,60)+'…':entry.text)+'” · ':n.label?n.label+' · ':'';
     return <div key={n.source+n.id} className="task" style={{cursor:'pointer',opacity:n.read_at?0.55:1}} onClick={()=>acts.openNotif(n)}>
       <div className="stripe" style={{background:isAct?'var(--accent)':n.kind==='overdue'?'var(--red)':'var(--amber)'}}/>
       <div className="tt">{isAct?(actor||'Someone')+' updated “'+(t?t.t:'a task')+'”':(t?t.t:'(task removed)')}</div>
-      <div className="meta">{isAct?(entry?'“'+(entry.text.length>60?entry.text.slice(0,60)+'…':entry.text)+'” · ':'')+fmtDateTime(n.created_at):(n.kind==='overdue'?'Overdue':'Due today')+' · '+fmtD(n.for_date)}</div>
+      <div className="meta">{isAct?desc+fmtDateTime(n.created_at):(n.kind==='overdue'?'Overdue':'Due today')+' · '+fmtD(n.for_date)}</div>
     </div>;
   };
   const attn=ctx.notifs.filter(n=>n.source!=='activity');
@@ -1697,7 +1709,9 @@ function UpdateSheet({ctx,idx,close}){
   useEffect(()=>{
     const tk=tasks[idx];
     if(tk&&!ctx.previewing&&hasWhoM(tk,ctx.realSelf)&&!tk.done&&!tk.progress){
-      tk.progress='inprogress';saveTask(tk).catch(console.error);ctx.R();
+      tk.progress='inprogress';saveTask(tk).catch(console.error);
+      notifyEvent(tk.id,ctx.r.id,'marked in progress',concernedForM(tk,ctx.r.self));
+      ctx.R();
     }
   },[idx]);
   if(!t)return null;
@@ -1731,19 +1745,21 @@ function UpdateSheet({ctx,idx,close}){
              else waits for approval instead — spawnNextRecur only runs once approveCompletion
              actually approves it (acts.approveCompletion), so a rejected completion never leaves
              an already-spawned next occurrence behind. */
-          if(!t.selfAssigned){t.progress='inprogress';t.completionPending=true;saveTask(t).catch(console.error);close();ctx.R();ctx.say('Everyone confirmed — waiting for approval');return;}
-          t.done=true;t.doneWhen='just now';delete t.extReq;const nd=spawnNextRecur(t);persistComplete(t,nd);close();ctx.R();ctx.say(nd?'Everyone finished ✓ · next '+RECURS[t.recur].toLowerCase()+' on '+fmtD(nd):'Everyone finished — task completed ✓');return;}
-        t.done=false;saveTask(t).catch(console.error);close();ctx.R();ctx.say('Your part done ✓ — pending with '+pending.join(', '));return;
+          if(!t.selfAssigned){t.progress='inprogress';t.completionPending=true;saveTask(t).catch(console.error);notifyEvent(t.id,ctx.r.id,'submitted for completion approval',concernedForM(t,ctx.r.self));close();ctx.R();ctx.say('Everyone confirmed — waiting for approval');return;}
+          t.done=true;t.doneWhen='just now';delete t.extReq;const nd=spawnNextRecur(t);persistComplete(t,nd);notifyEvent(t.id,ctx.r.id,'completed the task',concernedForM(t,ctx.r.self));close();ctx.R();ctx.say(nd?'Everyone finished ✓ · next '+RECURS[t.recur].toLowerCase()+' on '+fmtD(nd):'Everyone finished — task completed ✓');return;}
+        t.done=false;saveTask(t).catch(console.error);notifyEvent(t.id,ctx.r.id,'completed their part — waiting on '+pending.join(', '),concernedForM(t,ctx.r.self));close();ctx.R();ctx.say('Your part done ✓ — pending with '+pending.join(', '));return;
       }
       if(t.coWho&&t.coWho.length)t.doneBy=assigneesM(t).slice();
-      if(!t.selfAssigned){t.progress='inprogress';t.completionPending=true;saveTask(t).catch(console.error);close();ctx.R();ctx.say('Marked complete — waiting for approval');return;}
+      if(!t.selfAssigned){t.progress='inprogress';t.completionPending=true;saveTask(t).catch(console.error);notifyEvent(t.id,ctx.r.id,'submitted for completion approval',concernedForM(t,ctx.r.self));close();ctx.R();ctx.say('Marked complete — waiting for approval');return;}
       t.done=true;t.doneWhen='just now';delete t.extReq;
       const nd=spawnNextRecur(t);
       persistComplete(t,nd);
+      notifyEvent(t.id,ctx.r.id,'completed the task',concernedForM(t,ctx.r.self));
       close();ctx.R();
       ctx.say(nd?'Done ✓ · next '+RECURS[t.recur].toLowerCase()+' on '+fmtD(nd):'Task marked done ✓');return;
     } else t.done=false;
     saveTask(t).catch(console.error);
+    notifyEvent(t.id,ctx.r.id,'marked in progress',concernedForM(t,ctx.r.self));
     close();ctx.R();
     ctx.say('Progress updated 🔧');};
   return <>
@@ -1815,6 +1831,7 @@ function ExtSheet({ctx,idx,close}){
     if(t.date&&pickd.iso<=t.date){ctx.say('New date must be after the current due date');return;}
     t.extReq={newDate:pickd.iso,label:pickd.label,reason:reason.trim(),from:ctx.r.name};
     saveTask(t).catch(console.error);
+    notifyEvent(t.id,ctx.r.id,'requested an extension to '+fmtD(pickd.iso),concernedForM(t,ctx.r.self));
     close();ctx.R();ctx.say('Extension request sent to '+(bossesFor(ctx.role,ctx.r.self).slice(-1)[0]||'your manager')+' ⏳');};
   return <>
     <h3>Request time extension</h3>
@@ -1869,8 +1886,13 @@ function ReassignSheet({ctx,idx,close}){
   if(!t)return null;
   const load=workload();
   const list=MEMBERS.filter(m=>!q||m.n.toLowerCase().includes(q.toLowerCase())||m.dept.toLowerCase().includes(q.toLowerCase())||m.role.toLowerCase().includes(q.toLowerCase()));
-  const go=n=>{const m=findMember(n);t.who=n;t.init=m?m.i:n[0];t.coWho=undefined;
+  const go=n=>{const m=findMember(n);const oldWho=t.who;
+    t.who=n;t.init=m?m.i:n[0];t.coWho=undefined;
     saveTask(t).catch(console.error);
+    const recipients=new Set(concernedForM(t,ctx.r.self));
+    const oldP=oldWho?findPerson(oldWho):null;
+    if(oldP&&oldP.s!==ctx.r.self)recipients.add(oldP.id);
+    notifyEvent(t.id,ctx.r.id,'reassigned to '+n,[...recipients]);
     close();ctx.R();ctx.say('Reassigned to '+n+' · notified in TeamFlow');};
   return <>
     <h3>Reassign task</h3>

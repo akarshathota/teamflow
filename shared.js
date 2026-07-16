@@ -183,6 +183,16 @@ async function notifyActivity(taskId,logId,actorId,staffIds){
   const {error}=await sb.from('task_activity_notifications').insert(rows);
   if(error)console.error(error);
 }
+/* Lightweight sibling of notifyActivity for events that already have their own synthesized
+   Activity-timeline line (status change, extension request/approve/reject, completion submit/
+   approve/reject, reassignment) — deliberately does NOT touch task_log, just a short system-
+   written `label`, so the timeline doesn't end up rendering the same event twice. */
+async function notifyEvent(taskId,actorId,label,staffIds){
+  if(!staffIds.length)return;
+  const rows=staffIds.map(staff_id=>({staff_id,task_id:taskId,actor_staff_id:actorId,label}));
+  const {error}=await sb.from('task_activity_notifications').insert(rows);
+  if(error)console.error(error);
+}
 /* Edits a task_log row's text — the "fix a typo within 2 minutes of posting" feature. Real
    enforcement lives in the log_update RLS policy (author_id = auth_staff_id() AND now() -
    created_at < interval '2 minutes'); this is just the client call, and it deliberately does NOT
