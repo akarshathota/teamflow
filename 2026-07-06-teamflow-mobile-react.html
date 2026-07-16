@@ -250,42 +250,56 @@ const peopleDemo=[
   {n:"Arjun Menon", s:"In · 8:50", c:"var(--green)"},
 ];
 const ROLES={
-  admin:{name:"Akarsh",org:"Greenwood School · Admin",av:"A",team:ALL_STAFF,self:"Akarsh",rank:0,
+  admin:{name:"Akarsh",org:"Greenwood School · Admin",av:"A",team:ALL_STAFF,self:"Akarsh",
     tabs:["home","alltasks","calendar","insights","notices","more"],admin:true,billing:true,canPost:true,
     brief:"Across all 4 teams: 2 tasks at risk today and 1 person is overloaded. You have full visibility and control."},
-  mgmt:{name:"Rajesh Menon",org:"Greenwood School · Management",av:"R",team:ALL_STAFF,self:"Rajesh",rank:1,
+  mgmt:{name:"Rajesh Menon",org:"Greenwood School · Management",av:"R",team:ALL_STAFF,self:"Rajesh",
     tabs:["home","alltasks","calendar","insights","notices","more"],admin:true,billing:false,canPost:true,
     brief:"Org-wide view: 2 tasks at risk and 1 overloaded person. You can manage people and see every report."},
   /* 'Director' (DB_ROLE_TO_KEY, shared.js) sits between mgmt and srm — oversees several Sr.
      Managers' departments at once. Same shape as srm (self + full subtree scope, direct-reports-
      only approval authority) since a Director behaves exactly like a wider-scope srm everywhere a
      role-key gate exists today. name/org/av/team/self are placeholder demo values only — never
-     actually shown, see the lead entry's comment below for why. rank matches srm's so bossesFor()
-     treats a Director's chain identically to a Sr. Manager's. */
-  dir:{name:"Director",org:"Director",av:"D",team:[],self:"",rank:2,
+     actually shown, see the lead entry's comment below for why. */
+  dir:{name:"Director",org:"Director",av:"D",team:[],self:"",
     tabs:["home","alltasks","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
     brief:""},
-  srm:{name:"Anita Desai",org:"Manager · Academic + Admin",av:"A",team:["Meena","Kavya","Ravi","Anita","Hari","Suresh"],self:"Anita",rank:2,
+  srm:{name:"Anita Desai",org:"Manager · Academic + Admin",av:"A",team:["Meena","Kavya","Ravi","Anita","Hari","Suresh"],self:"Anita",
     tabs:["home","alltasks","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
     brief:"Your teams (Academic, Admin): 1 task likely to slip by Friday and Hari is behind."},
-  jrm:{name:"Vikram Rao",org:"Team Member · Maintenance head",av:"V",team:["Hari","Suresh","Latha"],self:"Vikram",rank:3,
+  jrm:{name:"Vikram Rao",org:"Team Member · Maintenance head",av:"V",team:["Hari","Suresh","Latha"],self:"Vikram",
     tabs:["home","alltasks","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
     brief:"Your team: Hari has 1 task overdue 4 days. Assign or remind to keep things on track."},
   /* 'Team Lead' (DB_ROLE_TO_KEY, shared.js) sits between jrm and worker in the reporting chain and
      "behaves like jrm everywhere a role-key gate exists today" — same tabs/admin/billing/canPost
      shape as jrm. name/org/av/team/self are placeholder demo values only, same as every other
      entry here — real logins and Preview As both resolve to a real person at render time (see
-     App's `person` lookup below), so these are never actually shown. rank matches jrm's so
-     bossesFor() treats a Team Lead's chain identically to a Team Member's. Without this entry, a
-     real Team Lead login hit ROLES[role] being undefined and crashed. */
-  lead:{name:"Team Lead",org:"Team Lead",av:"T",team:[],self:"",rank:3,
+     App's `person` lookup below), so these are never actually shown. Without this entry, a real
+     Team Lead login hit ROLES[role] being undefined and crashed. */
+  lead:{name:"Team Lead",org:"Team Lead",av:"T",team:[],self:"",
     tabs:["home","alltasks","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
     brief:""},
-  worker:{name:"Hari Charan",org:"Teacher",av:"H",team:["Hari"],self:"Hari",rank:4,
+  worker:{name:"Hari Charan",org:"Teacher",av:"H",team:["Hari"],self:"Hari",
     tabs:["alltasks","calendar","notices"],admin:false,billing:false,canPost:false,brief:""}
 };
-const CHAIN=[{rank:0,label:"Akarsh (Admin)"},{rank:1,label:"Rajesh (Management)"},{rank:2,label:"Anita (Manager)"},{rank:3,label:"Vikram (Team Member)"}];
-const bossesFor=role=>CHAIN.filter(c=>c.rank<ROLES[role].rank).map(c=>c.label);
+/* Walks the REAL boss_id chain upward from a real person (by short name), collecting a
+   "Name (Role)" label for every real boss above them. Replaces a static 4-name/4-rank array that
+   only ever covered the original demo data — same bug class already fixed once for
+   canApproveFrom below (its own comment explains: the old map "silently failed for anyone hired
+   since" the first ~10 demo names). admin/mgmt are org-wide with no meaningful single boss chain
+   here. seen guards against a bad boss_id cycle ever infinite-looping the UI. */
+const bossesFor=(role,self)=>{
+  if(role==='admin'||role==='mgmt'||!self)return [];
+  const out=[],seen=new Set();
+  let cur=findPerson(self);
+  while(cur&&cur.boss&&!seen.has(cur.boss)){
+    seen.add(cur.boss);
+    const boss=findPerson(cur.boss);
+    out.push(boss?boss.n+' ('+boss.role+')':cur.boss);
+    cur=boss;
+  }
+  return out;
+};
 /* same approval model as the console's canApprove: admin/mgmt approve anything, otherwise only the
    person's real direct boss (checked live via ALL_PEOPLE/findPerson, matching console's
    `p.boss===viewer.n` exactly) — not a hardcoded name→role table. The old BOSS_ROLE map only ever
@@ -978,13 +992,13 @@ function WorkerPending({ctx}){
     {myI.map((q,ix)=><div className="task" key={'wi'+ix}>
       <span className="pill today">🔧 Sent to maintenance head</span>
       <div className="tt">{q.t}</div>
-      <div className="meta">Vikram will assign it to the right person</div>
+      <div className="meta">The maintenance head will assign it to the right person</div>
       {q.files&&q.files.length?<div className="attrow">{q.files.map((f,fx)=><FileChip key={fx} f={f}/>)}</div>:null}
     </div>)}
     {myR.map((q,ix)=><div className="task" key={'wr'+ix}>
       <span className="pill today">⏳ Waiting approval</span>
       <div className="tt">📦 {q.t}</div>
-      <div className="meta">Sent to {bossesFor('worker').slice(-1)[0]}{q.note?' · “'+q.note+'”':''}</div>
+      <div className="meta">Sent to {bossesFor('worker',ctx.r.self).slice(-1)[0]}{q.note?' · “'+q.note+'”':''}</div>
     </div>)}
   </>;
 }
@@ -994,7 +1008,7 @@ function AllTasks({ctx,acts}){
   const [mode,setMode]=useState('byme'); // 'byme' = assigned by me (to my team) · 'mine' = assigned to me
   const [f,setF]=useState('all');
   const [fboss,setFboss]=useState('all');
-  const bosses=bossesFor(ctx.role);
+  const bosses=bossesFor(ctx.role,ctx.r.self);
   const byWho=ctx.role==='worker'?ctx.mine:ctx.mine.filter(o=>mode==='mine'?hasWhoM(o.t,ctx.r.self):!hasWhoM(o.t,ctx.r.self));
   const scoped=mode==='mine'&&fboss!=='all'?byWho.filter(o=>fboss==='self'?!o.t.instructedBy:o.t.instructedBy===fboss):byWho;
   const counts={all:scoped.length};
@@ -1143,7 +1157,7 @@ function More({ctx}){
   const onConsole=name=>ctx.say(name+' — manage this from the TeamFlow console app');
   return <div>
     {ctx.r.admin?<><div className="sec">Administration</div>
-      <Row e="🔑" t="Users & roles" s="Add people · set Admin / Manager / Teacher" onClick={()=>onConsole('Users & roles')}/>
+      <Row e="🔑" t="Users & roles" s="Add people · set Admin / Director / Manager / Team Lead / Teacher" onClick={()=>onConsole('Users & roles')}/>
       {ctx.r.billing?<Row e="💳" t="Billing & plan" s="Subscription · invoices · seats" onClick={()=>soon('Billing & plan')}/>:null}
     </>:null}
     <div className="sec">More</div>
@@ -1337,7 +1351,7 @@ function TaskSheet({ctx,close}){
   const depts=['all',...new Set(MEMBERS.map(m=>m.dept))];
   const load=workload();
   const emp=MEMBERS.filter(m=>(dept==='all'||m.dept===dept)&&(!q||m.n.toLowerCase().includes(q.toLowerCase())||m.dept.toLowerCase().includes(q.toLowerCase())||m.role.toLowerCase().includes(q.toLowerCase())));
-  const bosses=bossesFor(ctx.role);
+  const bosses=bossesFor(ctx.role,ctx.r.self);
   return <>
     <h3>New task</h3>
     <div className="sub">Type it or speak it — your choice.</div>
@@ -1461,7 +1475,7 @@ function IssueSheet({ctx,close}){
     pendingIssues.unshift(nq);
     close();ctx.R();
     saveRequestRow(nq,'issue').catch(console.error);
-    ctx.say('Sent to Vikram (maintenance head) 🔧');};
+    ctx.say('Sent to the maintenance head 🔧');};
   return <>
     <h3>Report a maintenance issue</h3>
     <div className="sub">Say what's broken — it goes to the maintenance head, who assigns the right person.</div>
@@ -1487,7 +1501,7 @@ function RequestSheet({ctx,close}){
     pendingReqs.unshift(nq);
     close();ctx.R();
     saveRequestRow(nq,'request').catch(console.error);
-    ctx.say('Request sent to '+(bossesFor(ctx.role).slice(-1)[0]||'your manager')+' for approval 📦');};
+    ctx.say('Request sent to '+(bossesFor(ctx.role,ctx.r.self).slice(-1)[0]||'your manager')+' for approval 📦');};
   return <>
     <h3>Request supplies</h3>
     <div className="sub">What do you need? Your manager approves it in one tap.</div>
@@ -1637,7 +1651,7 @@ function ExtSheet({ctx,idx,close}){
     if(t.date&&pickd.iso<=t.date){ctx.say('New date must be after the current due date');return;}
     t.extReq={newDate:pickd.iso,label:pickd.label,reason:reason.trim(),from:ctx.r.name};
     saveTask(t).catch(console.error);
-    close();ctx.R();ctx.say('Extension request sent to '+(bossesFor(ctx.role).slice(-1)[0]||'your manager')+' ⏳');};
+    close();ctx.R();ctx.say('Extension request sent to '+(bossesFor(ctx.role,ctx.r.self).slice(-1)[0]||'your manager')+' ⏳');};
   return <>
     <h3>Request time extension</h3>
     <div className="sub">{t.t}</div>

@@ -538,6 +538,12 @@ async function deleteStaffAccount(staffId){
    Preview As selection resolved to a nonexistent person and silently showed zero tasks). */
 const roleRep=k=>STAFF.find(p=>DB_ROLE_TO_KEY[p.role]===k);
 const BOSS_LABEL={"Akarsh":"Akarsh (Admin)","Rajesh Menon":"Rajesh (Management)","Anita Desai":"Anita (Manager)","Vikram Rao":"Vikram (Team Member)"};
+/* BOSS_LABEL only ever covers the 4 original demo names — falls back to the real name for anyone
+   else (every real boss in the org today, Director or otherwise). Module-scope so every caller
+   (TasksView, QuickCapture) shares one fallback instead of each reimplementing it — QuickCapture's
+   New Task modal used to index BOSS_LABEL raw with no fallback, silently rendering blank dropdown
+   options and misattributing the task to the viewer instead of the real boss picked. */
+const bossLabelOf=n=>BOSS_LABEL[n]||n;
 const SCOPE_WORD={admin:"all teams",mgmt:"org-wide",dir:"your departments",srm:"your teams",jrm:"your team",lead:"your team"};
 
 /* ============ helpers ============ */
@@ -1420,7 +1426,6 @@ function TasksView({ctx}){
 
   const showDept=ctx.role==='admin'||ctx.role==='srm'||ctx.role==='mgmt'||ctx.role==='dir';
   const isManagerTier=ctx.role==='srm';
-  const bossLabelOf=n=>BOSS_LABEL[n]||n;
 
   const rowsMine=tasks.map((t,i)=>({t,i})).filter(o=>hasWho(o.t,ctx.viewer.s)&&!o.t.instructedBy&&(fb==='all'||o.t.bucket===fb));
   const rowsBoss=tasks.map((t,i)=>({t,i})).filter(o=>hasWho(o.t,ctx.viewer.s)&&o.t.instructedBy&&(fboss==='all'||o.t.instructedBy===fboss));
@@ -2620,6 +2625,7 @@ function QuickCapture({ctx,close}){
   const [rec,setRec]=useState(false);
   const canMulti=ctx.role!=='jrm'&&ctx.role!=='lead';
   const parsed=kind==='task'&&txt.trim().length>=6;
+  const head=maintHead();
 
   function parse(text){
     setTxt(text);
@@ -2682,7 +2688,7 @@ function QuickCapture({ctx,close}){
       requests.unshift(nr);
       close();ctx.R();
       saveRequest(nr).catch(console.error);
-      ctx.say(kind==='issue'?'Issue sent to Vikram (maintenance head)':'Request sent to your department boss for approval');
+      ctx.say(kind==='issue'?'Issue sent to '+(head?head.n.split(' ')[0]+' (maintenance head)':'the maintenance head'):'Request sent to your department boss for approval');
       return;
     }
     if(!clean||clean.length<3){ctx.say('Type or speak the task first');return;}
@@ -2695,7 +2701,7 @@ function QuickCapture({ctx,close}){
     // stayed empty for the common case and only ever worked for the rare manual-relay one.
     const nt={t:cleanTask(clean),who:list[0],coWho:list.length>1?list.slice(1):undefined,
       type,bucket,prio,recur,recurOn:recur?recurOn:null,date:when||iso(TODAY),time:dueTime||null,status:'open',note:note.trim(),
-      selfAssigned:mode==='self',instructedBy:mode==='self'?null:(boss||BOSS_LABEL[ctx.viewer.n]||ctx.viewer.n)};
+      selfAssigned:mode==='self',instructedBy:mode==='self'?null:(boss||bossLabelOf(ctx.viewer.n))};
     tasks.unshift(nt);
     close();ctx.R();
     saveTask(nt).catch(console.error);
@@ -2705,7 +2711,7 @@ function QuickCapture({ctx,close}){
   const dts=[0,1,7].map(n=>{const d=new Date(TODAY);d.setDate(d.getDate()+n);return d;});
   const whoList=ctx.scope.filter(x=>!whoQ||x.n.toLowerCase().includes(whoQ.toLowerCase())||x.dept.toLowerCase().includes(whoQ.toLowerCase()));
   const hints={task:<span>Type or speak in plain words — <b>AI fills in who, when and what type</b>. Tap any value to change it.</span>,
-    issue:<span>Goes straight to <b>Vikram (maintenance head)</b> — he assigns the right person, no approval needed.</span>,
+    issue:<span>Goes straight to <b>{head?head.n.split(' ')[0]+' (maintenance head)':'the maintenance head'}</b> — assigns the right person, no approval needed.</span>,
     request:<span>Goes to <b>your department boss</b> for one-tap approval, then to procurement (Accounts department).</span>};
   const phs={task:'Try: "Ask Hari to fix the lab projector by Friday"',issue:"What's broken? e.g. Projector in Lab 2 not working",request:'What do you need? e.g. 2 boxes of chalk for Class 5'};
   return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
@@ -2811,7 +2817,7 @@ function QuickCapture({ctx,close}){
           <label>On instruction of</label>
           <select value={boss} onChange={e=>setBoss(e.target.value)}>
             <option value="">No one — own initiative</option>
-            {ctx.bossChain.map(n=><option key={n} value={BOSS_LABEL[n]}>{BOSS_LABEL[n]}</option>)}
+            {ctx.bossChain.map(n=><option key={n} value={bossLabelOf(n)}>{bossLabelOf(n)}</option>)}
           </select>
           <label>Note (optional)</label>
           <textarea rows={2} value={note} onChange={e=>setNote(e.target.value)} placeholder="Any details…"/>
