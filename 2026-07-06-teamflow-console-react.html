@@ -2422,7 +2422,11 @@ function ResetPwModal({ctx,staff,close}){
    org-chart scope — deliberately NOT further narrowed by Reports' own department/employee filters,
    since filtering by department would trivially hide the very mismatches this is meant to surface. */
 function DeptMismatchModal({ctx,close}){
-  const flagged=tasks.filter(t=>inScope(t,ctx.shorts)).map(t=>{
+  // Self-assigned tasks are deliberately excluded: this check exists to catch someone ELSE
+  // assigning work to the wrong team, not to flag people for self-logging an ad-hoc task (e.g.
+  // "Fix computers") under whatever bucket fits the work rather than their own HR department —
+  // there's no assignment error possible when you assigned it to yourself.
+  const flagged=tasks.filter(t=>inScope(t,ctx.shorts)&&!t.selfAssigned).map(t=>{
     const as=assignees(t).map(byShort).filter(Boolean);
     return {t,as,ok:as.some(p=>LABEL_TO_BUCKET[p.dept]===t.bucket)};
   }).filter(o=>!o.ok&&o.as.length); // tasks with no resolvable assignee are a different (missing-data) problem, not a mismatch

@@ -1111,16 +1111,25 @@ function Notices({ctx}){
 function More({ctx}){
   const Row=({e,t,s,onClick,extra})=><div className="task" onClick={onClick} style={onClick?{cursor:'pointer'}:null}>
     {e} <b style={{marginLeft:6}}>{t}</b>{extra}<div className="meta" style={{marginTop:6}}>{s}</div></div>;
+  /* Every row here used to render with no onClick at all — silently doing nothing when tapped,
+     which reads as broken rather than as the deliberately-labeled "Phase 2" stub pattern already
+     used below for Attendance & leave. Now every row responds to a tap: the ones with a real
+     screen elsewhere in the app navigate there (Calendar); the ones that exist only on console
+     say so explicitly (Users & roles / People & departments — console has a full People & Roles
+     org-chart screen, mobile never has); the ones that don't exist anywhere yet say "coming soon"
+     instead of pretending nothing happened. */
+  const soon=name=>ctx.say(name+' — coming soon');
+  const onConsole=name=>ctx.say(name+' — manage this from the TeamFlow console app');
   return <div>
     {ctx.r.admin?<><div className="sec">Administration</div>
-      <Row e="🔑" t="Users & roles" s="Add people · set Admin / Manager / Teacher"/>
-      {ctx.r.billing?<Row e="💳" t="Billing & plan" s="Subscription · invoices · seats"/>:null}
+      <Row e="🔑" t="Users & roles" s="Add people · set Admin / Manager / Teacher" onClick={()=>onConsole('Users & roles')}/>
+      {ctx.r.billing?<Row e="💳" t="Billing & plan" s="Subscription · invoices · seats" onClick={()=>soon('Billing & plan')}/>:null}
     </>:null}
     <div className="sec">More</div>
-    <Row e="📅" t="Calendar" s="Duty roster, exams & task due-dates in one view"/>
-    <Row e="👥" t="People & departments" s="academic · maintenance · accounts · hr · +4 more"/>
-    <Row e="🏫" t="School tools" s="Substitute cover · period timetable · parent broadcast"/>
-    <Row e="⚙️" t="Settings & language" s="9 languages · notifications"/>
+    <Row e="📅" t="Calendar" s="Duty roster, exams & task due-dates in one view" onClick={()=>ctx.setPage('calendar')}/>
+    <Row e="👥" t="People & departments" s="academic · maintenance · accounts · hr · +4 more" onClick={()=>onConsole('People & departments')}/>
+    <Row e="🏫" t="School tools" s="Substitute cover · period timetable · parent broadcast" onClick={()=>soon('School tools')}/>
+    <Row e="⚙️" t="Settings & language" s="9 languages · notifications" onClick={()=>soon('Settings & language')}/>
     <div className="sec" style={{marginTop:16}}>Coming later</div>
     <Row e="🕑" t="Attendance & leave" s="Tap to preview · staff present / late / absent, geofenced check-in"
       extra={<span className="pill open" style={{marginLeft:6}}>Phase 2</span>} onClick={()=>ctx.setPage('attendance')}/>
