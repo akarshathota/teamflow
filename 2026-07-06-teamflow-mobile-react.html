@@ -379,7 +379,7 @@ async function loadAll(){
   ]);
   const byId=Object.fromEntries((staffRows||[]).map(r=>[r.id,{name:r.name,short:r.short_name,initials:r.initials}]));
   ALL_PEOPLE.length=0;ALL_PEOPLE.push(...(staffRows||[]).map(r=>({n:r.name,s:r.short_name,id:r.id,authId:r.auth_user_id,role:r.role,department:r.department,
-    boss:r.boss_id&&byId[r.boss_id]?byId[r.boss_id].short:null})));
+    boss:r.boss_id&&byId[r.boss_id]?byId[r.boss_id].short:null,bossId:r.boss_id||null})));
   MEMBERS.length=0;MEMBERS.push(...(staffRows||[]).map(r=>({
     n:r.short_name,i:r.initials,dept:r.department,role:JOB_TITLE[r.short_name]||r.role,
     types:(SKILLS[r.short_name]||{}).types||[],buckets:(SKILLS[r.short_name]||{}).buckets||[],id:r.id})));
@@ -732,6 +732,7 @@ function App(){
   const person=previewing?(ALL_PEOPLE.find(p=>DB_ROLE_TO_KEY[p.role]===role)||myPerson):myPerson;
   const r={...ROLES[role],name:person.n,
     self:person.s,
+    id:person.id,bossId:person.bossId,boss:person.boss,
     av:person.n.split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase(),
     // admin/mgmt are org-wide, not tied to a department, so their org string stays the fixed
     // "Greenwood School · <tier>" text — everyone else's real department replaces the old
@@ -1195,6 +1196,7 @@ function Sheets({ctx,acts,sheet}){
       {sheet.kind==='actions'&&<Actions ctx={ctx} close={close}/>}
       {sheet.kind==='task'&&<TaskSheet ctx={ctx} close={close}/>}
       {sheet.kind==='issue'&&<IssueSheet ctx={ctx} close={close}/>}
+      {sheet.kind==='dailyreport'&&<DailyReportSheet ctx={ctx} close={close}/>}
       {sheet.kind==='request'&&<RequestSheet ctx={ctx} close={close}/>}
       {sheet.kind==='update'&&<UpdateSheet ctx={ctx} idx={sheet.idx} close={close}/>}
       {sheet.kind==='ext'&&<ExtSheet ctx={ctx} idx={sheet.idx} close={close}/>}
@@ -1269,6 +1271,9 @@ function Actions({ctx}){
     <button className="actbtn" onClick={()=>ctx.setSheet({kind:'request'})}>
       <span className="actic" style={{background:'var(--green-soft)',color:'var(--green)'}}><I n="box"/></span>
       <span><b>Request supplies</b><small>Chalk, markers, lab material…</small></span></button>
+    <button className="actbtn" onClick={()=>ctx.setSheet({kind:'dailyreport'})}>
+      <span className="actic" style={{background:'var(--blue-soft)',color:'var(--blue)'}}><I n="chart"/></span>
+      <span><b>Daily report</b><small>Raise issues, see how your tasks stand</small></span></button>
   </>;
 }
 
@@ -1491,6 +1496,165 @@ function IssueSheet({ctx,close}){
       removeAttachment(f.path).catch(console.error);
     }}/>)}</div>:null}
     <button className="send" onClick={send}>Send to maintenance head ✓</button>
+  </>;
+}
+/* Small self-contained donut renderer, same math as the console app's donutSVG (which doesn't
+   exist in this file) — mobile has no chart helper anywhere else, so this is built fresh rather
+   than reusing something that isn't there. Returns an HTML string, rendered via
+   dangerouslySetInnerHTML, same convention as console. */
+function drDonutSVG(segs,size,stroke){
+  const total=segs.reduce((a,x)=>a+x.v,0);
+  const r=(size-stroke)/2,C=2*Math.PI*r,cx=size/2,cy=size/2;
+  let off=0,parts='';
+  if(!total)parts=`<circle r="${r}" cx="${cx}" cy="${cy}" fill="none" stroke="#efeee7" stroke-width="${stroke}"/>`;
+  else segs.forEach(x=>{if(!x.v)return;const len=x.v/total*C;
+    parts+=`<circle r="${r}" cx="${cx}" cy="${cy}" fill="none" stroke="${x.c}" stroke-width="${stroke}" stroke-dasharray="${len-1.5} ${C-len+1.5}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cy})"/>`;off+=len;});
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${parts}
+    <text x="${cx}" y="${cy+5}" text-anchor="middle" font-size="22" font-weight="700" fill="#1b1e21">${total}</text></svg>`;
+}
+/* Own-issue/incident reporting that escalates one hop at a time up the exact same boss_id chain
+   the app already walks (r.bossId → escalate → server recomputes from staff.boss_id regardless of
+   what's sent, see report_issues_authority_trg), plus a scope-matched due/completed task summary.
+   Inbox is fetched fresh on open, not kept live — a point-in-time check-in, not a persistent
+   queue. Follows IssueSheet's exact pattern: returns a Fragment, Sheets already provides the
+   sheet-wrap/sheet/grab/close chrome. */
+function DailyReportSheet({ctx,close}){
+  const {r,previewing,say}=ctx;
+  const [inbox,setInbox]=useState([]);
+  const [wantIssue,setWantIssue]=useState(false);
+  const [rows,setRows]=useState([{issue:'',remarks:'',priority:'Medium',file:null}]);
+  const [busy,setBusy]=useState(false);
+
+  useEffect(()=>{
+    sb.from('report_issues').select('*').eq('escalated_to',r.id).eq('status','open').order('created_at')
+      .then(({data,error})=>{if(error)console.error(error);setInbox(data||[]);});
+  },[]);
+
+  const setRow=(i,patch)=>setRows(rows.map((x,ix)=>ix===i?{...x,...patch}:x));
+  const addRow=()=>setRows(rows.concat([{issue:'',remarks:'',priority:'Medium',file:null}]));
+  const removeRow=i=>setRows(rows.length>1?rows.filter((_,ix)=>ix!==i):rows);
+  async function pickFile(i,e){
+    const f=e.target.files[0];if(!f)return;
+    say('Uploading…');
+    try{const up=await uploadFile(f,'report-issues');setRow(i,{file:up});}
+    catch(err){console.error(err);say('Upload failed — try again');}
+  }
+
+  async function submit(){
+    if(previewing){say("You're previewing — switch back to send a real report");return;}
+    if(wantIssue){
+      const clean=rows.filter(x=>x.issue.trim());
+      if(!clean.length){say('Describe at least one issue, or choose "No, nothing to report"');return;}
+      setBusy(true);
+      for(const x of clean){
+        const {error}=await sb.from('report_issues').insert({created_by:r.id,
+          issue:x.issue.trim(),remarks:x.remarks.trim()||null,priority:x.priority,
+          files:x.file?[x.file]:[]});
+        if(error){console.error(error);say('Could not send report — try again');setBusy(false);return;}
+      }
+      setBusy(false);
+    }
+    say('Daily report sent'+(r.boss?' to '+bossLabelOf(r.boss):''));
+    close();
+  }
+  async function escalate(row){
+    if(previewing){say("You're previewing — switch back to escalate for real");return;}
+    if(!r.bossId){say('Nothing above you to escalate to');return;}
+    const {error}=await sb.from('report_issues').update({escalated_to:r.bossId}).eq('id',row.id);
+    if(error){console.error(error);say('Could not escalate — try again');return;}
+    setInbox(inbox.filter(x=>x.id!==row.id));
+    say('Escalated to '+bossLabelOf(r.boss));
+  }
+  async function resolve(row){
+    if(previewing){say("You're previewing — switch back to resolve for real");return;}
+    const {error}=await sb.from('report_issues').update({status:'resolved'}).eq('id',row.id);
+    if(error){console.error(error);say('Could not resolve — try again');return;}
+    setInbox(inbox.filter(x=>x.id!==row.id));
+    say('Marked resolved');
+  }
+
+  const list=ctx.mine.map(o=>o.t);
+  const isOver=t=>!t.done&&t.date&&t.date<iso(TODAY);
+  const segs=[
+    {l:'Completed',v:list.filter(t=>t.done).length,c:'#1a7a48'},
+    {l:'Overdue',v:list.filter(isOver).length,c:'#c43a53'},
+    {l:'Open · on track',v:list.filter(t=>!t.done&&!isOver(t)).length,c:'#dcdad2'}];
+  const overdueList=list.filter(isOver).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const pendingList=list.filter(t=>!t.done&&!isOver(t)).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const doneList=list.filter(t=>t.done);
+  const ordered=overdueList.concat(pendingList,doneList);
+  const shown=ordered.slice(0,8);
+  const showAssignee=ctx.scope.length>1;
+
+  function statusPill(t){
+    if(t.done)return <span className="pill done">Completed</span>;
+    const days=Math.round(Math.abs(new Date(iso(TODAY))-new Date(t.date))/86400000);
+    if(isOver(t))return <span className="pill over">{days} day{days!==1?'s':''} overdue</span>;
+    return <span className="pill today">{days<=0?'Due today':'Due in '+days+' day'+(days!==1?'s':'')}</span>;
+  }
+  function fromLabel(row){
+    const raiser=ALL_PEOPLE.find(p=>p.id===row.created_by);
+    if(!row.last_escalated_by)return 'Raised by '+(raiser?raiser.n:'someone');
+    const esc=ALL_PEOPLE.find(p=>p.id===row.last_escalated_by);
+    return 'Escalated by '+(esc?esc.n+' ('+esc.role+')':'someone')
+      +' · originally raised by '+(raiser?raiser.n:'someone')
+      +(row.hop_count>1?', '+row.hop_count+' levels down':'');
+  }
+
+  return <>
+    <h3>Daily Report</h3>
+    <div className="sub">A quick check-in — raise anything worth flagging, and see how your tasks stand.</div>
+
+    {inbox.length?<>
+      <div style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.5,color:'var(--muted)',margin:'4px 0 8px'}}>Issues/Incidents escalated to you ({inbox.length})</div>
+      {inbox.map(row=><div key={row.id} style={{padding:'10px 0',borderBottom:'1px solid var(--line)'}}>
+        <div style={{fontWeight:700,fontSize:13.5}}>{row.issue} <span className={'pill '+(row.priority==='High'?'over':row.priority==='Medium'?'today':'done')} style={{marginLeft:4}}>{row.priority}</span></div>
+        <div className="meta" style={{marginTop:2}}>{fromLabel(row)}{row.remarks?' · "'+row.remarks+'"':''}</div>
+        {row.files&&row.files.length?<div className="filelist">{row.files.map((f,ix)=><FileChip key={ix} f={f}/>)}</div>:null}
+        <div style={{display:'flex',gap:8,marginTop:8}}>
+          {r.bossId?<button className="chipbtn" onClick={()=>escalate(row)}>↑ Escalate to {bossLabelOf(r.boss).split(' (')[0]}</button>:null}
+          <button className="chipbtn" onClick={()=>resolve(row)}>✓ Resolve here</button>
+        </div>
+      </div>)}
+    </>:null}
+
+    <div style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.5,color:'var(--muted)',margin:'16px 0 8px'}}>Report an issue or incident?</div>
+    <div className="modetabs">
+      <button className={'mtab'+(wantIssue?'':' on')} onClick={()=>setWantIssue(false)}>No, nothing to report</button>
+      <button className={'mtab'+(wantIssue?' on':'')} onClick={()=>setWantIssue(true)}>Yes</button>
+    </div>
+    {wantIssue?<>
+      {rows.map((x,i)=><div key={i} style={{border:'1.5px solid var(--line)',borderRadius:9,padding:10,marginBottom:8}}>
+        <textarea className="typein" rows={2} value={x.issue} onChange={e=>setRow(i,{issue:e.target.value})} placeholder="What's the issue/incident?"/>
+        <input className="empsearch" style={{marginTop:8}} value={x.remarks} onChange={e=>setRow(i,{remarks:e.target.value})} placeholder="Remarks (optional)"/>
+        <div style={{display:'flex',gap:8,marginTop:8,alignItems:'center'}}>
+          <select className="selsel" style={{flex:1}} value={x.priority} onChange={e=>setRow(i,{priority:e.target.value})}>
+            <option>High</option><option>Medium</option><option>Low</option>
+          </select>
+          {x.file?<FileChip f={x.file} onRemove={()=>setRow(i,{file:null})}/>:
+            <label className="uploadbtn" style={{flex:'0 0 auto'}}>📎 Attach<input type="file" style={{display:'none'}} onChange={e=>pickFile(i,e)}/></label>}
+          {rows.length>1?<button className="chipbtn" onClick={()=>removeRow(i)}>✕</button>:null}
+        </div>
+      </div>)}
+      <button className="optst" onClick={addRow}>+ Add another issue</button>
+    </>:null}
+
+    <div style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.5,color:'var(--muted)',margin:'18px 0 8px'}}>{showAssignee?"Your team's tasks this period":'Your tasks this period'}</div>
+    <div style={{display:'flex',gap:16,alignItems:'center',marginBottom:12}}>
+      <div dangerouslySetInnerHTML={{__html:drDonutSVG(segs,88,15)}}/>
+      <div style={{flex:1}}>{segs.map(x=><div key={x.l} style={{display:'flex',alignItems:'center',gap:7,fontSize:12.5,padding:'3px 0'}}>
+        <span style={{width:9,height:9,borderRadius:2,background:x.c,flex:'0 0 auto'}}/>{x.l}<b style={{marginLeft:'auto'}}>{x.v}</b></div>)}</div>
+    </div>
+    {shown.map(t=><div key={t.id||t.t} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:'1px solid var(--line)'}}>
+      <div style={{minWidth:0,flex:1}}>
+        <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.t}</div>
+        {showAssignee?<div className="meta">{t.who}</div>:null}
+      </div>
+      {statusPill(t)}
+    </div>)}
+    {ordered.length>shown.length?<div style={{textAlign:'center',color:'var(--muted)',fontSize:11.5,padding:'8px 0'}}>… {ordered.length-shown.length} more</div>:null}
+
+    <button className="send" disabled={busy} onClick={submit}>{busy?'Sending…':'Submit report'}</button>
   </>;
 }
 function RequestSheet({ctx,close}){

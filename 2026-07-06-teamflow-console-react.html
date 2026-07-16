@@ -802,6 +802,7 @@ function App(){
   const drawerIdxRef=useRef(-1);
   useEffect(()=>{drawerIdxRef.current=drawerIdx;},[drawerIdx]);
   const [modal,setModal]=useState(false);
+  const [dailyReport,setDailyReport]=useState(false);
   const [resetTarget,setResetTarget]=useState(null); // staff object being password-reset, or null
   const searchRef=useRef();
   const [loaded,setLoaded]=useState(false);
@@ -842,7 +843,7 @@ function App(){
   useEffect(()=>{
     const h=e=>{
       const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
-      if(e.key==='Escape'){setModal(false);setDrawerIdx(-1);document.activeElement.blur();return;}
+      if(e.key==='Escape'){setModal(false);setDailyReport(false);setDrawerIdx(-1);document.activeElement.blur();return;}
       if(typing)return;
       if(e.key==='/'){e.preventDefault();searchRef.current&&searchRef.current.focus();return;}
       if(e.key==='n'||e.key==='N'){e.preventDefault();setModal(true);return;}
@@ -1005,7 +1006,7 @@ function App(){
 
   const ctx={role,view,setView,say,R,scope,shorts,viewer,treeRoot,mine,canApprove,canAssignIssue,bossChain,previewing,
     remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,approveCompletion,rejectCompletion,
-    setDrawerIdx,setModal,setResetTarget,exportCSV,printReport,qReqs,qExts,qCompletions,attentionList,
+    setDrawerIdx,setModal,setDailyReport,setResetTarget,exportCSV,printReport,qReqs,qExts,qCompletions,attentionList,
     notifs,openNotif,markAllNotifsSeen,lastCronRun,activityLog};
 
   return <div className="app">
@@ -1059,6 +1060,7 @@ function App(){
     </div>
     {drawerIdx>=0&&<><div className="scrim" onClick={()=>setDrawerIdx(-1)}/><Drawer ctx={ctx} idx={drawerIdx}/></>}
     {modal&&<QuickCapture ctx={ctx} close={()=>setModal(false)}/>}
+    {dailyReport&&<DailyReportModal ctx={ctx} close={()=>setDailyReport(false)}/>}
     {resetTarget&&<ResetPwModal ctx={ctx} staff={resetTarget} close={()=>setResetTarget(null)}/>}
     {toast&&<div className="toast"><I n="check"/>{toast}</div>}
   </div>;
@@ -1163,6 +1165,7 @@ function Topbar({ctx,searchRef}){
           })():(queueN?null:<div className="sd-empty">No notifications</div>)}
         </div>:null}
       </div>
+      <button className="btn ghost" onClick={()=>ctx.setDailyReport(true)}><I n="chart"/>Daily report</button>
       <button className="btn primary" onClick={()=>ctx.setModal(true)}><I n="plus"/>New task</button>
       <div className="av">{ctx.viewer.av}</div>
     </div>
@@ -2632,6 +2635,171 @@ function ReportsView({ctx}){
           <td>{p.dept}</td><td><b>{load[p.s]}</b></td>
           <td style={{color:tt.filter(isOverdue).length?'var(--red)':undefined}}>{tt.filter(isOverdue).length}</td>
           <td>{tt.filter(t=>t.status==='done').length}</td></tr>;})}</tbody></table>
+      </div>
+    </div>
+  </div>;
+}
+
+/* ============ daily report ============ */
+/* Own-issue/incident reporting that escalates one hop at a time up the exact same boss_id chain
+   the rest of the app already walks, plus a scope-matched due/completed task summary. Escalating
+   and resolving both rely entirely on report_issues_authority_trg (20260716000002_report_issues.sql)
+   for correctness — the client sends its best guess at the next holder (viewer.bossId) purely so
+   the request has a distinct new value to trigger the escalate branch; the server always
+   recomputes the real value from staff.boss_id regardless of what's sent. Inbox is fetched fresh
+   each time the modal opens rather than kept live — this is a point-in-time check-in, not a
+   persistent queue like QueuePanel. */
+function DailyReportModal({ctx,close}){
+  const {viewer,previewing,say}=ctx;
+  const [inbox,setInbox]=useState([]);
+  const [wantIssue,setWantIssue]=useState(false);
+  const [rows,setRows]=useState([{issue:'',remarks:'',priority:'Medium',file:null}]);
+  const [busy,setBusy]=useState(false);
+
+  useEffect(()=>{
+    sb.from('report_issues').select('*').eq('escalated_to',viewer.id).eq('status','open').order('created_at')
+      .then(({data,error})=>{if(error)console.error(error);setInbox(data||[]);});
+  },[]);
+
+  const setRow=(i,patch)=>setRows(rows.map((r,ix)=>ix===i?{...r,...patch}:r));
+  const addRow=()=>setRows(rows.concat([{issue:'',remarks:'',priority:'Medium',file:null}]));
+  const removeRow=i=>setRows(rows.length>1?rows.filter((_,ix)=>ix!==i):rows);
+  async function pickFile(i,e){
+    const f=e.target.files[0];if(!f)return;
+    say('Uploading…');
+    try{const up=await uploadFile(f,'report-issues');setRow(i,{file:up});}
+    catch(err){console.error(err);say('Upload failed — try again');}
+  }
+
+  async function submit(){
+    if(previewing){say("You're previewing — switch back to send a real report");return;}
+    if(wantIssue){
+      const clean=rows.filter(r=>r.issue.trim());
+      if(!clean.length){say('Describe at least one issue, or choose "No, nothing to report"');return;}
+      setBusy(true);
+      for(const r of clean){
+        const {error}=await sb.from('report_issues').insert({created_by:viewer.id,
+          issue:r.issue.trim(),remarks:r.remarks.trim()||null,priority:r.priority,
+          files:r.file?[r.file]:[]});
+        if(error){console.error(error);say('Could not send report — try again');setBusy(false);return;}
+      }
+      setBusy(false);
+    }
+    say('Daily report sent'+(viewer.boss?' to '+bossLabelOf(viewer.boss):''));
+    close();
+  }
+  async function escalate(row){
+    if(previewing){say("You're previewing — switch back to escalate for real");return;}
+    if(!viewer.bossId){say('Nothing above you to escalate to');return;}
+    const {error}=await sb.from('report_issues').update({escalated_to:viewer.bossId}).eq('id',row.id);
+    if(error){console.error(error);say('Could not escalate — try again');return;}
+    setInbox(inbox.filter(x=>x.id!==row.id));
+    say('Escalated to '+bossLabelOf(viewer.boss));
+  }
+  async function resolve(row){
+    if(previewing){say("You're previewing — switch back to resolve for real");return;}
+    const {error}=await sb.from('report_issues').update({status:'resolved'}).eq('id',row.id);
+    if(error){console.error(error);say('Could not resolve — try again');return;}
+    setInbox(inbox.filter(x=>x.id!==row.id));
+    say('Marked resolved');
+  }
+
+  const segs=[
+    {l:'Completed',v:ctx.mine.filter(t=>t.status==='done').length,c:'#1a7a48'},
+    {l:'Overdue',v:ctx.mine.filter(isOverdue).length,c:'#c43a53'},
+    {l:'Open · on track',v:ctx.mine.filter(t=>t.status!=='done'&&!isOverdue(t)).length,c:'#dcdad2'}];
+  const overdueList=ctx.mine.filter(isOverdue).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const pendingList=ctx.mine.filter(t=>t.status!=='done'&&!isOverdue(t)).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const doneList=ctx.mine.filter(t=>t.status==='done');
+  const ordered=overdueList.concat(pendingList,doneList);
+  const shown=ordered.slice(0,8);
+  const showAssignee=ctx.scope.length>1;
+  const showDept=showAssignee&&new Set(ctx.scope.map(p=>p.dept)).size>1;
+
+  function statusBadge(t){
+    if(t.status==='done')return <span className="chip-s green">Completed</span>;
+    const days=Math.round(Math.abs(new Date(iso(TODAY))-new Date(t.date))/86400000);
+    if(isOverdue(t))return <span className="chip-s red">{days} day{days!==1?'s':''} overdue</span>;
+    return <span className="chip-s amber">{days<=0?'Due today':'Due in '+days+' day'+(days!==1?'s':'')}</span>;
+  }
+  function fromLabel(row){
+    const raiser=byId(row.created_by);
+    if(!row.last_escalated_by)return 'Raised by '+(raiser?raiser.n:'someone');
+    const esc=byId(row.last_escalated_by);
+    return 'Escalated by '+(esc?esc.n+' ('+esc.role+')':'someone')
+      +' · originally raised by '+(raiser?raiser.n:'someone')
+      +(row.hop_count>1?', '+row.hop_count+' levels down':'');
+  }
+
+  return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
+    <div className="modal">
+      <div className="qc-head"><h3>Daily Report</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
+      <div style={{padding:'14px 20px 20px'}}>
+
+        {inbox.length?<div className="panel" style={{marginBottom:16}}>
+          <div className="h-row"><h3>Issues/Incidents escalated to you</h3><span className="tag amber">{inbox.length}</span></div>
+          {inbox.map(row=><div className="attn" key={row.id}>
+            <div className="ring" style={{background:'var(--amber)'}}><I n="tool" c="#fff"/></div>
+            <div style={{flex:1,minWidth:0}}>
+              <div className="nm">{row.issue} <span className={'chip-s '+(row.priority==='High'?'red':row.priority==='Medium'?'amber':'green')}>{row.priority}</span></div>
+              <div className="rs">{fromLabel(row)}{row.remarks?' · “'+row.remarks+'”':''}</div>
+              {row.files&&row.files.length?<div className="filelist">{row.files.map((x,ix)=><FileChip key={ix} x={x}/>)}</div>:null}
+              <div className="act" style={{marginTop:7,marginLeft:0}}>
+                {viewer.bossId?<button className="linkbtn" onClick={()=>escalate(row)}>↑ Escalate to {bossLabelOf(viewer.boss).split(' (')[0]}</button>:null}
+                <button className="linkbtn" onClick={()=>resolve(row)}>✓ Resolve here</button>
+              </div>
+            </div>
+          </div>)}
+        </div>:null}
+
+        <div className="panel" style={{marginBottom:16}}>
+          <div className="h-row"><h3>Report an issue or incident?</h3></div>
+          <div className="selfseg" style={{margin:'0 0 14px'}}>
+            <button className={wantIssue?'':'on'} onClick={()=>setWantIssue(false)}>No, nothing to report</button>
+            <button className={wantIssue?'on':''} onClick={()=>setWantIssue(true)}>Yes, I have something to raise</button>
+          </div>
+          {wantIssue?<>
+            <table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>
+              <th style={{textAlign:'left',padding:'4px 6px',fontSize:11,color:'var(--muted)'}}>Issues/Incidents</th>
+              <th style={{textAlign:'left',padding:'4px 6px',fontSize:11,color:'var(--muted)'}}>Remarks</th>
+              <th style={{textAlign:'left',padding:'4px 6px',fontSize:11,color:'var(--muted)',width:100}}>Priority</th>
+              <th style={{padding:'4px 6px',width:90}}></th><th style={{width:20}}></th></tr></thead>
+            <tbody>{rows.map((r,i)=><tr key={i}>
+              <td style={{padding:'4px 6px'}}><input className="fsel" style={{width:'100%'}} value={r.issue} onChange={e=>setRow(i,{issue:e.target.value})} placeholder="What's the issue?"/></td>
+              <td style={{padding:'4px 6px'}}><input className="fsel" style={{width:'100%'}} value={r.remarks} onChange={e=>setRow(i,{remarks:e.target.value})} placeholder="Optional"/></td>
+              <td style={{padding:'4px 6px'}}><select className="fsel" style={{width:'100%'}} value={r.priority} onChange={e=>setRow(i,{priority:e.target.value})}>
+                <option>High</option><option>Medium</option><option>Low</option></select></td>
+              <td style={{padding:'4px 6px'}}>{r.file?<FileChip x={r.file} onRemove={()=>setRow(i,{file:null})}/>:
+                <label className="linkbtn" style={{cursor:'pointer',whiteSpace:'nowrap'}}>📎 Attach<input type="file" style={{display:'none'}} onChange={e=>pickFile(i,e)}/></label>}</td>
+              <td style={{padding:'4px 6px',textAlign:'right',color:'var(--muted)',cursor:rows.length>1?'pointer':'default'}} onClick={()=>removeRow(i)}>{rows.length>1?'✕':''}</td>
+            </tr>)}</tbody></table>
+            <button className="btn ghost" style={{width:'100%',justifyContent:'center',marginTop:8}} onClick={addRow}>+ Add another issue</button>
+          </>:null}
+        </div>
+
+        <div className="panel" style={{marginBottom:16}}>
+          <div className="h-row"><h3>{ctx.scope.length>1?"Your team's tasks this period":'Your tasks this period'}</h3></div>
+          <div style={{display:'flex',gap:24,alignItems:'center',flexWrap:'wrap',marginBottom:14}}>
+            <div dangerouslySetInnerHTML={{__html:donutSVG(segs,120,20)}}/>
+            <div>{segs.map(x=><div className="leg" key={x.l}><span className="dot2" style={{background:x.c}}/>{x.l}<b>{x.v}</b></div>)}</div>
+          </div>
+          <div style={{overflowX:'auto'}}>
+          <table><thead><tr><th>Task</th>{showAssignee?<th>Assignee</th>:null}{showDept?<th>Department</th>:null}<th>Due</th><th>Status</th></tr></thead>
+            <tbody>{shown.map(t=><tr key={t.id||t.t}>
+              <td>{t.t}</td>
+              {showAssignee?<td>{(byShort(t.who)||{n:t.who}).n}</td>:null}
+              {showDept?<td>{(byShort(t.who)||{}).dept||''}</td>:null}
+              <td>{fmtDate(t.date)}</td>
+              <td>{statusBadge(t)}</td>
+            </tr>)}</tbody></table>
+          </div>
+          {ordered.length>shown.length?<div style={{textAlign:'center',color:'var(--muted)',fontSize:11.5,padding:'6px 0'}}>… {ordered.length-shown.length} more</div>:null}
+        </div>
+
+        <div style={{display:'flex',gap:10}}>
+          <button className="btn ghost" style={{flex:1,justifyContent:'center'}} onClick={close}>Cancel</button>
+          <button className="btn primary" style={{flex:1,justifyContent:'center'}} disabled={busy} onClick={submit}>{busy?'Sending…':'Submit report'}</button>
+        </div>
       </div>
     </div>
   </div>;
