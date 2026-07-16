@@ -256,6 +256,15 @@ const ROLES={
   mgmt:{name:"Rajesh Menon",org:"Greenwood School · Management",av:"R",team:ALL_STAFF,self:"Rajesh",rank:1,
     tabs:["home","alltasks","calendar","insights","notices","more"],admin:true,billing:false,canPost:true,
     brief:"Org-wide view: 2 tasks at risk and 1 overloaded person. You can manage people and see every report."},
+  /* 'Director' (DB_ROLE_TO_KEY, shared.js) sits between mgmt and srm — oversees several Sr.
+     Managers' departments at once. Same shape as srm (self + full subtree scope, direct-reports-
+     only approval authority) since a Director behaves exactly like a wider-scope srm everywhere a
+     role-key gate exists today. name/org/av/team/self are placeholder demo values only — never
+     actually shown, see the lead entry's comment below for why. rank matches srm's so bossesFor()
+     treats a Director's chain identically to a Sr. Manager's. */
+  dir:{name:"Director",org:"Director",av:"D",team:[],self:"",rank:2,
+    tabs:["home","alltasks","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
+    brief:""},
   srm:{name:"Anita Desai",org:"Manager · Academic + Admin",av:"A",team:["Meena","Kavya","Ravi","Anita","Hari","Suresh"],self:"Anita",rank:2,
     tabs:["home","alltasks","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
     brief:"Your teams (Academic, Admin): 1 task likely to slip by Friday and Hari is behind."},
@@ -715,7 +724,7 @@ function App(){
     // hardcoded one (e.g. "Manager · Academic + Admin" regardless of who was previewed).
     org:(role==='admin'||role==='mgmt')?ROLES[role].org:person.role+' · '+(person.department||''),
     team:role==='worker'?[person.s]
-      :role==='srm'?[person.s].concat(descendantsM(person.s).map(p=>p.s))
+      :(role==='srm'||role==='dir')?[person.s].concat(descendantsM(person.s).map(p=>p.s))
       :(role==='jrm'||role==='lead')?descendantsM(person.s).map(p=>p.s)
       :ROLES[role].team};
   const scope=r.team;
@@ -821,6 +830,7 @@ function App(){
           <span className="demo">PREVIEW AS</span>
           <select className="rolesel" value={role} onChange={e=>switchRole(e.target.value)}>
             <option value="admin">Administrator</option><option value="mgmt">Management</option>
+            <option value="dir">Director</option>
             <option value="srm">Manager</option><option value="jrm">Team Member</option>
             <option value="lead">Team Lead</option><option value="worker">Teacher</option>
           </select>

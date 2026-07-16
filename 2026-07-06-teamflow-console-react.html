@@ -277,6 +277,8 @@
   .onode.admin{background:#23262a;border-color:#23262a}
   .onode.admin .orole,.onode.admin .oname{color:#fff}
   .onode.mgmt{background:var(--accent-soft);border-color:var(--accent);gap:2px}
+  .onode.director{background:var(--blue-soft);border-color:var(--blue)}
+  .onode.director .orole{color:var(--blue)}
   .org-mgmt-member{display:flex;flex-direction:column;align-items:center;padding:3px 0}
   .org-mgmt-member+.org-mgmt-member{border-top:1px dashed var(--accent);padding-top:5px;margin-top:1px}
   .org-edit-dept{cursor:pointer;margin-left:6px;font-size:14px;color:var(--red);vertical-align:middle;display:inline-block;transform:scaleX(-1)}
@@ -404,7 +406,7 @@ const AV_COLORS=['#0e7a6f','#39638f','#1a7a48','#b06e12','#c43a53','#0e7a8f','#a
    view's rendering of them) stay exactly as they are; this is presentation-layer relabeling so the
    chart reads as the Admin Control -> Management -> Sr. Manager -> Jr Manager -> Team Lead -> Staff
    tiers everyone agreed on, without a schema/UI-wide rename of "Manager"/"Team Member"/"Teacher". */
-const TIER_LABEL={'Administrator':'Admin Control','Management':'Management','Manager':'Sr. Manager','Team Lead':'Team Lead','Team Member':'Jr Manager','Teacher':'Staff'};
+const TIER_LABEL={'Administrator':'Admin Control','Management':'Management','Director':'Director','Manager':'Sr. Manager','Team Lead':'Team Lead','Team Member':'Jr Manager','Teacher':'Staff'};
 
 let STAFF=[];
 let tasks=[];
@@ -536,7 +538,7 @@ async function deleteStaffAccount(staffId){
    Preview As selection resolved to a nonexistent person and silently showed zero tasks). */
 const roleRep=k=>STAFF.find(p=>DB_ROLE_TO_KEY[p.role]===k);
 const BOSS_LABEL={"Akarsh":"Akarsh (Admin)","Rajesh Menon":"Rajesh (Management)","Anita Desai":"Anita (Manager)","Vikram Rao":"Vikram (Team Member)"};
-const SCOPE_WORD={admin:"all teams",mgmt:"org-wide",srm:"your teams",jrm:"your team",lead:"your team"};
+const SCOPE_WORD={admin:"all teams",mgmt:"org-wide",dir:"your departments",srm:"your teams",jrm:"your team",lead:"your team"};
 
 /* ============ helpers ============ */
 const byShort=s=>STAFF.find(x=>x.s===s);
@@ -1010,7 +1012,7 @@ function App(){
         {myRoleKey==='admin'?<>
           <div className="side-lab">Preview as</div>
           <select className="roleSel" value={role} onChange={e=>setRole(e.target.value)}>
-            {[['admin','Administrator'],['mgmt','Management'],['srm','Manager'],['jrm','Team Member'],['lead','Team Lead']].map(([k,label])=>{
+            {[['admin','Administrator'],['mgmt','Management'],['dir','Director'],['srm','Manager'],['jrm','Team Member'],['lead','Team Lead']].map(([k,label])=>{
               const person=k==='admin'?myStaff:roleRep(k);
               return <option key={k} value={k}>{label}{person?' · '+person.n.split(' ')[0]:''}</option>;})}
           </select>
@@ -1416,7 +1418,7 @@ function TasksView({ctx}){
   const [deptFb,setDeptFb]=useState('all');
   const [exportFor,setExportFor]=useState(null);
 
-  const showDept=ctx.role==='admin'||ctx.role==='srm'||ctx.role==='mgmt';
+  const showDept=ctx.role==='admin'||ctx.role==='srm'||ctx.role==='mgmt'||ctx.role==='dir';
   const isManagerTier=ctx.role==='srm';
   const bossLabelOf=n=>BOSS_LABEL[n]||n;
 
@@ -1759,7 +1761,7 @@ function orgDeepestOfType(rootName,dbRole){
 function personLabel(p){
   const tier=TIER_LABEL[p.role]||p.role;
   if(p.role==='Manager')return tier+' — '+p.dept+' ('+p.n+')';
-  if(p.role==='Management')return tier+' — '+p.n;
+  if(p.role==='Management'||p.role==='Director')return tier+' — '+p.n;
   return tier+' — '+p.n+' ('+p.dept+')';
 }
 async function createStaffAccount({name,role,department,subDept,boss,phone,email}){
@@ -1812,7 +1814,7 @@ function OrgNode({person,onNodeClick,canM,chainSiblings}){
   }
   return <li>
     <div className={'onode-wrap'+(person.tempCovering?' temp':'')}>
-      <div className={'onode'+(canM?'':' static')} onClick={()=>onNodeClick(person)}>
+      <div className={'onode'+(person.role==='Director'?' director':'')+(canM?'':' static')} onClick={()=>onNodeClick(person)}>
         <div className="orole">{TIER_LABEL[person.role]||person.role}</div>
         <div className="oname">{person.n}</div>
         {person.role==='Manager'?<div className="odept">{person.dept}
@@ -1835,7 +1837,14 @@ function OrgChart({onNodeClick,canM}){
   const admin=STAFF.find(p=>p.role==='Administrator');
   if(!admin)return <Empty t="No Admin Control account yet" s=""/>;
   const mgmt=mgmtMembers();
-  const depts=orgDepts();
+  const directors=STAFF.filter(p=>p.role==='Director');
+  /* orgDepts() is every Sr. Manager regardless of who they report to. OrgNode is a generic
+     boss-name tree-walk, so a Sr. Manager whose boss is a Director already renders correctly
+     nested under that Director once the Director itself is rendered — the only thing this split
+     does is stop ALSO rendering those same Sr. Managers a second time as direct children of
+     Management. */
+  const directorNames=new Set(directors.map(d=>d.n));
+  const directDepts=orgDepts().filter(d=>!directorNames.has(d.boss));
   return <ul className="orgtree"><li>
     <div className="onode-wrap"><div className="onode admin"><div className="orole">Admin Control</div><div className="oname">{admin.n}</div></div></div>
     {mgmt.length?<ul><li>
@@ -1846,7 +1855,10 @@ function OrgChart({onNodeClick,canM}){
           {m.tempCovering?<><div className="otempflag">Temporary</div><div className="otaphint">Click to revert</div></>:null}
         </div>)}
       </div></div>
-      {depts.length?<ul>{depts.map(d=><OrgNode key={d.id} person={d} onNodeClick={onNodeClick} canM={canM}/>)}</ul>:null}
+      {(directors.length||directDepts.length)?<ul>
+        {directors.map(d=><OrgNode key={d.id} person={d} onNodeClick={onNodeClick} canM={canM}/>)}
+        {directDepts.map(d=><OrgNode key={d.id} person={d} onNodeClick={onNodeClick} canM={canM}/>)}
+      </ul>:null}
     </li></ul>:null}
   </li></ul>;
 }
@@ -1914,16 +1926,45 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
       </div>
     </ModalShell>;
   }
+  if(step==='add-director'){
+    return <ModalShell close={close} err={err} title="Add a Director" sub="Sits between Management and Sr. Manager, overseeing whichever departments are assigned to them. Assign departments to this Director from 'Add a department', or from an existing department's card once added.">
+      <div className="mf">
+        <label>Name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Priya Nair" autoFocus/>
+      </div>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+          const name=(f.name||'').trim();
+          if(!name){setErr('Enter a name.');return;}
+          const boss=mgmtMembers()[0];
+          if(!boss){setErr('Add a Management member first — Directors report to Management.');return;}
+          setBusy(true);setErr('');
+          try{
+            const dept=boss.dept||'Administration';
+            const j=await createStaffAccount({name,role:'Director',department:dept,boss:boss.n});
+            STAFF.push({n:j.name,s:j.short_name,role:'Director',dept,boss:boss.n,bossId:boss.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
+            ctx.R();say('Added Director '+name);setBusy(false);setResult(j);
+          }catch(e){setBusy(false);setErr(e.message);}
+        }}>{busy?'Adding…':'Add'}</button>
+      </div>
+    </ModalShell>;
+  }
   if(step==='add-dept'){
     const takenDepts=new Set(orgDepts().map(d=>d.dept));
     const availDepts=Object.values(BUCKETS).filter(d=>!takenDepts.has(d));
-    return <ModalShell close={close} err={err} title="Add a department" sub="Creates a new Sr. Manager department under Management — overseen jointly by every Management member.">
+    const directorOpts=STAFF.filter(p=>p.role==='Director');
+    return <ModalShell close={close} err={err} title="Add a department" sub="Creates a new Sr. Manager department — reports to Management by default, or to a Director if you pick one below.">
       <div className="mf">
         <label>Department name</label>
         {availDepts.length?<select value={f.dept||availDepts[0]} onChange={e=>setF({...f,dept:e.target.value})} autoFocus>
           {availDepts.map(d=><option key={d}>{d}</option>)}</select>
         :<div className="whysm" style={{margin:0}}>Every department already has a Sr. Manager.</div>}
         <label>Sr. Manager name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Priya Nair"/>
+        {directorOpts.length?<><label>Reports to</label>
+          <select value={f.bossId||'mgmt'} onChange={e=>setF({...f,bossId:e.target.value})}>
+            <option value="mgmt">Management</option>
+            {directorOpts.map(d=><option key={d.id} value={d.id}>{d.n} (Director)</option>)}
+          </select></>:null}
       </div>
       <div className="qc-actions">
         <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
@@ -1933,10 +1974,10 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           if(orgDepts().some(d=>d.dept.toLowerCase()===dept.toLowerCase())){setErr('A department with that name already exists.');return;}
           setBusy(true);setErr('');
           try{
-            const boss=mgmtMembers()[0];
+            const boss=(f.bossId&&f.bossId!=='mgmt')?byId(f.bossId):mgmtMembers()[0];
             const j=await createStaffAccount({name,role:'Manager',department:dept,boss:boss.n});
             STAFF.push({n:j.name,s:j.short_name,role:'Manager',dept,boss:boss.n,bossId:boss.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
-            ctx.R();say('Added department "'+dept+'" with Sr. Manager '+name);setBusy(false);setResult(j);
+            ctx.R();say('Added department "'+dept+'" with Sr. Manager '+name+(boss.role==='Director'?' — reporting to '+boss.n:''));setBusy(false);setResult(j);
           }catch(e){setBusy(false);setErr(e.message);}
         }}>{busy?'Adding…':'Add'}</button>
       </div>
@@ -2026,6 +2067,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
     return <ModalShell close={close} err={err} title="Remove someone" sub="Who do you want to remove?">
       <div className="org-role-grid">
         <button onClick={()=>{setOaCtx({dbRole:'Management'});setStep('remove-person');}}>Management</button>
+        <button onClick={()=>{setOaCtx({dbRole:'Director'});setStep('remove-person');}}>Director</button>
         <button onClick={()=>{setOaCtx({dbRole:'Manager'});setStep('remove-person');}}>Sr. Manager</button>
         <button onClick={()=>{setOaCtx({dbRole:'Team Member'});setStep('remove-person');}}>Jr. Manager</button>
         <button onClick={()=>{setOaCtx({dbRole:'Team Lead'});setStep('remove-person');}}>Team Lead</button>
@@ -2251,9 +2293,38 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
       <div className="mf" style={{display:'flex',flexDirection:'column',gap:8}}>
         {person.authId?<button className="btn soft" onClick={()=>{close();ctx.setResetTarget(person);}}><I n="key" s={15}/>Reset password</button>:null}
         {person.authId?<button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('change-login');}}><I n="redo" s={15}/>Change login</button>:null}
+        {person.role==='Manager'?<button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('reassign-boss');}}><I n="redo" s={15}/>Change who they report to</button>:null}
         {person.tempCovering?<button className="btn soft" onClick={()=>{setOaCtx({person});setStep('revert-name');}}>Revert to their original role</button>:null}
       </div>
       <div className="qc-actions"><button className="btn soft" style={{flex:1}} onClick={close}>Close</button></div>
+    </ModalShell>;
+  }
+  if(step==='reassign-boss'){
+    const {person}=oaCtx;
+    const directors=STAFF.filter(p=>p.role==='Director');
+    const mgmtBoss=mgmtMembers()[0];
+    return <ModalShell close={close} err={err} title={'Reassign '+person.n} sub="Moves this Sr. Manager — and everyone below them — under Management or a Director. Their own department and team stay exactly the same, only the reporting line changes.">
+      <div className="mf">
+        <label>Reports to</label>
+        <select value={f.bossId||person.bossId} onChange={e=>setF({...f,bossId:e.target.value})}>
+          {mgmtBoss?<option value={mgmtBoss.id}>Management — {mgmtBoss.n}</option>:null}
+          {directors.map(d=><option key={d.id} value={d.id}>{d.n} (Director)</option>)}
+        </select>
+      </div>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={()=>setStep('person-detail')}>Back</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+          const newBoss=byId(f.bossId||person.bossId);
+          if(!newBoss){setErr('Pick who they should report to.');return;}
+          if(newBoss.id===person.bossId){close();return;}
+          setBusy(true);setErr('');
+          try{
+            await updateStaffFields(person.id,{boss_id:newBoss.id});
+            Object.assign(person,{boss:newBoss.n,bossId:newBoss.id});
+            ctx.R();say(person.n+' now reports to '+newBoss.n);setBusy(false);close();
+          }catch(e){setBusy(false);setErr(e.message);}
+        }}>{busy?'Saving…':'Save'}</button>
+      </div>
     </ModalShell>;
   }
   if(step==='change-login'){
@@ -2351,6 +2422,7 @@ function PeopleView({ctx}){
   return <div className="view">
     {canM?<div className="org-toolbar">
       <button className="btn soft" onClick={()=>open('add-mgmt')}>+ Add Management</button>
+      <button className="btn soft" onClick={()=>open('add-director')}>+ Add Director</button>
       <button className="btn soft" onClick={()=>open('add-dept')}>+ Add a department</button>
       <button className="btn soft" onClick={()=>open('add-jrm')}>+ Add Jr. Manager</button>
       <button className="btn soft" onClick={()=>open('add-lead')}>+ Add Team Lead</button>

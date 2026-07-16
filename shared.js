@@ -17,8 +17,12 @@ const bucketColor=b=>BUCKET_COLORS[b]||'#5d6672';
 /* mobile's superset — includes Teacher, which console never looks up (it has no console-facing
    Teacher role), so sharing the superset is harmless rather than trimming it per app.
    'Team Lead' sits between Team Member (jrm) and Teacher (worker) in the reporting chain — added
-   for the org-chart People & roles view; behaves like jrm everywhere a role-key gate exists today. */
-const DB_ROLE_TO_KEY={Administrator:'admin',Management:'mgmt',Manager:'srm','Team Lead':'lead','Team Member':'jrm',Teacher:'worker'};
+   for the org-chart People & roles view; behaves like jrm everywhere a role-key gate exists today.
+   'Director' sits between Management (mgmt) and Manager (srm) — oversees several Sr. Managers'
+   departments at once; behaves like srm everywhere a role-key gate exists today (self + full
+   subtree scope, direct-reports-only approval authority — see console's canApprove/ctx.scope and
+   mobile's team ternary in App()). */
+const DB_ROLE_TO_KEY={Administrator:'admin',Management:'mgmt',Director:'dir',Manager:'srm','Team Lead':'lead','Team Member':'jrm',Teacher:'worker'};
 
 const sb=window.supabase.createClient(
   "https://fumggrcamegejihenkhb.supabase.co",
