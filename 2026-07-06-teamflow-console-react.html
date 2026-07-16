@@ -2551,16 +2551,17 @@ function DeptMismatchModal({ctx,close}){
   // assigning work to the wrong team, not to flag people for self-logging an ad-hoc task (e.g.
   // "Fix computers") under whatever bucket fits the work rather than their own HR department —
   // there's no assignment error possible when you assigned it to yourself.
-  const [editing,setEditing]=useState(null); // id of the row whose department badge is open as a select
+  const [editing,setEditing]=useState(null); // {key, mode:'dept'|'reassign'} for the one row being fixed
   const flagged=tasks.filter(t=>inScope(t,ctx.shorts)&&!t.selfAssigned).map(t=>{
     const as=assignees(t).map(byShort).filter(Boolean);
     return {t,as,ok:as.some(p=>LABEL_TO_BUCKET[p.dept]===t.bucket)};
   }).filter(o=>!o.ok&&o.as.length); // tasks with no resolvable assignee are a different (missing-data) problem, not a mismatch
 
-  // Most of these mismatches are stale tags left behind after an assignee moved departments
-  // (e.g. Sridhar: Construction → Maintenance) — the select defaults to that real current
-  // department so fixing one is a single click, but still opens the full list in case the
-  // right call is actually reassigning the task's *label*, not just chasing the person's move.
+  // Two different real fixes for the same symptom, so both stay one click apart rather than
+  // guessing which one applies: (1) the assignee genuinely moved departments and the task's
+  // label is just stale — move the task to follow them. (2) the task itself genuinely belongs
+  // to its tagged department, and the real mistake was assigning it to someone who's since left
+  // that department — reassign it to someone who's actually still there instead.
   function fixBucket(t,newBucket){
     if(ctx.previewing){ctx.say("You're previewing — switch back to fix this for real");return;}
     if(!newBucket||newBucket===t.bucket){setEditing(null);return;}
@@ -2570,28 +2571,56 @@ function DeptMismatchModal({ctx,close}){
     ctx.say('Moved to '+BUCKETS[newBucket]);
     setEditing(null);
   }
+  function fixAssignee(t,shortName){
+    if(ctx.previewing){ctx.say("You're previewing — switch back to fix this for real");return;}
+    if(!shortName)return;
+    t.who=shortName;t.coWho=undefined;
+    saveTask(t).catch(console.error);
+    ctx.R();
+    ctx.say('Reassigned to '+(byShort(shortName)||{n:shortName}).n);
+    setEditing(null);
+  }
 
   return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
     <div className="modal" style={{width:560}}>
       <div className="qc-head"><h3>Department / assignee mismatches</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
       <div className="mf">
         <div className="whysm" style={{marginTop:8}}>{flagged.length
-          ?flagged.length+' task'+(flagged.length===1?'':'s')+' tagged into a department none of the assignees actually belong to. Click a department to fix it.'
+          ?flagged.length+' task'+(flagged.length===1?'':'s')+' tagged into a department none of the assignees actually belong to.'
           :'No mismatches found in your current scope.'}</div>
         <div style={{maxHeight:'50vh',overflowY:'auto',marginTop:6}}>
           {flagged.map(o=>{
             const key=o.t.id||o.t.t;
+            const taggedLabel=BUCKETS[o.t.bucket]||o.t.bucket;
             const suggested=LABEL_TO_BUCKET[(o.as[0]||{}).dept];
+            const inOldDept=ctx.scope.filter(p=>p.dept===taggedLabel&&!assignees(o.t).includes(p.s));
+            const mode=editing&&editing.key===key?editing.mode:null;
             return <div key={key} className="attn">
               <div style={{flex:1,minWidth:0}}>
                 <div className="nm">{o.t.t}</div>
-                <div className="rs">Tagged: {editing===key?
-                  <select className="fsel" style={{fontSize:12.5,padding:'3px 8px'}} defaultValue={suggested||o.t.bucket} autoFocus
-                    onChange={e=>fixBucket(o.t,e.target.value)} onBlur={()=>setEditing(null)}>
-                    {realDeptKeys(ctx.scope).map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}
-                  </select>
-                  :<b style={{color:'var(--accent-ink)',textDecoration:'underline',cursor:'pointer'}} onClick={()=>setEditing(key)} title="Click to fix the department">{BUCKETS[o.t.bucket]||o.t.bucket}</b>}
-                  {' · '}{o.as.map(p=>p.n+' ('+(p.dept||'—')+')').join(', ')}</div>
+                <div className="rs">Tagged: <b>{taggedLabel}</b> · {o.as.map(p=>p.n+' ('+(p.dept||'—')+')').join(', ')}</div>
+                {mode==='dept'?
+                  <div style={{marginTop:6}}>
+                    <select className="fsel" style={{fontSize:12.5,padding:'3px 8px'}} defaultValue={suggested||o.t.bucket} autoFocus
+                      onChange={e=>fixBucket(o.t,e.target.value)} onBlur={()=>setEditing(null)}>
+                      {realDeptKeys(ctx.scope).map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}
+                    </select>
+                  </div>
+                :mode==='reassign'?
+                  <div style={{marginTop:6}}>
+                    <select className="fsel" style={{fontSize:12.5,padding:'3px 8px'}} defaultValue="" autoFocus
+                      onChange={e=>fixAssignee(o.t,e.target.value)} onBlur={()=>setEditing(null)}>
+                      <option value="">Choose someone in {taggedLabel}…</option>
+                      {inOldDept.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}
+                    </select>
+                    {!inOldDept.length?<div style={{fontSize:11.5,color:'var(--muted)',marginTop:4}}>No one else in your scope is currently in {taggedLabel}.</div>:null}
+                  </div>
+                :<div className="act" style={{marginTop:6,marginLeft:0,gap:14}}>
+                  <button className="linkbtn" onClick={()=>setEditing({key,mode:'dept'})}>
+                    → Move task to {suggested?BUCKETS[suggested]:'a different department'}</button>
+                  <button className="linkbtn" onClick={()=>setEditing({key,mode:'reassign'})}>
+                    → Reassign within {taggedLabel}</button>
+                </div>}
               </div>
             </div>;})}
         </div>
