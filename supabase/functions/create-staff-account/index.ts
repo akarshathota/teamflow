@@ -14,7 +14,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const CONSOLE_ROLES = ["Administrator", "Management", "Manager", "Team Lead", "Team Member", "Teacher"];
+const CONSOLE_ROLES = ["Administrator", "Management", "Director", "Manager", "Team Lead", "Team Member", "Teacher"];
 const ADMIN_TIER = ["Administrator", "Management"];
 
 const CORS = {
