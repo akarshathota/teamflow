@@ -2695,7 +2695,27 @@ function DeptMismatchModal({ctx,close}){
   </div>;
 }
 /* ============ reports ============ */
+/* per-submission daily_reports export/print — same #print-report/csvDownload machinery as
+   exportRows/printRows above, just parameterized over daily_reports rows (+ the staff record
+   each belongs to) instead of tasks. */
+function exportDailyReports(rows,label){
+  const csvRows=[['Person','Department','Date','Completed','Overdue','Open · on track']];
+  rows.forEach(({row,p})=>csvRows.push([p?p.n:'—',p?p.dept:'',row.report_date,row.completed_count,row.overdue_count,row.pending_count]));
+  csvDownload(iso(new Date())+'-teamflow-'+label.toLowerCase().replace(/\s+/g,'-')+'.csv',csvRows);
+}
+function printDailyReports(rows,label,viewerName){
+  let b='<h1 style="margin:0 0 4px;font-family:Bricolage Grotesque,sans-serif">TeamFlow — '+label+'</h1>';
+  b+='<div style="color:#555;margin-bottom:18px">Prepared for '+viewerName+' · '+new Date().toDateString()+' · '+rows.length+' report'+(rows.length!==1?'s':'')+'</div>';
+  b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Person</th><th style="text-align:left;padding:6px">Department</th><th style="text-align:left;padding:6px">Date</th><th style="text-align:left;padding:6px">Completed</th><th style="text-align:left;padding:6px">Overdue</th><th style="text-align:left;padding:6px">Open · on track</th></tr>';
+  rows.forEach(({row,p})=>{b+='<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+(p?p.n:'—')+'</td><td style="padding:6px">'+(p?p.dept:'')+'</td><td style="padding:6px">'+fmtDate(row.report_date)+'</td><td style="padding:6px">'+row.completed_count+'</td><td style="padding:6px">'+row.overdue_count+'</td><td style="padding:6px">'+row.pending_count+'</td></tr>';});
+  b+='</table>';
+  const pr=document.getElementById('print-report');pr.innerHTML=b;pr.style.display='block';
+  const ot=document.title;document.title=iso(new Date())+'-teamflow-'+label.toLowerCase().replace(/\s+/g,'-');
+  window.print();
+  setTimeout(()=>{pr.style.display='none';document.title=ot;},300);
+}
 function ReportsView({ctx}){
+  const [mode,setMode]=useState('tasks');
   const [fw,setFw]=useState('all');
   const [fb,setFb]=useState('all');
   const [showMismatch,setShowMismatch]=useState(false);
@@ -2715,6 +2735,10 @@ function ReportsView({ctx}){
     ['Overdue',ov,'var(--red)','var(--red-soft)','alert'],
     ['Completion rate',rate+'%','var(--blue)','var(--blue-soft)','chart']];
   return <div className="view">
+    <div className="selfseg" style={{margin:'0 0 14px',maxWidth:360}}>
+      <button className={mode==='reports'?'':'on'} onClick={()=>setMode('tasks')}>Task analytics</button>
+      <button className={mode==='reports'?'on':''} onClick={()=>setMode('reports')}>Daily reports</button>
+    </div>
     <div className="filters">
       <select className="fsel" value={fb} onChange={e=>{setFb(e.target.value);setFw('all');}}>
         <option value="all">All departments</option>
@@ -2723,12 +2747,15 @@ function ReportsView({ctx}){
         <option value="all">{fb==='all'?'All staff':'All in '+BUCKETS[fb]}</option>
         {empOpts.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}</select>
       <div className="spacer"/>
-      <button className="btn soft" onClick={()=>setShowMismatch(true)}><I n="alert"/>Check dept mismatches</button>
-      <button className="btn soft" onClick={()=>ctx.exportCSV('tasks')}><I n="dl"/>Tasks CSV</button>
-      <button className="btn soft" onClick={()=>ctx.exportCSV('workload')}><I n="dl"/>Workload CSV</button>
-      <button className="btn primary" onClick={()=>ctx.printReport(fw,fb)}><I n="print"/>Export PDF</button>
+      {mode==='tasks'?<>
+        <button className="btn soft" onClick={()=>setShowMismatch(true)}><I n="alert"/>Check dept mismatches</button>
+        <button className="btn soft" onClick={()=>ctx.exportCSV('tasks')}><I n="dl"/>Tasks CSV</button>
+        <button className="btn soft" onClick={()=>ctx.exportCSV('workload')}><I n="dl"/>Workload CSV</button>
+        <button className="btn primary" onClick={()=>ctx.printReport(fw,fb)}><I n="print"/>Export PDF</button>
+      </>:null}
     </div>
     {showMismatch?<DeptMismatchModal ctx={ctx} close={()=>setShowMismatch(false)}/>:null}
+    {mode==='tasks'?<>
     <div className="kpis">{KP.map(([l,n,c,cs,ic])=><div className="kpi" key={l}>
       <div className="top"><span className="l">{l}</span><span className="ic" style={{background:cs,color:c}}><I n={ic}/></span></div>
       <div className="n" style={{color:c}}>{n}</div></div>)}</div>
@@ -2755,7 +2782,83 @@ function ReportsView({ctx}){
           <td>{tt.filter(t=>t.status==='done').length}</td></tr>;})}</tbody></table>
       </div>
     </div>
+    </>:<DailyReportsPanel ctx={ctx} fw={fw} fb={fb}/>}
   </div>;
+}
+
+/* Browse past Daily Report submissions from ctx.scope (RLS already limits the raw fetch to
+   is_in_scope rows for the real signed-in user; re-filtering by ctx.shorts here is what makes
+   "Preview As" narrow the list correctly, same reasoning ReportsView's own `mine` already relies
+   on for tasks). Capped list, ActivityLogModal's style, inlined into the page instead of a modal —
+   this is a whole tab of the Reports page, not a small popover. */
+function DailyReportsPanel({ctx,fw,fb}){
+  const [reports,setReports]=useState([]);
+  const [escId,setEscId]=useState(null);
+  const [escText,setEscText]=useState('');
+  const [escPrio,setEscPrio]=useState('Medium');
+  const [escBusy,setEscBusy]=useState(false);
+
+  useEffect(()=>{
+    sb.from('daily_reports').select('*').order('created_at',{ascending:false})
+      .then(({data,error})=>{if(error)console.error(error);setReports(data||[]);});
+  },[]);
+
+  const scoped=reports.filter(r=>{const p=byId(r.created_by);
+    return p&&ctx.shorts.includes(p.s)&&inDept(p,fb)&&(fw==='all'||p.s===fw);});
+  const shown=scoped.slice(0,25);
+
+  const today=iso(TODAY);
+  const submittedToday=new Set(reports.filter(r=>r.report_date===today).map(r=>r.created_by));
+  const missing=ctx.scope.filter(p=>!submittedToday.has(p.id));
+
+  async function sendEscalation(row){
+    if(ctx.previewing){ctx.say("You're previewing — switch back to escalate for real");return;}
+    if(!escText.trim()){ctx.say('Describe what needs escalating');return;}
+    setEscBusy(true);
+    const p=byId(row.created_by);
+    const {error}=await sb.from('report_issues').insert({created_by:ctx.viewer.id,daily_report_id:row.id,
+      issue:escText.trim(),remarks:'Raised while reviewing '+(p?p.n:'someone')+"’s "+fmtDate(row.report_date)+' daily report',
+      priority:escPrio,files:[]});
+    if(error){console.error(error);ctx.say('Could not escalate — try again');setEscBusy(false);return;}
+    setEscBusy(false);setEscId(null);setEscText('');setEscPrio('Medium');
+    ctx.say('Escalated'+(ctx.viewer.boss?' to '+bossLabelOf(ctx.viewer.boss):''));
+  }
+
+  return <>
+    <div className="panel">
+      <div className="h-row"><h3><I n="spark" c="var(--accent-ink)"/>Today's submissions</h3>
+        <span className={'tag '+(missing.length?'amber':'green')}>{ctx.scope.length-missing.length} of {ctx.scope.length} submitted</span></div>
+      {missing.length?<div className="rs" style={{padding:'2px 0 4px'}}>Still waiting on: {missing.map(p=>p.n.split(' ')[0]).join(', ')}</div>
+        :<Empty t="Everyone has submitted today" s="No one in your scope is missing today's daily report."/>}
+    </div>
+    <div className="panel">
+      <div className="h-row"><h3>Daily reports</h3>
+        <button className="btn soft" onClick={()=>exportDailyReports(scoped.map(row=>({row,p:byId(row.created_by)})),'Daily Reports')}><I n="dl"/>Download CSV</button></div>
+      {shown.length?shown.map(row=>{
+        const p=byId(row.created_by);
+        const isEsc=escId===row.id;
+        return <div className="attn" key={row.id} style={{flexWrap:'wrap'}}>
+          <div className="ring" style={{background:avColor(p?p.n:row.created_by)}}>{p?p.av:'?'}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div className="nm">{p?p.n:'—'} <span className="rs" style={{fontWeight:400}}>· {p?p.dept:''}</span></div>
+            <div className="rs">{fmtDate(row.report_date)} · {row.completed_count} completed · {row.overdue_count} overdue · {row.pending_count} open · on track</div>
+            {isEsc?<div style={{marginTop:8,display:'flex',gap:8,flexWrap:'wrap'}}>
+              <input className="fsel" style={{flex:'1 1 220px'}} value={escText} onChange={e=>setEscText(e.target.value)} placeholder="What needs escalating?"/>
+              <select className="fsel" value={escPrio} onChange={e=>setEscPrio(e.target.value)}>
+                <option>High</option><option>Medium</option><option>Low</option></select>
+              <button className="btn ghost" onClick={()=>{setEscId(null);setEscText('');}}>Cancel</button>
+              <button className="btn primary" disabled={escBusy} onClick={()=>sendEscalation(row)}>{escBusy?'Sending…':'Send'}</button>
+            </div>:null}
+          </div>
+          <div className="act">
+            <button className="linkbtn" onClick={()=>printDailyReports([{row,p}],(p?p.n:'Daily')+' — '+fmtDate(row.report_date),ctx.viewer.n)}>Print</button>
+            <button className="linkbtn" onClick={()=>{setEscId(isEsc?null:row.id);setEscText('');setEscPrio('Medium');}}>{isEsc?'Cancel':'Escalate'}</button>
+          </div>
+        </div>;
+      }):<Empty t="No daily reports yet" s="Submitted reports from your team will show up here."/>}
+      {scoped.length>shown.length?<div style={{textAlign:'center',color:'var(--muted)',fontSize:11.5,padding:'6px 0'}}>… {scoped.length-shown.length} more</div>:null}
+    </div>
+  </>;
 }
 
 /* ============ daily report ============ */
@@ -2791,18 +2894,21 @@ function DailyReportModal({ctx,close}){
 
   async function submit(){
     if(previewing){say("You're previewing — switch back to send a real report");return;}
-    if(wantIssue){
-      const clean=rows.filter(r=>r.issue.trim());
-      if(!clean.length){say('Describe at least one issue, or choose "No, nothing to report"');return;}
-      setBusy(true);
-      for(const r of clean){
-        const {error}=await sb.from('report_issues').insert({created_by:viewer.id,
-          issue:r.issue.trim(),remarks:r.remarks.trim()||null,priority:r.priority,
-          files:r.file?[r.file]:[]});
-        if(error){console.error(error);say('Could not send report — try again');setBusy(false);return;}
-      }
-      setBusy(false);
+    const clean=wantIssue?rows.filter(r=>r.issue.trim()):[];
+    if(wantIssue&&!clean.length){say('Describe at least one issue, or choose "No, nothing to report"');return;}
+    setBusy(true);
+    /* freeze the same three numbers segs is already showing on screen right now — not a live
+       recompute later, see 20260717000001_daily_reports.sql's header comment. */
+    const {data:dr,error:drErr}=await sb.from('daily_reports').insert({created_by:viewer.id,report_date:iso(TODAY),
+      completed_count:segs[0].v,overdue_count:segs[1].v,pending_count:segs[2].v}).select().single();
+    if(drErr){console.error(drErr);say('Could not send report — try again');setBusy(false);return;}
+    for(const r of clean){
+      const {error}=await sb.from('report_issues').insert({created_by:viewer.id,daily_report_id:dr.id,
+        issue:r.issue.trim(),remarks:r.remarks.trim()||null,priority:r.priority,
+        files:r.file?[r.file]:[]});
+      if(error){console.error(error);say('Could not send report — try again');setBusy(false);return;}
     }
+    setBusy(false);
     say('Daily report sent'+(viewer.boss?' to '+bossLabelOf(viewer.boss):''));
     close();
   }

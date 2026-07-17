@@ -1559,18 +1559,21 @@ function DailyReportSheet({ctx,close}){
 
   async function submit(){
     if(previewing){say("You're previewing — switch back to send a real report");return;}
-    if(wantIssue){
-      const clean=rows.filter(x=>x.issue.trim());
-      if(!clean.length){say('Describe at least one issue, or choose "No, nothing to report"');return;}
-      setBusy(true);
-      for(const x of clean){
-        const {error}=await sb.from('report_issues').insert({created_by:r.id,
-          issue:x.issue.trim(),remarks:x.remarks.trim()||null,priority:x.priority,
-          files:x.file?[x.file]:[]});
-        if(error){console.error(error);say('Could not send report — try again');setBusy(false);return;}
-      }
-      setBusy(false);
+    const clean=wantIssue?rows.filter(x=>x.issue.trim()):[];
+    if(wantIssue&&!clean.length){say('Describe at least one issue, or choose "No, nothing to report"');return;}
+    setBusy(true);
+    /* freeze the same three numbers segs is already showing on screen right now — not a live
+       recompute later, see 20260717000001_daily_reports.sql's header comment. */
+    const {data:dr,error:drErr}=await sb.from('daily_reports').insert({created_by:r.id,report_date:iso(TODAY),
+      completed_count:segs[0].v,overdue_count:segs[1].v,pending_count:segs[2].v}).select().single();
+    if(drErr){console.error(drErr);say('Could not send report — try again');setBusy(false);return;}
+    for(const x of clean){
+      const {error}=await sb.from('report_issues').insert({created_by:r.id,daily_report_id:dr.id,
+        issue:x.issue.trim(),remarks:x.remarks.trim()||null,priority:x.priority,
+        files:x.file?[x.file]:[]});
+      if(error){console.error(error);say('Could not send report — try again');setBusy(false);return;}
     }
+    setBusy(false);
     say('Daily report sent'+(r.boss?' to '+bossLabelOf(r.boss):''));
     close();
   }
