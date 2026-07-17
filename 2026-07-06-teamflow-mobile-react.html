@@ -331,6 +331,14 @@ function approvalQueue(role,self){
    MEMBERS (Teachers + the maintenance Team Member) is just the assignable operational subset. */
 let ALL_PEOPLE=[];
 const findPerson=n=>ALL_PEOPLE.find(p=>p.n.toLowerCase()===String(n).toLowerCase()||p.s.toLowerCase()===String(n).toLowerCase());
+/* Called from the Daily Report submit toast and the escalate button (DailyReportSheet) but was
+   never actually defined anywhere in this file — a real ReferenceError on every submit/escalate
+   that has a boss, live since the original Daily Report commit (78bae93), confirmed via git log -S
+   turning up no definition at all. Fixed here rather than porting console's bossLabelOf, which
+   leans on a hardcoded 4-name BOSS_LABEL map that already went stale for this org once — this
+   looks the person up for real and reuses the exact "Name (Role)" shape bossesFor() already
+   produces, so it can never drift the same way. */
+const bossLabelOf=n=>{const p=findPerson(n);return p?p.n+' ('+p.role+')':n;};
 /* srm/jrm's real reporting-line scope, mirroring console's descendants() — walks ALL_PEOPLE's
    boss field (short names, matching t.who's convention) rather than a role-config hardcoded list.
    Only need this for srm/jrm: admin/mgmt scope is role-based (ALL_STAFF, position-independent) and
@@ -1111,6 +1119,95 @@ function Cal({ctx,personal,allowFilter}){
   </div>;
 }
 
+function csvDownload(name,rows){
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  saveBlob(new Blob([rows.map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv'}),name);
+}
+/* Mobile counterpart to console's DailyReportsPanel (same daily_reports table, same is_in_scope
+   RLS) — browse past submissions from ctx.scope, a completeness indicator, and escalate-from-
+   review, adapted to mobile's own shapes: ctx.scope is an array of short-name strings here (not
+   person objects like console's), so person lookups go through ALL_PEOPLE by id/short-name rather
+   than console's byId. Lives inside Insights since that's the one screen every non-worker role
+   already has — mobile has no separate Reports page to hang a new tab off of. No print button:
+   mobile has no window.print()/printReport precedent anywhere (checked), so this only adds a CSV
+   download, mirroring the .ics calendar export's existing saveBlob pattern instead of inventing one. */
+function DailyReportsSection({ctx}){
+  const [reports,setReports]=useState([]);
+  const [escId,setEscId]=useState(null);
+  const [escText,setEscText]=useState('');
+  const [escPrio,setEscPrio]=useState('Medium');
+  const [escBusy,setEscBusy]=useState(false);
+
+  useEffect(()=>{
+    sb.from('daily_reports').select('*').order('created_at',{ascending:false})
+      .then(({data,error})=>{if(error)console.error(error);setReports(data||[]);});
+  },[]);
+
+  const scopePeople=ctx.scope.map(s=>findPerson(s)).filter(Boolean);
+  const scopeIds=new Set(scopePeople.map(p=>p.id));
+  const scoped=reports.filter(r=>scopeIds.has(r.created_by));
+  const shown=scoped.slice(0,15);
+  const today=iso(TODAY);
+  const submittedToday=new Set(reports.filter(r=>r.report_date===today).map(r=>r.created_by));
+  const missing=scopePeople.filter(p=>!submittedToday.has(p.id));
+
+  async function sendEscalation(row){
+    if(ctx.previewing){ctx.say("You're previewing — switch back to escalate for real");return;}
+    if(!escText.trim()){ctx.say('Describe what needs escalating');return;}
+    setEscBusy(true);
+    const p=ALL_PEOPLE.find(x=>x.id===row.created_by);
+    const {error}=await sb.from('report_issues').insert({created_by:ctx.r.id,daily_report_id:row.id,
+      issue:escText.trim(),remarks:'Raised while reviewing '+(p?p.n:'someone')+"’s "+fmtD(row.report_date)+' daily report',
+      priority:escPrio,files:[]});
+    if(error){console.error(error);ctx.say('Could not escalate — try again');setEscBusy(false);return;}
+    setEscBusy(false);setEscId(null);setEscText('');setEscPrio('Medium');
+    ctx.say('Escalated'+(ctx.r.boss?' to '+bossLabelOf(ctx.r.boss):''));
+  }
+
+  return <>
+    <div className="sec" style={{marginTop:16}}>Today's daily reports</div>
+    <div className="attn" style={{flexWrap:'wrap'}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div className="nm">{scopePeople.length-missing.length} of {scopePeople.length} submitted</div>
+        {missing.length?<div className="rs">Still waiting on: {missing.map(p=>p.n.split(' ')[0]).join(', ')}</div>
+          :<div className="rs">Everyone in your team has submitted today.</div>}
+      </div>
+    </div>
+    {shown.length?<>
+      {shown.map(row=>{
+        const p=ALL_PEOPLE.find(x=>x.id===row.created_by);
+        const isEsc=escId===row.id;
+        return <div className="attn" key={row.id} style={{flexWrap:'wrap'}}>
+          <div className="ring" style={{background:'var(--accent)'}}>{p?p.n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase():'?'}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div className="nm">{p?p.n:'—'} <span className="rs" style={{fontWeight:400}}>· {p?p.department:''}</span></div>
+            <div className="rs">{fmtD(row.report_date)} · {row.completed_count} completed · {row.overdue_count} overdue · {row.pending_count} open</div>
+            {isEsc?<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
+              <input className="empsearch" style={{marginBottom:0}} value={escText} onChange={e=>setEscText(e.target.value)} placeholder="What needs escalating?"/>
+              <select className="selsel" value={escPrio} onChange={e=>setEscPrio(e.target.value)}>
+                <option>High</option><option>Medium</option><option>Low</option></select>
+              <div style={{display:'flex',gap:8}}>
+                <button className="chipbtn" style={{flex:1,justifyContent:'center'}} onClick={()=>{setEscId(null);setEscText('');}}>Cancel</button>
+                <button className="send" style={{flex:1,margin:0,padding:'9px'}} disabled={escBusy} onClick={()=>sendEscalation(row)}>{escBusy?'Sending…':'Send'}</button>
+              </div>
+            </div>:<div style={{marginTop:6}}>
+              <button className="chipbtn" onClick={()=>{setEscId(row.id);setEscText('');setEscPrio('Medium');}}>↑ Escalate</button>
+            </div>}
+          </div>
+        </div>;
+      })}
+      {scoped.length>shown.length?<div className="rs" style={{textAlign:'center',padding:'4px 0'}}>… {scoped.length-shown.length} more — see the console for the full list</div>:null}
+      <button className="chipbtn" onClick={()=>exportDailyReportsM(scoped)}>⬇ Download CSV</button>
+    </>:<div className="rs" style={{padding:'8px 2px'}}>No daily reports yet.</div>}
+  </>;
+}
+function exportDailyReportsM(scoped){
+  const rows=[['Person','Department','Date','Completed','Overdue','Open']];
+  scoped.forEach(row=>{const p=ALL_PEOPLE.find(x=>x.id===row.created_by);
+    rows.push([p?p.n:'—',p?p.department:'',row.report_date,row.completed_count,row.overdue_count,row.pending_count]);});
+  csvDownload(iso(new Date())+'-teamflow-daily-reports.csv',rows);
+}
+
 /* ============ insights ============ */
 function Insights({ctx}){
   return <div>
@@ -1126,6 +1223,7 @@ function Insights({ctx}){
         <div className="ring" style={{background:x.od?'var(--red)':'var(--amber)'}}>{x.m.i}</div>
         <div><div className="nm">{x.m.n}</div><div className="rs">{x.reason}</div></div></div>)
         :<div className="rs" style={{padding:'8px 2px'}}>Everyone's on track.</div>;})()}
+    <DailyReportsSection ctx={ctx}/>
     <div className="sec" style={{marginTop:16}}>Ask anything</div>
     <div className="task" style={{display:'flex',alignItems:'center',gap:10}}>
       <I n="mic" c="var(--accent-ink)"/>
