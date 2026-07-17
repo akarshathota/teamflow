@@ -1011,6 +1011,7 @@ function App(){
     b+='<div style="display:flex;gap:34px;align-items:center;margin-bottom:24px">'+donutSVG(segs,140,24)
       +'<div style="flex:1">'+segs.map(x=>'<div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid #eee;font-size:13px"><span style="width:11px;height:11px;border-radius:3px;background:'+x.c+';display:inline-block"></span>'+x.l+'<b style="margin-left:auto">'+x.v+' · '+Math.round(x.v/tot*100)+'%</b></div>').join('')
       +'<div style="font-size:12px;color:#555;margin-top:8px"><b>'+Math.round(segs[0].v/tot*100)+'%</b> of tasks were completed on time.</div></div></div>';
+    b+='<hr style="border:none;border-top:1px solid #ddd;margin:4px 0 24px"/>';
     b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Task</th><th style="text-align:left;padding:6px">Assignee</th><th style="text-align:left;padding:6px">Type</th><th style="text-align:left;padding:6px">Due</th><th style="text-align:left;padding:6px">Status</th></tr>';
     list.forEach(t=>{b+='<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+t.t+'</td><td style="padding:6px">'+assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')+'</td><td style="padding:6px">'+TYPES[t.type||'work']+'</td><td style="padding:6px">'+t.date+(isOverdue(t)?' (overdue)':'')+'</td><td style="padding:6px">'+ST[t.status].l+'</td></tr>';});
     b+='</table>';
