@@ -2793,6 +2793,7 @@ function ReportsView({ctx}){
    this is a whole tab of the Reports page, not a small popover. */
 function DailyReportsPanel({ctx,fw,fb}){
   const [reports,setReports]=useState([]);
+  const [fDate,setFDate]=useState('');
   const [escId,setEscId]=useState(null);
   const [escText,setEscText]=useState('');
   const [escPrio,setEscPrio]=useState('Medium');
@@ -2804,7 +2805,7 @@ function DailyReportsPanel({ctx,fw,fb}){
   },[]);
 
   const scoped=reports.filter(r=>{const p=byId(r.created_by);
-    return p&&ctx.shorts.includes(p.s)&&inDept(p,fb)&&(fw==='all'||p.s===fw);});
+    return p&&ctx.shorts.includes(p.s)&&inDept(p,fb)&&(fw==='all'||p.s===fw)&&(!fDate||r.report_date===fDate);});
   const shown=scoped.slice(0,25);
 
   const today=iso(TODAY);
@@ -2833,7 +2834,11 @@ function DailyReportsPanel({ctx,fw,fb}){
     </div>
     <div className="panel">
       <div className="h-row"><h3>Daily reports</h3>
-        <button className="btn soft" onClick={()=>exportDailyReports(scoped.map(row=>({row,p:byId(row.created_by)})),'Daily Reports')}><I n="dl"/>Download CSV</button></div>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <input type="date" className="fsel" value={fDate} max={iso(TODAY)} onChange={e=>setFDate(e.target.value)}/>
+          {fDate?<button className="linkbtn" onClick={()=>setFDate('')}>Clear</button>:null}
+          <button className="btn soft" onClick={()=>exportDailyReports(scoped.map(row=>({row,p:byId(row.created_by)})),'Daily Reports')}><I n="dl"/>Download CSV</button>
+        </div></div>
       {shown.length?shown.map(row=>{
         const p=byId(row.created_by);
         const isEsc=escId===row.id;
@@ -2855,7 +2860,7 @@ function DailyReportsPanel({ctx,fw,fb}){
             <button className="linkbtn" onClick={()=>{setEscId(isEsc?null:row.id);setEscText('');setEscPrio('Medium');}}>{isEsc?'Cancel':'Escalate'}</button>
           </div>
         </div>;
-      }):<Empty t="No daily reports yet" s="Submitted reports from your team will show up here."/>}
+      }):<Empty t={fDate?'No reports for that date':'No daily reports yet'} s={fDate?'Nobody in your scope submitted a report on '+fmtDate(fDate)+'.':'Submitted reports from your team will show up here.'}/>}
       {scoped.length>shown.length?<div style={{textAlign:'center',color:'var(--muted)',fontSize:11.5,padding:'6px 0'}}>… {scoped.length-shown.length} more</div>:null}
     </div>
   </>;
@@ -2958,6 +2963,7 @@ function DailyReportModal({ctx,close}){
   return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
     <div className="modal">
       <div className="qc-head"><h3>Daily Report</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
+      <div className="whysm" style={{margin:'0 20px'}}>{TODAY.toLocaleDateString('en',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}</div>
       <div style={{padding:'14px 20px 20px'}}>
 
         {inbox.length?<div className="panel" style={{marginBottom:16}}>

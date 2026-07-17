@@ -1133,6 +1133,7 @@ function csvDownload(name,rows){
    download, mirroring the .ics calendar export's existing saveBlob pattern instead of inventing one. */
 function DailyReportsSection({ctx}){
   const [reports,setReports]=useState([]);
+  const [fDate,setFDate]=useState('');
   const [escId,setEscId]=useState(null);
   const [escText,setEscText]=useState('');
   const [escPrio,setEscPrio]=useState('Medium');
@@ -1145,7 +1146,7 @@ function DailyReportsSection({ctx}){
 
   const scopePeople=ctx.scope.map(s=>findPerson(s)).filter(Boolean);
   const scopeIds=new Set(scopePeople.map(p=>p.id));
-  const scoped=reports.filter(r=>scopeIds.has(r.created_by));
+  const scoped=reports.filter(r=>scopeIds.has(r.created_by)&&(!fDate||r.report_date===fDate));
   const shown=scoped.slice(0,15);
   const today=iso(TODAY);
   const submittedToday=new Set(reports.filter(r=>r.report_date===today).map(r=>r.created_by));
@@ -1173,6 +1174,10 @@ function DailyReportsSection({ctx}){
           :<div className="rs">Everyone in your team has submitted today.</div>}
       </div>
     </div>
+    <div style={{display:'flex',gap:8,alignItems:'center',margin:'12px 0 8px'}}>
+      <input type="date" className="selsel" style={{flex:1}} value={fDate} max={iso(TODAY)} onChange={e=>setFDate(e.target.value)}/>
+      {fDate?<button className="chipbtn" onClick={()=>setFDate('')}>Clear</button>:null}
+    </div>
     {shown.length?<>
       {shown.map(row=>{
         const p=ALL_PEOPLE.find(x=>x.id===row.created_by);
@@ -1198,7 +1203,7 @@ function DailyReportsSection({ctx}){
       })}
       {scoped.length>shown.length?<div className="rs" style={{textAlign:'center',padding:'4px 0'}}>… {scoped.length-shown.length} more — see the console for the full list</div>:null}
       <button className="chipbtn" onClick={()=>exportDailyReportsM(scoped)}>⬇ Download CSV</button>
-    </>:<div className="rs" style={{padding:'8px 2px'}}>No daily reports yet.</div>}
+    </>:<div className="rs" style={{padding:'8px 2px'}}>{fDate?'No reports for that date.':'No daily reports yet.'}</div>}
   </>;
 }
 function exportDailyReportsM(scoped){
@@ -1721,7 +1726,7 @@ function DailyReportSheet({ctx,close}){
 
   return <>
     <h3>Daily Report</h3>
-    <div className="sub">A quick check-in — raise anything worth flagging, and see how your tasks stand.</div>
+    <div className="sub">{TODAY.toLocaleDateString('en',{weekday:'short',day:'numeric',month:'short',year:'numeric'})} · A quick check-in — raise anything worth flagging, and see how your tasks stand.</div>
 
     {inbox.length?<>
       <div style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.5,color:'var(--muted)',margin:'4px 0 8px'}}>Issues/Incidents escalated to you ({inbox.length})</div>
