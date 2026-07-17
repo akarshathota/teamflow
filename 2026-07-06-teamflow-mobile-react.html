@@ -1673,6 +1673,16 @@ function DailyReportSheet({ctx,close}){
   const [wantIssue,setWantIssue]=useState(false);
   const [rows,setRows]=useState([{issue:'',remarks:'',priority:'Medium',file:null}]);
   const [busy,setBusy]=useState(false);
+  // "Resolve here" inline choice — resolveId is which inbox row is expanded, resolveMode picks
+  // which of the two real resolution paths (issue a task / describe it) once expanded. Mirrors
+  // console's DailyReportModal exactly (20260717000002_report_issue_resolution.sql).
+  const [resolveId,setResolveId]=useState(null);
+  const [resolveMode,setResolveMode]=useState(null);
+  const [resTaskTitle,setResTaskTitle]=useState('');
+  const [resTaskWho,setResTaskWho]=useState('');
+  const [resTaskDue,setResTaskDue]=useState('');
+  const [resText,setResText]=useState('');
+  const [resBusy,setResBusy]=useState(false);
 
   useEffect(()=>{
     sb.from('report_issues').select('*').eq('escalated_to',r.id).eq('status','open').order('created_at')
@@ -1695,9 +1705,13 @@ function DailyReportSheet({ctx,close}){
     if(wantIssue&&!clean.length){say('Describe at least one issue, or choose "No, nothing to report"');return;}
     setBusy(true);
     /* freeze the same three numbers segs is already showing on screen right now — not a live
-       recompute later, see 20260717000001_daily_reports.sql's header comment. */
+       recompute later, see 20260717000001_daily_reports.sql's header comment. task_snapshot
+       freezes the full ordered task list the same way (not `shown`, which is capped to 8 for
+       on-screen display only). */
+    const taskSnapshot=ordered.map(t=>({title:t.t,assignee:t.who,department:(findMember(t.who)||{}).dept||'',
+      due:t.date,status:t.done?'done':(isOver(t)?'overdue':'pending')}));
     const {data:dr,error:drErr}=await sb.from('daily_reports').insert({created_by:r.id,report_date:iso(TODAY),
-      completed_count:segs[0].v,overdue_count:segs[1].v,pending_count:segs[2].v}).select().single();
+      completed_count:segs[0].v,overdue_count:segs[1].v,pending_count:segs[2].v,task_snapshot:taskSnapshot}).select().single();
     if(drErr){console.error(drErr);say('Could not send report — try again');setBusy(false);return;}
     for(const x of clean){
       const {error}=await sb.from('report_issues').insert({created_by:r.id,daily_report_id:dr.id,
@@ -1717,11 +1731,37 @@ function DailyReportSheet({ctx,close}){
     setInbox(inbox.filter(x=>x.id!==row.id));
     say('Escalated to '+bossLabelOf(r.boss));
   }
-  async function resolve(row){
+  // Two real resolution paths (see 20260717000002_report_issue_resolution.sql): issue a task,
+  // reusing the exact same tasks-insert path TaskSheet/saveTask already use, or describe how it
+  // was resolved as free text. Mirrors console's DailyReportModal exactly.
+  async function resolveWithTask(row){
     if(previewing){say("You're previewing — switch back to resolve for real");return;}
-    const {error}=await sb.from('report_issues').update({status:'resolved'}).eq('id',row.id);
-    if(error){console.error(error);say('Could not resolve — try again');return;}
+    if(!resTaskTitle.trim()){say('Give the task a title');return;}
+    if(!resTaskWho){say('Pick who should do it');return;}
+    setResBusy(true);
+    const m=findMember(resTaskWho);
+    const nt={t:resTaskTitle.trim(),who:resTaskWho,init:m?m.i:resTaskWho[0],
+      bucket:(m&&LABEL_TO_BUCKET[m.dept])||'administration',type:'work',date:resTaskDue||iso(TODAY),
+      done:false,note:'Raised while resolving: “'+row.issue+'”',
+      selfAssigned:resTaskWho===r.self,instructedBy:resTaskWho===r.self?null:r.name};
+    try{await saveTask(nt);}
+    catch(err){console.error(err);say('Could not create task — try again');setResBusy(false);return;}
+    const {error}=await sb.from('report_issues').update({status:'resolved',
+      resolution_note:'Converted to task: '+nt.t,resolved_task_id:nt.id}).eq('id',row.id);
+    if(error){console.error(error);say('Task created but could not mark resolved — try again');setResBusy(false);return;}
+    tasks.unshift(nt);ctx.R();
     setInbox(inbox.filter(x=>x.id!==row.id));
+    setResolveId(null);setResolveMode(null);setResBusy(false);
+    say('Task created and issue resolved');
+  }
+  async function resolveWithNote(row){
+    if(previewing){say("You're previewing — switch back to resolve for real");return;}
+    if(!resText.trim()){say('Describe how it was resolved');return;}
+    setResBusy(true);
+    const {error}=await sb.from('report_issues').update({status:'resolved',resolution_note:resText.trim()}).eq('id',row.id);
+    if(error){console.error(error);say('Could not resolve — try again');setResBusy(false);return;}
+    setInbox(inbox.filter(x=>x.id!==row.id));
+    setResolveId(null);setResolveMode(null);setResText('');setResBusy(false);
     say('Marked resolved');
   }
 
@@ -1737,6 +1777,7 @@ function DailyReportSheet({ctx,close}){
   const ordered=overdueList.concat(pendingList,doneList);
   const shown=ordered.slice(0,8);
   const showAssignee=ctx.scope.length>1;
+  const scopeMembers=ctx.scope.map(findMember).filter(Boolean);
 
   function statusPill(t){
     if(t.done)return <span className="pill done">Completed</span>;
@@ -1759,15 +1800,40 @@ function DailyReportSheet({ctx,close}){
 
     {inbox.length?<>
       <div style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.5,color:'var(--muted)',margin:'4px 0 8px'}}>Issues/Incidents escalated to you ({inbox.length})</div>
-      {inbox.map(row=><div key={row.id} style={{padding:'10px 0',borderBottom:'1px solid var(--line)'}}>
+      {inbox.map(row=>{
+        const isRes=resolveId===row.id;
+        return <div key={row.id} style={{padding:'10px 0',borderBottom:'1px solid var(--line)'}}>
         <div style={{fontWeight:700,fontSize:13.5}}>{row.issue} <span className={'pill '+(row.priority==='High'?'over':row.priority==='Medium'?'today':'done')} style={{marginLeft:4}}>{row.priority}</span></div>
         <div className="meta" style={{marginTop:2}}>{fromLabel(row)}{row.remarks?' · "'+row.remarks+'"':''}</div>
         {row.files&&row.files.length?<div className="filelist">{row.files.map((f,ix)=><FileChip key={ix} f={f}/>)}</div>:null}
         <div style={{display:'flex',gap:8,marginTop:8}}>
           {r.bossId?<button className="chipbtn" onClick={()=>escalate(row)}>↑ Escalate to {bossLabelOf(r.boss).split(' (')[0]}</button>:null}
-          <button className="chipbtn" onClick={()=>resolve(row)}>✓ Resolve here</button>
+          <button className="chipbtn" onClick={()=>{setResolveId(isRes?null:row.id);setResolveMode(null);setResText('');}}>{isRes?'Cancel':'✓ Resolve here'}</button>
         </div>
-      </div>)}
+        {isRes&&!resolveMode?<div style={{display:'flex',gap:8,marginTop:8}}>
+          <button className="chipbtn" style={{flex:1,justifyContent:'center'}} onClick={()=>{setResolveMode('task');setResTaskTitle(row.issue);setResTaskWho('');setResTaskDue(iso(TODAY));}}>Issue a task</button>
+          <button className="chipbtn" style={{flex:1,justifyContent:'center'}} onClick={()=>{setResolveMode('text');setResText('');}}>Describe resolution</button>
+        </div>:null}
+        {isRes&&resolveMode==='task'?<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
+          <input className="empsearch" style={{marginBottom:0}} value={resTaskTitle} onChange={e=>setResTaskTitle(e.target.value)} placeholder="Task title"/>
+          <select className="selsel" value={resTaskWho} onChange={e=>setResTaskWho(e.target.value)}>
+            <option value="">Assign to…</option>
+            {scopeMembers.map(m=><option key={m.n} value={m.n}>{m.n}</option>)}
+          </select>
+          <input type="date" className="selsel" value={resTaskDue} min={iso(TODAY)} onChange={e=>setResTaskDue(e.target.value)}/>
+          <div style={{display:'flex',gap:8}}>
+            <button className="chipbtn" style={{flex:1,justifyContent:'center'}} onClick={()=>setResolveMode(null)}>Back</button>
+            <button className="send" style={{flex:1,margin:0,padding:'9px'}} disabled={resBusy} onClick={()=>resolveWithTask(row)}>{resBusy?'Creating…':'Create & resolve'}</button>
+          </div>
+        </div>:null}
+        {isRes&&resolveMode==='text'?<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
+          <textarea className="typein" rows={2} value={resText} onChange={e=>setResText(e.target.value)} placeholder="How was this resolved?"/>
+          <div style={{display:'flex',gap:8}}>
+            <button className="chipbtn" style={{flex:1,justifyContent:'center'}} onClick={()=>setResolveMode(null)}>Back</button>
+            <button className="send" style={{flex:1,margin:0,padding:'9px'}} disabled={resBusy} onClick={()=>resolveWithNote(row)}>{resBusy?'Saving…':'Mark resolved'}</button>
+          </div>
+        </div>:null}
+      </div>;})}
     </>:null}
 
     <div style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.5,color:'var(--muted)',margin:'16px 0 8px'}}>Report an issue or incident?</div>

@@ -2697,18 +2697,70 @@ function DeptMismatchModal({ctx,close}){
 /* ============ reports ============ */
 /* per-submission daily_reports export/print — same #print-report/csvDownload machinery as
    exportRows/printRows above, just parameterized over daily_reports rows (+ the staff record
-   each belongs to) instead of tasks. */
-function exportDailyReports(rows,label){
-  const csvRows=[['Person','Department','Date','Completed','Overdue','Open · on track']];
-  rows.forEach(({row,p})=>csvRows.push([p?p.n:'—',p?p.dept:'',row.report_date,row.completed_count,row.overdue_count,row.pending_count]));
+   each belongs to) instead of tasks.
+   Both functions now need more than what's on the daily_reports row itself: task_snapshot comes
+   free with the row (select('*') already fetches it), but linked report_issues don't — fetched
+   here in one .in() query across every report being exported/printed, same "fetch fresh, don't
+   keep live" spirit as the rest of this feature. Both are async now purely for that fetch; callers
+   still fire-and-forget them exactly like every other mutation in this file. */
+function snapStatusLabel(s){return s==='done'?'Completed':s==='overdue'?'Overdue':'Open · on track';}
+function issueResolutionText(x){
+  if(x.status!=='resolved')return '—';
+  if(x.resolved_task_id){const t=tasks.find(tk=>tk.id===x.resolved_task_id);return 'Task: '+(t?t.t:'(task)')+(x.resolution_note?' — '+x.resolution_note:'');}
+  return x.resolution_note||'Resolved';
+}
+async function fetchIssuesByReport(rows){
+  const ids=rows.map(({row})=>row.id);
+  if(!ids.length)return {};
+  const {data,error}=await sb.from('report_issues').select('*').in('daily_report_id',ids);
+  if(error){console.error(error);return {};}
+  const byReport={};
+  (data||[]).forEach(x=>{(byReport[x.daily_report_id]=byReport[x.daily_report_id]||[]).push(x);});
+  return byReport;
+}
+async function exportDailyReports(rows,label){
+  const issuesByReport=await fetchIssuesByReport(rows);
+  const csvRows=[];
+  rows.forEach(({row,p})=>{
+    csvRows.push(['Person','Department','Date','Completed','Overdue','Open · on track']);
+    csvRows.push([p?p.n:'—',p?p.dept:'',row.report_date,row.completed_count,row.overdue_count,row.pending_count]);
+    const snap=row.task_snapshot||[];
+    if(snap.length){
+      csvRows.push([]);csvRows.push(['Task','Assignee','Department','Due','Status']);
+      snap.forEach(t=>csvRows.push([t.title,t.assignee,t.department,fmtDate(t.due),snapStatusLabel(t.status)]));
+    }
+    const issues=issuesByReport[row.id]||[];
+    if(issues.length){
+      csvRows.push([]);csvRows.push(['Issue/Incident','Priority','Status','Resolution']);
+      issues.forEach(x=>csvRows.push([x.issue,x.priority,x.status==='resolved'?'Resolved':'Open',issueResolutionText(x)]));
+    }
+    csvRows.push([]);
+  });
   csvDownload(iso(new Date())+'-teamflow-'+label.toLowerCase().replace(/\s+/g,'-')+'.csv',csvRows);
 }
-function printDailyReports(rows,label,viewerName){
+async function printDailyReports(rows,label,viewerName){
+  const issuesByReport=await fetchIssuesByReport(rows);
   let b='<h1 style="margin:0 0 4px;font-family:Bricolage Grotesque,sans-serif">TeamFlow — '+label+'</h1>';
   b+='<div style="color:#555;margin-bottom:18px">Prepared for '+viewerName+' · '+new Date().toDateString()+' · '+rows.length+' report'+(rows.length!==1?'s':'')+'</div>';
-  b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Person</th><th style="text-align:left;padding:6px">Department</th><th style="text-align:left;padding:6px">Date</th><th style="text-align:left;padding:6px">Completed</th><th style="text-align:left;padding:6px">Overdue</th><th style="text-align:left;padding:6px">Open · on track</th></tr>';
-  rows.forEach(({row,p})=>{b+='<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+(p?p.n:'—')+'</td><td style="padding:6px">'+(p?p.dept:'')+'</td><td style="padding:6px">'+fmtDate(row.report_date)+'</td><td style="padding:6px">'+row.completed_count+'</td><td style="padding:6px">'+row.overdue_count+'</td><td style="padding:6px">'+row.pending_count+'</td></tr>';});
-  b+='</table>';
+  rows.forEach(({row,p})=>{
+    b+='<div style="margin:14px 0 6px"><b style="font-size:14px">'+(p?p.n:'—')+'</b> · '+(p?p.dept:'')+' · '+fmtDate(row.report_date)+'</div>';
+    b+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Completed</th><th style="text-align:left;padding:6px">Overdue</th><th style="text-align:left;padding:6px">Open · on track</th></tr>'
+      +'<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+row.completed_count+'</td><td style="padding:6px">'+row.overdue_count+'</td><td style="padding:6px">'+row.pending_count+'</td></tr></table>';
+    const snap=row.task_snapshot||[];
+    if(snap.length){
+      b+='<div style="font-size:12px;font-weight:700;margin:8px 0 4px">Tasks this period</div>';
+      b+='<table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:5px">Task</th><th style="text-align:left;padding:5px">Assignee</th><th style="text-align:left;padding:5px">Department</th><th style="text-align:left;padding:5px">Due</th><th style="text-align:left;padding:5px">Status</th></tr>';
+      snap.forEach(t=>{b+='<tr style="border-bottom:1px solid #eee"><td style="padding:5px">'+t.title+'</td><td style="padding:5px">'+t.assignee+'</td><td style="padding:5px">'+(t.department||'')+'</td><td style="padding:5px">'+fmtDate(t.due)+'</td><td style="padding:5px">'+snapStatusLabel(t.status)+'</td></tr>';});
+      b+='</table>';
+    }
+    const issues=issuesByReport[row.id]||[];
+    if(issues.length){
+      b+='<div style="font-size:12px;font-weight:700;margin:8px 0 4px">Issues / incidents raised</div>';
+      b+='<table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:5px">Issue</th><th style="text-align:left;padding:5px">Priority</th><th style="text-align:left;padding:5px">Status</th><th style="text-align:left;padding:5px">Resolution</th></tr>';
+      issues.forEach(x=>{b+='<tr style="border-bottom:1px solid #eee"><td style="padding:5px">'+x.issue+'</td><td style="padding:5px">'+x.priority+'</td><td style="padding:5px">'+(x.status==='resolved'?'Resolved':'Open')+'</td><td style="padding:5px">'+issueResolutionText(x)+'</td></tr>';});
+      b+='</table>';
+    }
+  });
   const pr=document.getElementById('print-report');pr.innerHTML=b;pr.style.display='block';
   const ot=document.title;document.title=iso(new Date())+'-teamflow-'+label.toLowerCase().replace(/\s+/g,'-');
   window.print();
@@ -2794,6 +2846,7 @@ function ReportsView({ctx}){
 function DailyReportsPanel({ctx,fw,fb}){
   const [reports,setReports]=useState([]);
   const [fDate,setFDate]=useState('');
+  const [showAll,setShowAll]=useState(false);
   const [escId,setEscId]=useState(null);
   const [escText,setEscText]=useState('');
   const [escPrio,setEscPrio]=useState('Medium');
@@ -2825,7 +2878,7 @@ function DailyReportsPanel({ctx,fw,fb}){
 
   const scoped=reports.filter(r=>{const p=byId(r.created_by);
     return p&&scopeShorts.has(p.s)&&(!fDate||r.report_date===fDate);});
-  const shown=scoped.slice(0,25);
+  const shown=showAll?scoped:scoped.slice(0,25);
 
   const today=iso(TODAY);
   const submittedToday=new Set(reports.filter(r=>r.report_date===today).map(r=>r.created_by));
@@ -2856,7 +2909,7 @@ function DailyReportsPanel({ctx,fw,fb}){
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
           <input type="date" className="fsel" value={fDate} max={iso(TODAY)} onChange={e=>setFDate(e.target.value)}/>
           {fDate?<button className="linkbtn" onClick={()=>setFDate('')}>Clear</button>:null}
-          <button className="btn soft" onClick={()=>exportDailyReports(scoped.map(row=>({row,p:byId(row.created_by)})),'Daily Reports')}><I n="dl"/>Download CSV</button>
+          <button className="btn soft" onClick={()=>exportDailyReports(scoped.map(row=>({row,p:byId(row.created_by)})),'Daily Reports').catch(console.error)}><I n="dl"/>Download CSV</button>
         </div></div>
       {shown.length?shown.map(row=>{
         const p=byId(row.created_by);
@@ -2875,12 +2928,13 @@ function DailyReportsPanel({ctx,fw,fb}){
             </div>:null}
           </div>
           <div className="act">
-            <button className="linkbtn" onClick={()=>printDailyReports([{row,p}],(p?p.n:'Daily')+' — '+fmtDate(row.report_date),ctx.viewer.n)}>Print</button>
+            <button className="linkbtn" onClick={()=>printDailyReports([{row,p}],(p?p.n:'Daily')+' — '+fmtDate(row.report_date),ctx.viewer.n).catch(console.error)}>Print</button>
             <button className="linkbtn" onClick={()=>{setEscId(isEsc?null:row.id);setEscText('');setEscPrio('Medium');}}>{isEsc?'Cancel':'Escalate'}</button>
           </div>
         </div>;
       }):<Empty t={fDate?'No reports for that date':'No daily reports yet'} s={fDate?'Nobody in your scope submitted a report on '+fmtDate(fDate)+'.':'Submitted reports from your team will show up here.'}/>}
-      {scoped.length>shown.length?<div style={{textAlign:'center',color:'var(--muted)',fontSize:11.5,padding:'6px 0'}}>… {scoped.length-shown.length} more</div>:null}
+      {scoped.length>shown.length?<button className="btn ghost" style={{width:'100%',justifyContent:'center',margin:'6px 0 0'}}
+        onClick={()=>setShowAll(true)}>Show {scoped.length-shown.length} more</button>:null}
     </div>
   </>;
 }
@@ -2900,6 +2954,15 @@ function DailyReportModal({ctx,close}){
   const [wantIssue,setWantIssue]=useState(false);
   const [rows,setRows]=useState([{issue:'',remarks:'',priority:'Medium',file:null}]);
   const [busy,setBusy]=useState(false);
+  // "Resolve here" inline choice — resolveId is which inbox row is expanded, resolveMode picks
+  // which of the two real resolution paths (issue a task / describe it) once expanded.
+  const [resolveId,setResolveId]=useState(null);
+  const [resolveMode,setResolveMode]=useState(null);
+  const [resTaskTitle,setResTaskTitle]=useState('');
+  const [resTaskWho,setResTaskWho]=useState('');
+  const [resTaskDue,setResTaskDue]=useState('');
+  const [resText,setResText]=useState('');
+  const [resBusy,setResBusy]=useState(false);
 
   useEffect(()=>{
     sb.from('report_issues').select('*').eq('escalated_to',viewer.id).eq('status','open').order('created_at')
@@ -2922,9 +2985,15 @@ function DailyReportModal({ctx,close}){
     if(wantIssue&&!clean.length){say('Describe at least one issue, or choose "No, nothing to report"');return;}
     setBusy(true);
     /* freeze the same three numbers segs is already showing on screen right now — not a live
-       recompute later, see 20260717000001_daily_reports.sql's header comment. */
+       recompute later, see 20260717000001_daily_reports.sql's header comment. task_snapshot
+       freezes the full ordered task list the same way (not `shown`, which is capped to 8 for
+       on-screen display only — the frozen record keeps every task that was actually on screen
+       via scrolling/"…N more", so a printed report later can show all of it). */
+    const taskSnapshot=ordered.map(t=>({title:t.t,assignee:(byShort(t.who)||{n:t.who}).n,
+      department:(byShort(t.who)||{}).dept||'',due:t.date,
+      status:t.status==='done'?'done':(isOverdue(t)?'overdue':'pending')}));
     const {data:dr,error:drErr}=await sb.from('daily_reports').insert({created_by:viewer.id,report_date:iso(TODAY),
-      completed_count:segs[0].v,overdue_count:segs[1].v,pending_count:segs[2].v}).select().single();
+      completed_count:segs[0].v,overdue_count:segs[1].v,pending_count:segs[2].v,task_snapshot:taskSnapshot}).select().single();
     if(drErr){console.error(drErr);say('Could not send report — try again');setBusy(false);return;}
     for(const r of clean){
       const {error}=await sb.from('report_issues').insert({created_by:viewer.id,daily_report_id:dr.id,
@@ -2944,11 +3013,38 @@ function DailyReportModal({ctx,close}){
     setInbox(inbox.filter(x=>x.id!==row.id));
     say('Escalated to '+bossLabelOf(viewer.boss));
   }
-  async function resolve(row){
+  // Two real resolution paths (see 20260717000002_report_issue_resolution.sql): issue a task,
+  // reusing the exact same tasks-insert path QuickCapture/saveTask already use, or describe how
+  // it was resolved as free text. Either way the row ends up resolved with a human-readable
+  // resolution_note — auto-generated for the task path, verbatim for the text path.
+  async function resolveWithTask(row){
     if(previewing){say("You're previewing — switch back to resolve for real");return;}
-    const {error}=await sb.from('report_issues').update({status:'resolved'}).eq('id',row.id);
-    if(error){console.error(error);say('Could not resolve — try again');return;}
+    if(!resTaskTitle.trim()){say('Give the task a title');return;}
+    if(!resTaskWho){say('Pick who should do it');return;}
+    setResBusy(true);
+    const who=byShort(resTaskWho);
+    const nt={t:resTaskTitle.trim(),who:resTaskWho,type:'work',
+      bucket:(who&&LABEL_TO_BUCKET[who.dept])||'administration',prio:'med',
+      date:resTaskDue||iso(TODAY),status:'open',note:'Raised while resolving: “'+row.issue+'”',
+      selfAssigned:resTaskWho===viewer.s,instructedBy:resTaskWho===viewer.s?null:viewer.n};
+    try{await saveTask(nt);}
+    catch(err){console.error(err);say('Could not create task — try again');setResBusy(false);return;}
+    const {error}=await sb.from('report_issues').update({status:'resolved',
+      resolution_note:'Converted to task: '+nt.t,resolved_task_id:nt.id}).eq('id',row.id);
+    if(error){console.error(error);say('Task created but could not mark resolved — try again');setResBusy(false);return;}
+    tasks.unshift(nt);ctx.R();
     setInbox(inbox.filter(x=>x.id!==row.id));
+    setResolveId(null);setResolveMode(null);setResBusy(false);
+    say('Task created and issue resolved');
+  }
+  async function resolveWithNote(row){
+    if(previewing){say("You're previewing — switch back to resolve for real");return;}
+    if(!resText.trim()){say('Describe how it was resolved');return;}
+    setResBusy(true);
+    const {error}=await sb.from('report_issues').update({status:'resolved',resolution_note:resText.trim()}).eq('id',row.id);
+    if(error){console.error(error);say('Could not resolve — try again');setResBusy(false);return;}
+    setInbox(inbox.filter(x=>x.id!==row.id));
+    setResolveId(null);setResolveMode(null);setResText('');setResBusy(false);
     say('Marked resolved');
   }
 
@@ -2987,7 +3083,9 @@ function DailyReportModal({ctx,close}){
 
         {inbox.length?<div className="panel" style={{marginBottom:16}}>
           <div className="h-row"><h3>Issues/Incidents escalated to you</h3><span className="tag amber">{inbox.length}</span></div>
-          {inbox.map(row=><div className="attn" key={row.id}>
+          {inbox.map(row=>{
+            const isRes=resolveId===row.id;
+            return <div className="attn" key={row.id} style={{flexWrap:'wrap'}}>
             <div className="ring" style={{background:'var(--amber)'}}><I n="tool" c="#fff"/></div>
             <div style={{flex:1,minWidth:0}}>
               <div className="nm">{row.issue} <span className={'chip-s '+(row.priority==='High'?'red':row.priority==='Medium'?'amber':'green')}>{row.priority}</span></div>
@@ -2995,10 +3093,29 @@ function DailyReportModal({ctx,close}){
               {row.files&&row.files.length?<div className="filelist">{row.files.map((x,ix)=><FileChip key={ix} x={x}/>)}</div>:null}
               <div className="act" style={{marginTop:7,marginLeft:0}}>
                 {viewer.bossId?<button className="linkbtn" onClick={()=>escalate(row)}>↑ Escalate to {bossLabelOf(viewer.boss).split(' (')[0]}</button>:null}
-                <button className="linkbtn" onClick={()=>resolve(row)}>✓ Resolve here</button>
+                <button className="linkbtn" onClick={()=>{setResolveId(isRes?null:row.id);setResolveMode(null);setResText('');}}>{isRes?'Cancel':'✓ Resolve here'}</button>
               </div>
+              {isRes&&!resolveMode?<div style={{marginTop:8,display:'flex',gap:8,flexWrap:'wrap'}}>
+                <button className="btn soft" onClick={()=>{setResolveMode('task');setResTaskTitle(row.issue);setResTaskWho('');setResTaskDue(iso(TODAY));}}>Issue a task</button>
+                <button className="btn soft" onClick={()=>{setResolveMode('text');setResText('');}}>Describe how it was resolved</button>
+              </div>:null}
+              {isRes&&resolveMode==='task'?<div style={{marginTop:8,display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                <input className="fsel" style={{flex:'1 1 220px'}} value={resTaskTitle} onChange={e=>setResTaskTitle(e.target.value)} placeholder="Task title"/>
+                <select className="fsel" value={resTaskWho} onChange={e=>setResTaskWho(e.target.value)}>
+                  <option value="">Assign to…</option>
+                  {ctx.scope.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}
+                </select>
+                <input type="date" className="fsel" value={resTaskDue} min={iso(TODAY)} onChange={e=>setResTaskDue(e.target.value)}/>
+                <button className="btn ghost" onClick={()=>setResolveMode(null)}>Back</button>
+                <button className="btn primary" disabled={resBusy} onClick={()=>resolveWithTask(row)}>{resBusy?'Creating…':'Create task & resolve'}</button>
+              </div>:null}
+              {isRes&&resolveMode==='text'?<div style={{marginTop:8,display:'flex',gap:8,flexWrap:'wrap'}}>
+                <input className="fsel" style={{flex:'1 1 220px'}} value={resText} onChange={e=>setResText(e.target.value)} placeholder="How was this resolved?"/>
+                <button className="btn ghost" onClick={()=>setResolveMode(null)}>Back</button>
+                <button className="btn primary" disabled={resBusy} onClick={()=>resolveWithNote(row)}>{resBusy?'Saving…':'Mark resolved'}</button>
+              </div>:null}
             </div>
-          </div>)}
+          </div>;})}
         </div>:null}
 
         <div className="panel" style={{marginBottom:16}}>
