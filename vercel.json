@@ -1,5 +1,8 @@
 {
   "redirects": [
     { "source": "/", "destination": "/2026-07-06-teamflow-console-react.html", "permanent": false }
+  ],
+  "rewrites": [
+    { "source": "/jhps", "destination": "/2026-07-06-teamflow-console-react.html" }
   ]
 }
