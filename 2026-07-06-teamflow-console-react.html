@@ -2754,7 +2754,8 @@ async function printDailyReports(rows,label,viewerName){
     /* same 3-way split/colors as DailyReportModal's own on-screen donut (segs at ~L3051) —
        keeps the printed chart visually consistent with what the submitter actually saw. */
     const pieSegs=[{l:'Completed',v:row.completed_count,c:'#1a7a48'},{l:'Overdue',v:row.overdue_count,c:'#c43a53'},{l:'Open · on track',v:row.pending_count,c:'#dcdad2'}];
-    b+='<div style="display:flex;gap:22px;align-items:center;margin:22px 0 14px">'+donutSVG(pieSegs,108,18)
+    b+='<hr style="border:none;border-top:1px solid #ddd;margin:28px 0 0"/>';
+    b+='<div style="display:flex;gap:22px;align-items:center;margin:24px 0 14px">'+donutSVG(pieSegs,108,18)
       +'<div>'+pieSegs.map(x=>'<div style="font-size:12px;margin:3px 0"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:'+x.c+';margin-right:6px"></span>'+x.l+' <b>'+x.v+'</b></div>').join('')
       +'</div></div>';
     const snap=row.task_snapshot||[];
