@@ -2804,13 +2804,26 @@ function DailyReportsPanel({ctx,fw,fb}){
       .then(({data,error})=>{if(error)console.error(error);setReports(data||[]);});
   },[]);
 
+  /* ctx.scope for Management is deliberately org-wide everywhere else in the app (Management
+     "oversees every department jointly" — see ROLES.mgmt's own comment — there's no per-person
+     subtree to narrow to). Daily Reports is different: with no filter picked, defaulting straight
+     to all 17 people buries a Management viewer's own actual reports (Directors, plus anyone who
+     reports straight to Management) in noise from departments they don't directly own. Narrow the
+     no-filter default to just those people; picking a specific department or person from the
+     existing filters still shows everyone in that department, unchanged. */
+  const mgmtDefault=ctx.role==='mgmt'&&fb==='all'&&fw==='all';
+  const scopeList=mgmtDefault
+    ?STAFF.filter(p=>p.role==='Director'||(byName(p.boss)&&byName(p.boss).role==='Management'))
+    :ctx.scope;
+  const scopeShorts=new Set(scopeList.map(p=>p.s));
+
   const scoped=reports.filter(r=>{const p=byId(r.created_by);
-    return p&&ctx.shorts.includes(p.s)&&inDept(p,fb)&&(fw==='all'||p.s===fw)&&(!fDate||r.report_date===fDate);});
+    return p&&scopeShorts.has(p.s)&&inDept(p,fb)&&(fw==='all'||p.s===fw)&&(!fDate||r.report_date===fDate);});
   const shown=scoped.slice(0,25);
 
   const today=iso(TODAY);
   const submittedToday=new Set(reports.filter(r=>r.report_date===today).map(r=>r.created_by));
-  const missing=ctx.scope.filter(p=>!submittedToday.has(p.id));
+  const missing=scopeList.filter(p=>!submittedToday.has(p.id));
 
   async function sendEscalation(row){
     if(ctx.previewing){ctx.say("You're previewing — switch back to escalate for real");return;}
@@ -2828,7 +2841,7 @@ function DailyReportsPanel({ctx,fw,fb}){
   return <>
     <div className="panel">
       <div className="h-row"><h3><I n="spark" c="var(--accent-ink)"/>Today's submissions</h3>
-        <span className={'tag '+(missing.length?'amber':'green')}>{ctx.scope.length-missing.length} of {ctx.scope.length} submitted</span></div>
+        <span className={'tag '+(missing.length?'amber':'green')}>{scopeList.length-missing.length} of {scopeList.length} submitted</span></div>
       {missing.length?<div className="rs" style={{padding:'2px 0 4px'}}>Still waiting on: {missing.map(p=>p.n.split(' ')[0]).join(', ')}</div>
         :<Empty t="Everyone has submitted today" s="No one in your scope is missing today's daily report."/>}
     </div>

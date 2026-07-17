@@ -1144,7 +1144,17 @@ function DailyReportsSection({ctx}){
       .then(({data,error})=>{if(error)console.error(error);setReports(data||[]);});
   },[]);
 
-  const scopePeople=ctx.scope.map(s=>findPerson(s)).filter(Boolean);
+  /* ctx.scope for Management is deliberately org-wide everywhere else (Management "oversees every
+     department jointly" — see ROLES.mgmt — there's no per-person subtree to narrow to). Daily
+     Reports is different: defaulting to all 17 people buries a Management viewer's own actual
+     reports (Directors, plus anyone reporting straight to Management) in org-wide noise. Unlike
+     console, mobile has no department/staff filter on this panel to opt back into the full list —
+     the existing "see the console for the full list" message below already sends mgmt users there
+     when they need it, so narrowing here unconditionally (not just on some filter state) is the
+     right default rather than a half-measure. */
+  const scopePeople=ctx.role==='mgmt'
+    ?ALL_PEOPLE.filter(p=>p.role==='Director'||(findPerson(p.boss)&&findPerson(p.boss).role==='Management'))
+    :ctx.scope.map(s=>findPerson(s)).filter(Boolean);
   const scopeIds=new Set(scopePeople.map(p=>p.id));
   const scoped=reports.filter(r=>scopeIds.has(r.created_by)&&(!fDate||r.report_date===fDate));
   const shown=scoped.slice(0,15);
