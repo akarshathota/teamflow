@@ -2143,13 +2143,14 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
     const candidateCount=STAFF.filter(p=>p.role!=='Administrator'&&p.id!==target.id).length;
     const canMerge=target.role==='Team Lead'||target.role==='Team Member';
     const mergeCandidates=canMerge?STAFF.filter(p=>p.role===target.role&&p.dept===target.dept&&p.id!==target.id):[];
-    return <ModalShell close={close} err={err} title={canMerge?'Replace, promote, or merge?':'Replace or promote?'}>
+    return <ModalShell close={close} err={err} title={canMerge?'Replace, promote, merge, or hand over?':'Replace, promote, or hand over?'}>
       <div className="org-info-box">Exported {(TIER_LABEL[target.role]||target.role).toLowerCase()} data for "{target.n}" as a CSV — one row per pending task, with status, due date, attached files, and full activity log.
         {openCount?<> They have <b>{openCount} pending task{openCount===1?'':'s'}</b> — reassign those separately if they don't move with whoever fills this position.</>:null}</div>
       <div className="org-action-grid">
         <button onClick={()=>setStep('remove-replace-name')}>Replace<small>Bring in someone new</small></button>
         <button disabled={!candidateCount} onClick={()=>setStep('remove-promote-pick')}>Promote<small>{candidateCount?'Anyone in the org':'No one to promote'}</small></button>
         {canMerge?<button disabled={!mergeCandidates.length} onClick={()=>setStep('remove-merge-pick')}>Merge<small>{mergeCandidates.length?'Fold into another '+TIER_LABEL[target.role]:'No other '+TIER_LABEL[target.role]+' in '+target.dept}</small></button>:null}
+        <button disabled={!candidateCount} onClick={()=>setStep('remove-handover-pick')}>Hand over<small>{candidateCount?'Reassign tasks & reports, leave role vacant':'No one to hand over to'}</small></button>
       </div>
       <div className="qc-actions"><button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button></div>
     </ModalShell>;
@@ -2185,6 +2186,39 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
             setBusy(false);close();
           }catch(e){setBusy(false);setErr(e.message);}
         }}>{busy?'Merging…':'Confirm merge'}</button>
+      </div>
+    </ModalShell>;
+  }
+  if(step==='remove-handover-pick'){
+    const {target}=oaCtx;
+    const candidates=STAFF.filter(p=>p.role!=='Administrator'&&p.id!==target.id);
+    const absorber=byId(f.handoverId||candidates[0].id);
+    return <ModalShell close={close} err={err} title={'Hand over '+target.n+"'s work to…"}
+      sub={"Everyone reporting to "+target.n+" and every task assigned to them moves to whoever you pick, and "+target.n+"'s account is removed. The "+TIER_LABEL[target.role]+" position itself stays vacant."}>
+      <div className="mf"><label>Hand over to</label>
+        <select value={f.handoverId||candidates[0].id} onChange={e=>setF({...f,handoverId:e.target.value})}>
+          {candidates.map(c=><option key={c.id} value={c.id}>{personLabel(c)}</option>)}
+        </select></div>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={()=>setStep('remove-action')}>Back</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+          setBusy(true);setErr('');
+          try{
+            const reports=directReports(target.n);
+            for(const r of reports){await updateStaffFields(r.id,{boss_id:absorber.id});const local=byId(r.id);if(local){local.boss=absorber.n;local.bossId=absorber.id;}}
+            const {error:taErr}=await sb.from('task_assignees').update({staff_id:absorber.id}).eq('staff_id',target.id);
+            if(taErr)throw taErr;
+            let movedTasks=0;
+            tasks.forEach(t=>{let changed=false;
+              if(t.who===target.s){t.who=absorber.s;changed=true;}
+              if(t.coWho&&t.coWho.includes(target.s)){t.coWho=t.coWho.map(s=>s===target.s?absorber.s:s);changed=true;}
+              if(changed)movedTasks++;});
+            await deleteStaffAccount(target.id);
+            STAFF.splice(STAFF.indexOf(target),1);
+            ctx.R();say("Handed "+target.n+"'s work to "+absorber.n+(reports.length?' — '+reports.length+' report'+(reports.length===1?'':'s')+' reassigned':'')+(movedTasks?' · '+movedTasks+' task'+(movedTasks===1?'':'s')+' moved':''));
+            setBusy(false);close();
+          }catch(e){setBusy(false);setErr(e.message);}
+        }}>{busy?'Handing over…':'Confirm hand over'}</button>
       </div>
     </ModalShell>;
   }
