@@ -1292,7 +1292,7 @@ function Dashboard({ctx,open,over,today,done}){
             </select></div>
           <div className="scrollbox">
             {wRows.map(o=>{const c=o.l>=3?'var(--red)':o.l===2?'var(--amber)':'var(--green)';
-              return <div className="barrow" key={o.p.s}><div className="k">{o.p.s}</div>
+              return <div className="barrow" key={o.p.s}><div className="k">{o.p.n}</div>
                 <div className="track"><i style={{width:(o.l?Math.max(4,o.l/wMax*100):0)+'%',background:c}}/></div><div className="v">{o.l}</div></div>;})}
           </div>
         </div>
