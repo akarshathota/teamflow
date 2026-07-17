@@ -2785,7 +2785,7 @@ function ReportsView({ctx}){
   const workers=ctx.scope.filter(p=>(fw==='all'||p.s===fw)&&inDept(p,fb));
   const load=workloadMap();
   const byEmp=fw==='all'
-    ?workers.map(p=>{const tt=mine.filter(t=>hasWho(t,p.s));return [p.s,tt.length?Math.round(tt.filter(t=>t.status==='done').length/tt.length*100):0];})
+    ?workers.map(p=>{const tt=mine.filter(t=>hasWho(t,p.s));return [p.n,tt.length?Math.round(tt.filter(t=>t.status==='done').length/tt.length*100):0];})
     :Object.keys(BUCKETS).map(k=>({k,tt:mine.filter(t=>t.bucket===k)})).filter(o=>o.tt.length)
       .map(o=>[BUCKETS[o.k],Math.round(o.tt.filter(t=>t.status==='done').length/o.tt.length*100)]);
   const KP=[['Total tasks',mine.length,'var(--accent)','var(--accent-soft)','checkc'],
