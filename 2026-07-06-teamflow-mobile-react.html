@@ -1134,6 +1134,8 @@ function csvDownload(name,rows){
 function DailyReportsSection({ctx}){
   const [reports,setReports]=useState([]);
   const [fDate,setFDate]=useState('');
+  const [fb,setFb]=useState('all');
+  const [fw,setFw]=useState('all');
   const [escId,setEscId]=useState(null);
   const [escText,setEscText]=useState('');
   const [escPrio,setEscPrio]=useState('Medium');
@@ -1146,21 +1148,30 @@ function DailyReportsSection({ctx}){
 
   /* ctx.scope for Management is deliberately org-wide everywhere else (Management "oversees every
      department jointly" — see ROLES.mgmt — there's no per-person subtree to narrow to). Daily
-     Reports is different: defaulting to all 17 people buries a Management viewer's own actual
-     reports (Directors, plus anyone reporting straight to Management) in org-wide noise. Unlike
-     console, mobile has no department/staff filter on this panel to opt back into the full list —
-     the existing "see the console for the full list" message below already sends mgmt users there
-     when they need it, so narrowing here unconditionally (not just on some filter state) is the
-     right default rather than a half-measure. */
-  const scopePeople=ctx.role==='mgmt'
+     Reports is different: with no filter picked, defaulting straight to all 17 people buries a
+     Management viewer's own actual reports (Directors, plus anyone reporting straight to
+     Management) in org-wide noise. Mirrors console's DailyReportsPanel exactly: fullScope (the
+     TRUE, un-narrowed ctx.scope) is what the department/staff dropdowns are always built from —
+     picking a department has to be able to reach every real department, not just whatever's inside
+     the narrowed default — while baseScope only substitutes the narrower Directors-only set when
+     no filter is active. Getting this backwards (building the dropdown options from the already-
+     narrowed set) was a real bug caught in live testing: the department picker only ever offered
+     "Management" for a Management viewer, since that's the only department the narrowed default
+     itself touches. */
+  const fullScope=ctx.scope.map(s=>findPerson(s)).filter(Boolean);
+  const mgmtDefault=ctx.role==='mgmt'&&fb==='all'&&fw==='all';
+  const baseScope=mgmtDefault
     ?ALL_PEOPLE.filter(p=>p.role==='Director'||(findPerson(p.boss)&&findPerson(p.boss).role==='Management'))
-    :ctx.scope.map(s=>findPerson(s)).filter(Boolean);
-  const scopeIds=new Set(scopePeople.map(p=>p.id));
+    :fullScope;
+  const deptKeys=Object.keys(BUCKETS).filter(k=>fullScope.some(p=>p.department===BUCKETS[k]));
+  const empOpts=fullScope.filter(p=>fb==='all'||p.department===BUCKETS[fb]);
+  const filteredScope=baseScope.filter(p=>(fb==='all'||p.department===BUCKETS[fb])&&(fw==='all'||p.s===fw));
+  const scopeIds=new Set(filteredScope.map(p=>p.id));
   const scoped=reports.filter(r=>scopeIds.has(r.created_by)&&(!fDate||r.report_date===fDate));
   const shown=scoped.slice(0,15);
   const today=iso(TODAY);
   const submittedToday=new Set(reports.filter(r=>r.report_date===today).map(r=>r.created_by));
-  const missing=scopePeople.filter(p=>!submittedToday.has(p.id));
+  const missing=filteredScope.filter(p=>!submittedToday.has(p.id));
 
   async function sendEscalation(row){
     if(ctx.previewing){ctx.say("You're previewing — switch back to escalate for real");return;}
@@ -1177,9 +1188,17 @@ function DailyReportsSection({ctx}){
 
   return <>
     <div className="sec" style={{marginTop:16}}>Today's daily reports</div>
+    {deptKeys.length?<div style={{display:'flex',gap:8,marginBottom:8}}>
+      <select className="selsel" style={{flex:1}} value={fb} onChange={e=>{setFb(e.target.value);setFw('all');}}>
+        <option value="all">All departments</option>
+        {deptKeys.map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}</select>
+      <select className="selsel" style={{flex:1}} value={fw} onChange={e=>setFw(e.target.value)}>
+        <option value="all">{fb==='all'?'All staff':'All in '+BUCKETS[fb]}</option>
+        {empOpts.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}</select>
+    </div>:null}
     <div className="attn" style={{flexWrap:'wrap'}}>
       <div style={{flex:1,minWidth:0}}>
-        <div className="nm">{scopePeople.length-missing.length} of {scopePeople.length} submitted</div>
+        <div className="nm">{filteredScope.length-missing.length} of {filteredScope.length} submitted</div>
         {missing.length?<div className="rs">Still waiting on: {missing.map(p=>p.n.split(' ')[0]).join(', ')}</div>
           :<div className="rs">Everyone in your team has submitted today.</div>}
       </div>
