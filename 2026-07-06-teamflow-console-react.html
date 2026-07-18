@@ -2890,7 +2890,7 @@ function ReportsView({ctx}){
    this is a whole tab of the Reports page, not a small popover. */
 function DailyReportsPanel({ctx,fw,fb}){
   const [reports,setReports]=useState([]);
-  const [fDate,setFDate]=useState('');
+  const [fDate,setFDate]=useState(iso(TODAY)); // default to today's reports; Clear widens to all dates
   const [showAll,setShowAll]=useState(false);
   const [escId,setEscId]=useState(null);
   const [escText,setEscText]=useState('');
@@ -2973,8 +2973,10 @@ function DailyReportsPanel({ctx,fw,fb}){
             </div>:null}
           </div>
           <div className="act">
-            <button className="linkbtn" onClick={()=>printDailyReports([{row,p}],(p?p.n:'Daily')+' — '+fmtDate(row.report_date),ctx.viewer.n).catch(console.error)}>Print</button>
-            <button className="linkbtn" onClick={()=>{setEscId(isEsc?null:row.id);setEscText('');setEscPrio('Medium');}}>{isEsc?'Cancel':'Escalate'}</button>
+            {/* one flow serves both: the browser print dialog's destination picker is where
+               "Save as PDF" lives, and document.title already names the file. */}
+            <button className="linkbtn" onClick={()=>printDailyReports([{row,p}],(p?p.n:'Daily')+' — '+fmtDate(row.report_date),ctx.viewer.n).catch(console.error)}>Print / PDF</button>
+            {ctx.viewer.bossId?<button className="linkbtn" onClick={()=>{setEscId(isEsc?null:row.id);setEscText('');setEscPrio('Medium');}}>{isEsc?'Cancel':'Escalate'}</button>:null}
           </div>
         </div>;
       }):<Empty t={fDate?'No reports for that date':'No daily reports yet'} s={fDate?'Nobody in your scope submitted a report on '+fmtDate(fDate)+'.':'Submitted reports from your team will show up here.'}/>}

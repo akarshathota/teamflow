@@ -1140,7 +1140,7 @@ function csvDownload(name,rows){
    download, mirroring the .ics calendar export's existing saveBlob pattern instead of inventing one. */
 function DailyReportsSection({ctx}){
   const [reports,setReports]=useState([]);
-  const [fDate,setFDate]=useState('');
+  const [fDate,setFDate]=useState(iso(TODAY)); // default to today's reports; Clear widens to all dates
   const [fb,setFb]=useState('all');
   const [fw,setFw]=useState('all');
   const [escId,setEscId]=useState(null);
@@ -1231,9 +1231,9 @@ function DailyReportsSection({ctx}){
                 <button className="chipbtn" style={{flex:1,justifyContent:'center'}} onClick={()=>{setEscId(null);setEscText('');}}>Cancel</button>
                 <button className="send" style={{flex:1,margin:0,padding:'9px'}} disabled={escBusy} onClick={()=>sendEscalation(row)}>{escBusy?'Sending…':'Send'}</button>
               </div>
-            </div>:<div style={{marginTop:6}}>
+            </div>:ctx.r.bossId?<div style={{marginTop:6}}>
               <button className="chipbtn" onClick={()=>{setEscId(row.id);setEscText('');setEscPrio('Medium');}}>↑ Escalate</button>
-            </div>}
+            </div>:null}
           </div>
         </div>;
       })}
