@@ -296,7 +296,12 @@ async function downloadDailyReportPdf(rows,label,viewerName){
   const issuesByReport=await fetchIssuesByReport(rows);
   const doc=new window.jspdf.jsPDF({unit:'pt',format:'a4'});
   let y=48;
-  doc.setFont('helvetica','bold');doc.setFontSize(19);doc.setTextColor(27,30,33);doc.text('TeamFlow — '+label,40,y);y+=18;
+  /* ORG_NAME is each app's script-global (loaded from org_settings in loadAll) — headline of the
+     document in the accent ink, with the TeamFlow line demoted beneath it. */
+  if(typeof ORG_NAME!=='undefined'&&ORG_NAME){
+    doc.setFont('helvetica','bold');doc.setFontSize(24);doc.setTextColor(10,92,84);doc.text(ORG_NAME,40,y);y+=25;
+  }
+  doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(27,30,33);doc.text('TeamFlow — '+label,40,y);y+=16;
   doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(85,85,85);
   doc.text('Prepared for '+viewerName+' · '+new Date().toDateString()+' · '+rows.length+' report'+(rows.length!==1?'s':''),40,y);y+=26;
   rows.forEach(({row,p})=>{
@@ -324,7 +329,12 @@ async function downloadDailyReportPdf(rows,label,viewerName){
       doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text('Tasks this period',40,y);
       doc.autoTable({startY:y+6,margin:{left:40,right:40},styles:{fontSize:8.5},headStyles:{fillColor:[14,122,111]},
         head:[['Task','Assignee','Department','Due','Status']],
-        body:snap.map(t=>[t.title,t.assignee,t.department||'',pdfDate(t.due),snapStatusLabel(t.status)])});
+        /* "Nd late" is relative to the report's own date, not today — the snapshot froze what
+           was true at submit time, so an old report keeps saying how late things were THEN. */
+        body:snap.map(t=>{let st=snapStatusLabel(t.status);
+          if(t.status==='overdue'&&t.due){const d=Math.round((new Date(row.report_date+'T00:00:00')-new Date(t.due+'T00:00:00'))/86400000);
+            if(d>0)st='Overdue · '+d+'d late';}
+          return [t.title,t.assignee,t.department||'',pdfDate(t.due),st];})});
       y=doc.lastAutoTable.finalY+24;
     }
   });
