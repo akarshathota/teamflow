@@ -404,9 +404,9 @@ const PRIOS={high:{l:"High",c:"var(--red)"},med:{l:"Medium",c:"var(--amber)"},lo
 const AV_COLORS=['#0e7a6f','#39638f','#1a7a48','#b06e12','#c43a53','#0e7a8f','#a34d78','#5b5ea6'];
 /* display labels for the org-chart view only — the DB role strings themselves (and every other
    view's rendering of them) stay exactly as they are; this is presentation-layer relabeling so the
-   chart reads as the Admin Control -> Management -> Sr. Manager -> Jr Manager -> Team Lead -> Staff
+   chart reads as the Admin -> Management -> Sr. Manager -> Jr Manager -> Team Lead -> Staff
    tiers everyone agreed on, without a schema/UI-wide rename of "Manager"/"Team Member"/"Teacher". */
-const TIER_LABEL={'Administrator':'Admin Control','Management':'Management','Director':'Director','Manager':'Sr. Manager','Team Lead':'Team Lead','Team Member':'Jr Manager','Teacher':'Staff'};
+const TIER_LABEL={'Administrator':'Admin','Management':'Management','Director':'Director','Manager':'Sr. Manager','Team Lead':'Team Lead','Team Member':'Jr Manager','Teacher':'Staff'};
 
 let STAFF=[];
 let tasks=[];
@@ -1875,7 +1875,7 @@ function OrgNode({person,onNodeClick,canM,chainSiblings}){
 
 function OrgChart({onNodeClick,canM}){
   const admin=STAFF.find(p=>p.role==='Administrator');
-  if(!admin)return <Empty t="No Admin Control account yet" s=""/>;
+  if(!admin)return <Empty t="No Admin account yet" s=""/>;
   const mgmt=mgmtMembers();
   const directors=STAFF.filter(p=>p.role==='Director');
   /* orgDepts() is every Sr. Manager regardless of who they report to. OrgNode is a generic
@@ -1886,7 +1886,7 @@ function OrgChart({onNodeClick,canM}){
   const directorNames=new Set(directors.map(d=>d.n));
   const directDepts=orgDepts().filter(d=>!directorNames.has(d.boss));
   return <ul className="orgtree"><li>
-    <div className="onode-wrap"><div className="onode admin"><div className="orole">Admin Control</div><div className="oname">{admin.n}</div></div></div>
+    <div className="onode-wrap"><div className="onode admin"><div className="orole">Admin</div><div className="oname">{admin.n}</div></div></div>
     {mgmt.length?<ul><li>
       <div className="onode-wrap"><div className="onode mgmt">
         <div className="orole">Management</div>
