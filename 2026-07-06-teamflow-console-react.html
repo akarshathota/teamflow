@@ -544,7 +544,7 @@ async function deleteStaffAccount(staffId){
    map still said "Anita Desai"/"Vikram Rao" long after the real org moved to Chandu/Imran, so every
    Preview As selection resolved to a nonexistent person and silently showed zero tasks). */
 const roleRep=k=>STAFF.find(p=>DB_ROLE_TO_KEY[p.role]===k);
-const BOSS_LABEL={"Akarsh":"Akarsh (Admin)","Rajesh Menon":"Rajesh (Management)","Anita Desai":"Anita (Manager)","Vikram Rao":"Vikram (Team Member)"};
+const BOSS_LABEL={"Rajesh Menon":"Rajesh (Management)","Anita Desai":"Anita (Manager)","Vikram Rao":"Vikram (Team Member)"};
 /* BOSS_LABEL only ever covers the 4 original demo names — falls back to the real name for anyone
    else (every real boss in the org today, Director or otherwise). Module-scope so every caller
    (TasksView, QuickCapture) shares one fallback instead of each reimplementing it — QuickCapture's
