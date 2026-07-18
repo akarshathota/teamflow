@@ -238,6 +238,7 @@ const JOB_TITLE={Hari:"Repairs & electrical",Suresh:"Plumbing & carpentry",Latha
   Arjun:"General duties",Deepa:"Coordinator",Vikram:"Maintenance head"};
 
 let MEMBERS=[];
+let ORG_NAME='';
 const ALL_STAFF=[];
 let tasks=[];
 let pendingReqs=[];
@@ -250,10 +251,10 @@ const peopleDemo=[
   {n:"Arjun Menon", s:"In · 8:50", c:"var(--green)"},
 ];
 const ROLES={
-  admin:{name:"Admin",org:"Greenwood School · Admin",av:"A",team:ALL_STAFF,self:"Admin",
+  admin:{name:"Admin",org:"Admin",av:"A",team:ALL_STAFF,self:"Admin",
     tabs:["home","alltasks","calendar","insights","notices","more"],admin:true,billing:true,canPost:true,
     brief:"Across all 4 teams: 2 tasks at risk today and 1 person is overloaded. You have full visibility and control."},
-  mgmt:{name:"Rajesh Menon",org:"Greenwood School · Management",av:"R",team:ALL_STAFF,self:"Rajesh",
+  mgmt:{name:"Rajesh Menon",org:"Management",av:"R",team:ALL_STAFF,self:"Rajesh",
     tabs:["home","alltasks","calendar","insights","notices","more"],admin:true,billing:false,canPost:true,
     brief:"Org-wide view: 2 tasks at risk and 1 overloaded person. You can manage people and see every report."},
   /* 'Director' (DB_ROLE_TO_KEY, shared.js) sits between mgmt and srm — oversees several Sr.
@@ -381,15 +382,17 @@ function rowToMobileTask(row,assignRows,byId,logRows){
   return t;
 }
 async function loadAll(){
-  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},{data:noticeRows},notifRows]=await Promise.all([
+  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},{data:noticeRows},notifRows,{data:orgRow}]=await Promise.all([
     sb.from('staff').select('*'),
     sb.from('tasks').select('*'),
     sb.from('task_assignees').select('*'),
     sb.from('task_log').select('*').order('created_at'),
     sb.from('requests').select('*').order('created_at'),
     sb.from('notices').select('*').order('created_at',{ascending:false}),
-    loadNotifs()
+    loadNotifs(),
+    sb.from('org_settings').select('name').eq('id',true).maybeSingle()
   ]);
+  if(orgRow&&orgRow.name)ORG_NAME=orgRow.name;
   const byId=Object.fromEntries((staffRows||[]).map(r=>[r.id,{name:r.name,short:r.short_name,initials:r.initials}]));
   ALL_PEOPLE.length=0;ALL_PEOPLE.push(...(staffRows||[]).map(r=>({n:r.name,s:r.short_name,id:r.id,authId:r.auth_user_id,role:r.role,department:r.department,
     boss:r.boss_id&&byId[r.boss_id]?byId[r.boss_id].short:null,bossId:r.boss_id||null})));
@@ -755,10 +758,10 @@ function App(){
     self:person.s,
     id:person.id,bossId:person.bossId,boss:person.boss,
     av:person.n.split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase(),
-    // admin/mgmt are org-wide, not tied to a department, so their org string stays the fixed
-    // "Greenwood School · <tier>" text — everyone else's real department replaces the old
-    // hardcoded one (e.g. "Manager · Academic + Admin" regardless of who was previewed).
-    org:(role==='admin'||role==='mgmt')?ROLES[role].org:person.role+' · '+(person.department||''),
+    // admin/mgmt are org-wide, not tied to a department, so their org string is the live
+    // organisation name (org_settings, admin-editable in console) + tier — everyone else's
+    // real department replaces the old hardcoded one.
+    org:(role==='admin'||role==='mgmt')?ORG_NAME+' · '+ROLES[role].org:person.role+' · '+(person.department||''),
     team:role==='worker'?[person.s]
       :(role==='srm'||role==='dir'||role==='jrm'||role==='lead')?[person.s].concat(descendantsM(person.s).map(p=>p.s))
       :ROLES[role].team};
@@ -1276,7 +1279,7 @@ function Notices({ctx}){
     {ctx.r.canPost?<>
       <div className="sec">Post a notice</div>
       <div className="task" style={{padding:16}}>
-        <div style={{fontSize:12,color:'var(--muted)',marginBottom:8}}>{TODAY.toLocaleDateString('en',{day:'numeric',month:'short',year:'numeric'})} · Greenwood School</div>
+        <div style={{fontSize:12,color:'var(--muted)',marginBottom:8}}>{TODAY.toLocaleDateString('en',{day:'numeric',month:'short',year:'numeric'})} · {ORG_NAME}</div>
         <input value={t} onChange={e=>setT(e.target.value)} placeholder="Title — e.g. Holiday on Friday"
           style={{width:'100%',border:'none',borderBottom:'1.5px solid var(--line)',fontSize:16,fontWeight:600,padding:'6px 0',outline:'none',fontFamily:'inherit',color:'var(--ink)',background:'none'}}/>
         <textarea value={b} onChange={e=>setB(e.target.value)} placeholder="Write the message…" rows={3}

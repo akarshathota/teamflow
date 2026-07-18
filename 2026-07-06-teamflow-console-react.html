@@ -410,6 +410,7 @@ const TIER_LABEL={'Administrator':'Admin','Management':'Management','Director':'
 
 let STAFF=[];
 let tasks=[];
+let ORG_NAME='';
 let requests=[];
 let notifs=[];
 let lastCronRun=null; // most recent cron_runs row — "is check-due-tasks actually running?" (RLS: admin/mgmt only, empty for everyone else)
@@ -453,7 +454,7 @@ function rowToRequest(row){
 async function loadAll(){
   /* cron_runs/admin_activity_log are both RLS-gated to admin/mgmt (see their migrations) — for
      everyone else these just come back empty, same as any other out-of-scope query in this app. */
-  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},notifRows,{data:cronRows},{data:activityRows}]=await Promise.all([
+  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},notifRows,{data:cronRows},{data:activityRows},{data:orgRow}]=await Promise.all([
     sb.from('staff').select('*'),
     sb.from('tasks').select('*'),
     sb.from('task_assignees').select('*'),
@@ -461,8 +462,10 @@ async function loadAll(){
     sb.from('requests').select('*').order('created_at'),
     loadNotifs(),
     sb.from('cron_runs').select('*').order('ran_at',{ascending:false}).limit(1),
-    sb.from('admin_activity_log').select('*').order('created_at',{ascending:false}).limit(30)
+    sb.from('admin_activity_log').select('*').order('created_at',{ascending:false}).limit(30),
+    sb.from('org_settings').select('name').eq('id',true).maybeSingle()
   ]);
+  if(orgRow&&orgRow.name)ORG_NAME=orgRow.name;
   STAFF.length=0;STAFF.push(...rowsToStaff(staffRows||[]));
   const byId=Object.fromEntries(STAFF.map(p=>[p.id,p]));
   byId2Name=id=>byId[id]?byId[id].n:"";
@@ -816,6 +819,8 @@ function App(){
   const [modal,setModal]=useState(false);
   const [dailyReport,setDailyReport]=useState(false);
   const [resetTarget,setResetTarget]=useState(null); // staff object being password-reset, or null
+  const [orgEdit,setOrgEdit]=useState(false);
+  const [orgDraft,setOrgDraft]=useState('');
   const searchRef=useRef();
   const [loaded,setLoaded]=useState(false);
   const [session,setSession]=useState(undefined); // undefined=checking · null=signed out · object=signed in
@@ -1026,9 +1031,25 @@ function App(){
     setDrawerIdx,setModal,setDailyReport,setResetTarget,exportCSV,printReport,qReqs,qExts,qCompletions,attentionList,
     notifs,openNotif,markAllNotifsSeen,lastCronRun,activityLog};
 
+  async function saveOrgName(){
+    const v=orgDraft.trim();
+    if(!v){say('Give the organisation a name');return;}
+    const {error}=await sb.from('org_settings').update({name:v}).eq('id',true);
+    if(error){console.error(error);say('Could not save — try again');return;}
+    ORG_NAME=v;setOrgEdit(false);say('Organisation name updated');
+  }
   return <div className="app">
     <aside className="sidebar">
-      <div className="brand"><span className="logo"><I n="logo"/></span><span className="bt">TeamFlow</span></div>
+      <div className="brand" style={{paddingBottom:2}}><span className="logo"><I n="logo"/></span><span className="bt">TeamFlow</span></div>
+      {orgEdit?<div style={{margin:'0 0 14px',padding:'0 10px',display:'flex',gap:6}}>
+        <input className="fsel" style={{flex:1,minWidth:0}} value={orgDraft} onChange={e=>setOrgDraft(e.target.value)} autoFocus
+          onKeyDown={e=>{if(e.key==='Enter')saveOrgName();if(e.key==='Escape')setOrgEdit(false);}}/>
+        <button className="btn primary" style={{padding:'6px 10px'}} onClick={saveOrgName}>✓</button>
+      </div>
+      :<div style={{margin:'0 0 14px',padding:'0 10px 0 54px',fontSize:12.5,fontWeight:700,color:'var(--muted)',letterSpacing:.4}}>{ORG_NAME}
+        {myRoleKey==='admin'&&role==='admin'?<button className="linkbtn" style={{marginLeft:6,fontSize:12}} title="Rename organisation"
+          onClick={()=>{setOrgDraft(ORG_NAME);setOrgEdit(true);}}>✎</button>:null}
+      </div>}
       {[['dashboard','grid','Dashboard','1'],['tasks','checkc','Tasks','2'],['calendar','cal','Calendar','3'],['people','users','People & roles','4'],['reports','chart','Reports','5']].map(([v,ic,l,k])=>
         <button key={v} className={'navitem'+(view===v?' on':'')} onClick={()=>setView(v)}>
           <I n={ic}/><span className="lb">{l}</span><span className="kbd">{k}</span></button>)}
