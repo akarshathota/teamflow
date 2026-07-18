@@ -1046,9 +1046,9 @@ function App(){
           onKeyDown={e=>{if(e.key==='Enter')saveOrgName();if(e.key==='Escape')setOrgEdit(false);}}/>
         <button className="btn primary" style={{padding:'6px 10px'}} onClick={saveOrgName}>✓</button>
       </div>
-      :<div style={{margin:'0 0 14px',padding:'0 10px 0 54px',fontSize:12.5,fontWeight:700,color:'var(--muted)',letterSpacing:.4}}>{ORG_NAME}
-        {myRoleKey==='admin'&&role==='admin'?<button className="linkbtn" style={{marginLeft:6,fontSize:12}} title="Rename organisation"
-          onClick={()=>{setOrgDraft(ORG_NAME);setOrgEdit(true);}}>✎</button>:null}
+      :<div style={{margin:'0 0 14px',padding:'0 10px 0 54px',fontFamily:"'Bricolage Grotesque','IBM Plex Sans',sans-serif",fontSize:15.5,fontWeight:800,color:'var(--accent-ink)',letterSpacing:.3}}>{ORG_NAME}
+        {myRoleKey==='admin'&&role==='admin'?<span className="org-edit-dept" title="Rename organisation" role="button"
+          onClick={()=>{setOrgDraft(ORG_NAME);setOrgEdit(true);}}>✎</span>:null}
       </div>}
       {[['dashboard','grid','Dashboard','1'],['tasks','checkc','Tasks','2'],['calendar','cal','Calendar','3'],['people','users','People & roles','4'],['reports','chart','Reports','5']].map(([v,ic,l,k])=>
         <button key={v} className={'navitem'+(view===v?' on':'')} onClick={()=>setView(v)}>
