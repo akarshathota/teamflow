@@ -2705,6 +2705,9 @@ function DeptMismatchModal({ctx,close}){
    keep live" spirit as the rest of this feature. Both are async now purely for that fetch; callers
    still fire-and-forget them exactly like every other mutation in this file. */
 function snapStatusLabel(s){return s==='done'?'Completed':s==='overdue'?'Overdue':'Open · on track';}
+/* single source for the Daily Report 3-way split — DailyReportModal's on-screen donut and
+   printDailyReports' printed pie both build from this, so they can't drift apart. */
+const DR_SEGS=[{l:'Completed',c:'#1a7a48'},{l:'Overdue',c:'#c43a53'},{l:'Open · on track',c:'#dcdad2'}];
 function issueResolutionText(x){
   if(x.status!=='resolved')return '—';
   if(x.resolved_task_id){const t=tasks.find(tk=>tk.id===x.resolved_task_id);return 'Task: '+(t?t.t:'(task)')+(x.resolution_note?' — '+x.resolution_note:'');}
@@ -2752,9 +2755,7 @@ async function printDailyReports(rows,label,viewerName){
       issues.forEach(x=>{b+='<tr style="border-bottom:1px solid #eee"><td style="padding:5px">'+x.issue+'</td><td style="padding:5px">'+x.priority+'</td><td style="padding:5px">'+(x.status==='resolved'?'Resolved':'Open')+'</td><td style="padding:5px">'+issueResolutionText(x)+'</td></tr>';});
       b+='</table>';
     }
-    /* same 3-way split/colors as DailyReportModal's own on-screen donut (segs at ~L3051) —
-       keeps the printed chart visually consistent with what the submitter actually saw. */
-    const pieSegs=[{l:'Completed',v:row.completed_count,c:'#1a7a48'},{l:'Overdue',v:row.overdue_count,c:'#c43a53'},{l:'Open · on track',v:row.pending_count,c:'#dcdad2'}];
+    const pieSegs=[row.completed_count,row.overdue_count,row.pending_count].map((v,i)=>({...DR_SEGS[i],v}));
     b+='<hr style="border:none;border-top:1px solid #ddd;margin:28px 0 0"/>';
     b+='<div style="display:flex;gap:22px;align-items:center;margin:24px 0 14px">'+donutSVG(pieSegs,108,18)
       +'<div>'+pieSegs.map(x=>'<div style="font-size:12px;margin:3px 0"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:'+x.c+';margin-right:6px"></span>'+x.l+' <b>'+x.v+'</b></div>').join('')
@@ -2998,16 +2999,12 @@ function DailyReportModal({ctx,close}){
     const taskSnapshot=ordered.map(t=>({title:t.t,assignee:(byShort(t.who)||{n:t.who}).n,
       department:(byShort(t.who)||{}).dept||'',due:t.date,
       status:t.status==='done'?'done':(isOverdue(t)?'overdue':'pending')}));
-    /* resubmitting today updates the existing row instead of inserting a duplicate — otherwise a
-       second submit the same day silently creates a second daily_reports row, and whichever one a
-       viewer later prints/browses to might be the one with no issues attached (confusing, looks
-       like a display bug when it's actually two separate reports). */
-    const {data:already}=await sb.from('daily_reports').select('id').eq('created_by',viewer.id).eq('report_date',iso(TODAY)).maybeSingle();
-    const drQuery=already
-      ?sb.from('daily_reports').update({completed_count:segs[0].v,overdue_count:segs[1].v,pending_count:segs[2].v,task_snapshot:taskSnapshot}).eq('id',already.id)
-      :sb.from('daily_reports').insert({created_by:viewer.id,report_date:iso(TODAY),
-        completed_count:segs[0].v,overdue_count:segs[1].v,pending_count:segs[2].v,task_snapshot:taskSnapshot});
-    const {data:dr,error:drErr}=await drQuery.select().single();
+    /* resubmitting today updates the existing row instead of inserting a duplicate — enforced by
+       the daily_reports_one_per_day unique constraint (20260718000001), so this is one racefree
+       upsert rather than a check-then-write. */
+    const {data:dr,error:drErr}=await sb.from('daily_reports').upsert({created_by:viewer.id,report_date:iso(TODAY),
+      completed_count:segs[0].v,overdue_count:segs[1].v,pending_count:segs[2].v,task_snapshot:taskSnapshot},
+      {onConflict:'created_by,report_date'}).select().single();
     if(drErr){console.error(drErr);say('Could not send report — try again');setBusy(false);return;}
     for(const r of clean){
       const {error}=await sb.from('report_issues').insert({created_by:viewer.id,daily_report_id:dr.id,
@@ -3062,10 +3059,8 @@ function DailyReportModal({ctx,close}){
     say('Marked resolved');
   }
 
-  const segs=[
-    {l:'Completed',v:ctx.mine.filter(t=>t.status==='done').length,c:'#1a7a48'},
-    {l:'Overdue',v:ctx.mine.filter(isOverdue).length,c:'#c43a53'},
-    {l:'Open · on track',v:ctx.mine.filter(t=>t.status!=='done'&&!isOverdue(t)).length,c:'#dcdad2'}];
+  const segs=[ctx.mine.filter(t=>t.status==='done').length,ctx.mine.filter(isOverdue).length,
+    ctx.mine.filter(t=>t.status!=='done'&&!isOverdue(t)).length].map((v,i)=>({...DR_SEGS[i],v}));
   const overdueList=ctx.mine.filter(isOverdue).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   const pendingList=ctx.mine.filter(t=>t.status!=='done'&&!isOverdue(t)).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   const doneList=ctx.mine.filter(t=>t.status==='done');

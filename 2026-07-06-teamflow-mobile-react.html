@@ -1710,16 +1710,12 @@ function DailyReportSheet({ctx,close}){
        on-screen display only). */
     const taskSnapshot=ordered.map(t=>({title:t.t,assignee:t.who,department:(findMember(t.who)||{}).dept||'',
       due:t.date,status:t.done?'done':(isOver(t)?'overdue':'pending')}));
-    /* resubmitting today updates the existing row instead of inserting a duplicate — see
-       console's identical guard in DailyReportModal.submit() for why this matters (a second
-       same-day submit used to silently create a second report, and a viewer printing/browsing
-       could land on the one with no issues attached, looking like a display bug). */
-    const {data:already}=await sb.from('daily_reports').select('id').eq('created_by',r.id).eq('report_date',iso(TODAY)).maybeSingle();
-    const drQuery=already
-      ?sb.from('daily_reports').update({completed_count:segs[0].v,overdue_count:segs[1].v,pending_count:segs[2].v,task_snapshot:taskSnapshot}).eq('id',already.id)
-      :sb.from('daily_reports').insert({created_by:r.id,report_date:iso(TODAY),
-        completed_count:segs[0].v,overdue_count:segs[1].v,pending_count:segs[2].v,task_snapshot:taskSnapshot});
-    const {data:dr,error:drErr}=await drQuery.select().single();
+    /* resubmitting today updates the existing row instead of inserting a duplicate — enforced by
+       the daily_reports_one_per_day unique constraint (20260718000001), same racefree upsert as
+       console's DailyReportModal.submit(). */
+    const {data:dr,error:drErr}=await sb.from('daily_reports').upsert({created_by:r.id,report_date:iso(TODAY),
+      completed_count:segs[0].v,overdue_count:segs[1].v,pending_count:segs[2].v,task_snapshot:taskSnapshot},
+      {onConflict:'created_by,report_date'}).select().single();
     if(drErr){console.error(drErr);say('Could not send report — try again');setBusy(false);return;}
     for(const x of clean){
       const {error}=await sb.from('report_issues').insert({created_by:r.id,daily_report_id:dr.id,
