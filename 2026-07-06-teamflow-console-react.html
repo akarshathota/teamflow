@@ -821,6 +821,7 @@ function App(){
   const [resetTarget,setResetTarget]=useState(null); // staff object being password-reset, or null
   const [orgEdit,setOrgEdit]=useState(false);
   const [orgDraft,setOrgDraft]=useState('');
+  const [syncTick,setSyncTick]=useState(0);
   const searchRef=useRef();
   const [loaded,setLoaded]=useState(false);
   const [session,setSession]=useState(undefined); // undefined=checking · null=signed out · object=signed in
@@ -842,6 +843,7 @@ function App(){
       const openId=di>=0&&tasks[di]?tasks[di].id:null;
       loadAll().then(()=>{
         if(openId)setDrawerIdx(tasks.findIndex(x=>x.id===openId)); // findIndex's -1-on-miss doubles as "closed"
+        setSyncTick(x=>x+1); // components holding their own fetched state (Daily Reports panel/modal) key refetches off this
         R();
       }).catch(console.error);
     },400);};
@@ -854,6 +856,8 @@ function App(){
       .on('postgres_changes',{event:'*',schema:'public',table:'notices'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'task_notifications'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'task_activity_notifications'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'daily_reports'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'report_issues'},refetch)
       .subscribe();
     return ()=>{clearTimeout(t);sb.removeChannel(ch);};
   },[session]);
@@ -1026,7 +1030,7 @@ function App(){
     setTimeout(()=>{pr.style.display='none';document.title=ot;},300);
   }
 
-  const ctx={role,view,setView,say,R,scope,shorts,viewer,treeRoot,mine,canApprove,canAssignIssue,bossChain,previewing,
+  const ctx={role,view,setView,say,R,scope,shorts,viewer,treeRoot,mine,canApprove,canAssignIssue,bossChain,previewing,syncTick,
     remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,approveCompletion,rejectCompletion,
     setDrawerIdx,setModal,setDailyReport,setResetTarget,exportCSV,printReport,qReqs,qExts,qCompletions,attentionList,
     notifs,openNotif,markAllNotifsSeen,lastCronRun,activityLog};
@@ -2896,7 +2900,7 @@ function DailyReportsPanel({ctx,fw,fb}){
   useEffect(()=>{
     sb.from('daily_reports').select('*').order('created_at',{ascending:false})
       .then(({data,error})=>{if(error)console.error(error);setReports(data||[]);});
-  },[]);
+  },[ctx.syncTick]); // refetch on realtime sync so a resubmitted report's counts update live
 
   /* ctx.scope for Management is deliberately org-wide everywhere else in the app (Management
      "oversees every department jointly" — see ROLES.mgmt's own comment — there's no per-person
@@ -3008,7 +3012,7 @@ function DailyReportModal({ctx,close}){
   useEffect(()=>{
     sb.from('report_issues').select('*').eq('escalated_to',viewer.id).eq('status','open').order('created_at')
       .then(({data,error})=>{if(error)console.error(error);setInbox(data||[]);});
-  },[]);
+  },[ctx.syncTick]); // refetch on realtime sync so issues raised in a resubmitted report land while the modal is open
 
   const setRow=(i,patch)=>setRows(rows.map((r,ix)=>ix===i?{...r,...patch}:r));
   const addRow=()=>setRows(rows.concat([{issue:'',remarks:'',priority:'Medium',file:null}]));

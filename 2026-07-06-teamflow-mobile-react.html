@@ -681,6 +681,7 @@ function App(){
   const [,setTick]=useState(0);
   const R=useCallback(()=>setTick(t=>t+1),[]);
   const [previewRole,setPreviewRole]=useState(null); // admin-only "preview as" override
+  const [syncTick,setSyncTick]=useState(0);
   const [page,setPage]=useState('home');
   const [sheet,setSheet]=useState(null); // {kind, idx?}
   const sheetRef=useRef(null);
@@ -707,6 +708,7 @@ function App(){
       const openId=cur&&taskSheetKinds.includes(cur.kind)&&tasks[cur.idx]?tasks[cur.idx].id:null;
       loadAll().then(()=>{
         if(openId){const ni=tasks.findIndex(x=>x.id===openId);setSheet(ni<0?null:{...cur,idx:ni});}
+        setSyncTick(x=>x+1); // Daily Report sheet/panel key their own fetches off this
         R();
       }).catch(console.error);
     },400);};
@@ -719,6 +721,8 @@ function App(){
       .on('postgres_changes',{event:'*',schema:'public',table:'notices'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'task_notifications'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'task_activity_notifications'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'daily_reports'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'report_issues'},refetch)
       .subscribe();
     return ()=>{clearTimeout(t);sb.removeChannel(ch);};
   },[session]);
@@ -782,7 +786,7 @@ function App(){
   /* previewing/realSelf: same real-signed-in-vs-Preview-As distinction the console keeps on ctx
      (ctx.previewing/ctx.viewer there) — needed so UpdateSheet's open->inprogress auto-transition
      (Issue 4) checks the REAL logged-in person, not whichever role is currently being simulated. */
-  const ctx={role,r,scope,mine,say,R,setSheet,setPage,page,notifs,previewing,realSelf:myPerson.s,waitN,approvalQueue:aq};
+  const ctx={role,r,scope,mine,say,R,setSheet,setPage,page,notifs,previewing,realSelf:myPerson.s,waitN,approvalQueue:aq,syncTick};
 
   const needExt=t=>{if(t.done||!t.date)return false;const lim=new Date(TODAY);lim.setDate(lim.getDate()+2);return t.date<=iso(lim);};
 
@@ -1147,7 +1151,7 @@ function DailyReportsSection({ctx}){
   useEffect(()=>{
     sb.from('daily_reports').select('*').order('created_at',{ascending:false})
       .then(({data,error})=>{if(error)console.error(error);setReports(data||[]);});
-  },[]);
+  },[ctx.syncTick]); // refetch on realtime sync so a resubmitted report's counts update live
 
   /* ctx.scope for Management is deliberately org-wide everywhere else (Management "oversees every
      department jointly" — see ROLES.mgmt — there's no per-person subtree to narrow to). Daily
@@ -1690,7 +1694,7 @@ function DailyReportSheet({ctx,close}){
   useEffect(()=>{
     sb.from('report_issues').select('*').eq('escalated_to',r.id).eq('status','open').order('created_at')
       .then(({data,error})=>{if(error)console.error(error);setInbox(data||[]);});
-  },[]);
+  },[ctx.syncTick]); // refetch on realtime sync so issues raised in a resubmitted report land while the sheet is open
 
   const setRow=(i,patch)=>setRows(rows.map((x,ix)=>ix===i?{...x,...patch}:x));
   const addRow=()=>setRows(rows.concat([{issue:'',remarks:'',priority:'Medium',file:null}]));
