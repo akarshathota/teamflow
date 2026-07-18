@@ -245,3 +245,88 @@ const SHARED_ICON_PATHS={
   tool:g('path',{d:"M20.3 7.1a4.6 4.6 0 01-6 5.3l-6.4 6.4a2.1 2.1 0 11-3-3l6.4-6.4a4.6 4.6 0 015.3-6l-2.9 2.9 3.7 3.7z"}),
   box:g('g',null,g('path',{d:"M3.5 8L12 3.5 20.5 8v8L12 20.5 3.5 16z"}),g('path',{d:"M3.5 8L12 12.5 20.5 8M12 12.5v8"})),
 };
+
+/* ============ Daily Report shared helpers + one-click PDF (v71) ============ */
+/* Moved here from the console app verbatim when mobile gained the same Download PDF —
+   everything below is app-agnostic: it reads only daily_reports/report_issues rows, the
+   global `tasks` array (same `t`/`id` fields in both apps), and plain {n, dept} person
+   objects supplied by the caller. */
+const DR_SEGS=[{l:'Completed',c:'#1a7a48'},{l:'Overdue',c:'#c43a53'},{l:'Open · on track',c:'#dcdad2'}];
+const snapStatusLabel=s=>s==='done'?'Completed':s==='overdue'?'Overdue':'Open · on track';
+function issueResolutionText(x){
+  if(x.status!=='resolved')return '—';
+  if(x.resolved_task_id){const t=tasks.find(tk=>tk.id===x.resolved_task_id);return 'Task: '+(t?t.t:'(task)')+(x.resolution_note?' — '+x.resolution_note:'');}
+  return x.resolution_note||'Resolved';
+}
+async function fetchIssuesByReport(rows){
+  const ids=rows.map(({row})=>row.id);
+  if(!ids.length)return {};
+  const {data,error}=await sb.from('report_issues').select('*').in('daily_report_id',ids);
+  if(error){console.error(error);return {};}
+  const byReport={};
+  (data||[]).forEach(x=>{(byReport[x.daily_report_id]=byReport[x.daily_report_id]||[]).push(x);});
+  return byReport;
+}
+/* jsPDF + autotable lazy-loaded on first click from the same CDN family as everything else,
+   so page weight is unchanged. Donut drawn on an offscreen canvas, embedded as an image. */
+let pdfLibsP=null;
+function ensurePdfLibs(){
+  if(pdfLibsP)return pdfLibsP;
+  const load=src=>new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;
+    s.onload=res;s.onerror=()=>rej(new Error('Could not load '+src));document.head.appendChild(s);});
+  pdfLibsP=load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+    .then(()=>load('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'))
+    .catch(e=>{pdfLibsP=null;throw e;}); // reset so a transient network failure can be retried
+  return pdfLibsP;
+}
+function donutPng(segs){
+  const size=240,stroke=40,c=document.createElement('canvas');c.width=size;c.height=size;
+  const x=c.getContext('2d');const total=segs.reduce((a,s)=>a+s.v,0);
+  const r=(size-stroke)/2,cx=size/2,cy=size/2;let a0=-Math.PI/2;
+  if(!total){x.strokeStyle='#efeee7';x.lineWidth=stroke;x.beginPath();x.arc(cx,cy,r,0,2*Math.PI);x.stroke();}
+  else segs.forEach(s=>{if(!s.v)return;const a1=a0+s.v/total*2*Math.PI;
+    x.strokeStyle=s.c;x.lineWidth=stroke;x.beginPath();x.arc(cx,cy,r,a0,a1);x.stroke();a0=a1;});
+  x.fillStyle='#1b1e21';x.font='700 44px sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(String(total),cx,cy-8);
+  x.fillStyle='#71797f';x.font='600 18px sans-serif';x.fillText('tasks',cx,cy+22);
+  return c.toDataURL('image/png');
+}
+const pdfDate=d=>{if(!d)return '—';return new Date(d+'T00:00:00').toLocaleDateString('en',{day:'numeric',month:'short'});};
+async function downloadDailyReportPdf(rows,label,viewerName){
+  await ensurePdfLibs();
+  const issuesByReport=await fetchIssuesByReport(rows);
+  const doc=new window.jspdf.jsPDF({unit:'pt',format:'a4'});
+  let y=48;
+  doc.setFont('helvetica','bold');doc.setFontSize(19);doc.setTextColor(27,30,33);doc.text('TeamFlow — '+label,40,y);y+=18;
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(85,85,85);
+  doc.text('Prepared for '+viewerName+' · '+new Date().toDateString()+' · '+rows.length+' report'+(rows.length!==1?'s':''),40,y);y+=26;
+  rows.forEach(({row,p})=>{
+    if(y>640){doc.addPage();y=48;}
+    doc.setTextColor(27,30,33);doc.setFontSize(12);doc.setFont('helvetica','bold');
+    doc.text((p?p.n:'—')+' · '+(p?p.dept:'')+' · '+pdfDate(row.report_date),40,y);y+=6;
+    const issues=issuesByReport[row.id]||[];
+    if(issues.length){
+      doc.setFontSize(10);doc.text('Issues / incidents raised',40,y+14);
+      doc.autoTable({startY:y+20,margin:{left:40,right:40},styles:{fontSize:8.5},headStyles:{fillColor:[14,122,111]},
+        head:[['Issue','Priority','Status','Resolution']],
+        body:issues.map(x=>[x.issue,x.priority,x.status==='resolved'?'Resolved':'Open',issueResolutionText(x)])});
+      y=doc.lastAutoTable.finalY+18;
+    }else y+=12;
+    if(y>640){doc.addPage();y=48;}
+    const pieSegs=[row.completed_count,row.overdue_count,row.pending_count].map((v,i)=>({...DR_SEGS[i],v}));
+    doc.addImage(donutPng(pieSegs),'PNG',40,y,76,76);
+    doc.setFontSize(9.5);doc.setFont('helvetica','normal');
+    pieSegs.forEach((s,i)=>{const ly=y+22+i*16;
+      doc.setFillColor(s.c);doc.rect(132,ly-7,8,8,'F');
+      doc.setTextColor(27,30,33);doc.text(s.l+'   '+s.v,146,ly);});
+    y+=92;
+    const snap=row.task_snapshot||[];
+    if(snap.length){
+      doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text('Tasks this period',40,y);
+      doc.autoTable({startY:y+6,margin:{left:40,right:40},styles:{fontSize:8.5},headStyles:{fillColor:[14,122,111]},
+        head:[['Task','Assignee','Department','Due','Status']],
+        body:snap.map(t=>[t.title,t.assignee,t.department||'',pdfDate(t.due),snapStatusLabel(t.status)])});
+      y=doc.lastAutoTable.finalY+24;
+    }
+  });
+  doc.save(iso(new Date())+'-teamflow-'+label.toLowerCase().replace(/\s+/g,'-')+'.pdf');
+}

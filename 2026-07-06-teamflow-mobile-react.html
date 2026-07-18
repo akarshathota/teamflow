@@ -1231,9 +1231,12 @@ function DailyReportsSection({ctx}){
                 <button className="chipbtn" style={{flex:1,justifyContent:'center'}} onClick={()=>{setEscId(null);setEscText('');}}>Cancel</button>
                 <button className="send" style={{flex:1,margin:0,padding:'9px'}} disabled={escBusy} onClick={()=>sendEscalation(row)}>{escBusy?'Sending…':'Send'}</button>
               </div>
-            </div>:ctx.r.bossId?<div style={{marginTop:6}}>
-              <button className="chipbtn" onClick={()=>{setEscId(row.id);setEscText('');setEscPrio('Medium');}}>↑ Escalate</button>
-            </div>:null}
+            </div>:<div style={{marginTop:6,display:'flex',gap:8}}>
+              <button className="chipbtn" onClick={()=>{const person=ALL_PEOPLE.find(x=>x.id===row.created_by);
+                downloadDailyReportPdf([{row,p:person?{n:person.n,dept:person.department}:null}],(person?person.n:'Daily')+' — '+fmtD(row.report_date),ctx.r.name)
+                  .catch(e=>{console.error(e);ctx.say('Could not build the PDF — try again');});}}>⬇ PDF</button>
+              {ctx.r.bossId?<button className="chipbtn" onClick={()=>{setEscId(row.id);setEscText('');setEscPrio('Medium');}}>↑ Escalate</button>:null}
+            </div>}
           </div>
         </div>;
       })}
