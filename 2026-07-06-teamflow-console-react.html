@@ -1508,7 +1508,7 @@ function TasksView({ctx}){
       </div>
 
       <div className="panel colpanel">
-        {col(bossToMe?'Tasks Assigned to me by':'Tasks Assigned by me',rowsBossCol)}
+        {col(bossToMe?'Tasks assigned to me by':'Tasks assigned by me',rowsBossCol)}
         <div className="selfseg" style={{margin:'0 0 12px'}}>
           <button className={bossToMe?'on':''} onClick={()=>setBossMode('tome')}>To me</button>
           <button className={bossToMe?'':'on'} onClick={()=>setBossMode('byme')}>By me</button>
