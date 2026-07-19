@@ -33,6 +33,9 @@ const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+Stri
 /* YYYY-MM-DD -> DD-MM-YYYY, for CSV/XLSX cells only. On-screen dates keep their human forms
    (fmtDate "Jul 7", ord "31st") — this is just so raw ISO strings don't land in a spreadsheet. */
 const dmy=s=>{if(!s)return '';const p=String(s).split('-');return p.length===3?p[2]+'-'+p[1]+'-'+p[0]:s;};
+/* timestamptz (e.g. tasks.created_at, the "issued"/assigned date) -> DD-MM-YYYY in local time.
+   Blank for missing (old daily-report snapshots that predate the issued column). */
+const dmyTs=ts=>ts?dmy(iso(new Date(ts))):'';
 /* Organisation name (org_settings, e.g. JHPS) as a prominent header for every downloadable
    report/list. orgCsvRows: prepended by csvDownload so it lands in cell A1 of any CSV/XLSX.
    orgHeadHtml: prepended to every print/PDF's HTML so the org name heads the page above the
@@ -338,13 +341,13 @@ async function downloadDailyReportPdf(rows,label,viewerName){
     if(snap.length){
       doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text('Tasks this period',40,y);
       doc.autoTable({startY:y+6,margin:{left:40,right:40},styles:{fontSize:8.5},headStyles:{fillColor:[14,122,111]},
-        head:[['Task','Assignee','Department','Due','Status']],
+        head:[['Task','Assignee','Department','Issued','Due','Status']],
         /* "Nd late" is relative to the report's own date, not today — the snapshot froze what
            was true at submit time, so an old report keeps saying how late things were THEN. */
         body:snap.map(t=>{let st=snapStatusLabel(t.status);
           if(t.status==='overdue'&&t.due){const d=Math.round((new Date(row.report_date+'T00:00:00')-new Date(t.due+'T00:00:00'))/86400000);
             if(d>0)st='Overdue · '+d+'d late';}
-          return [t.title,t.assignee,t.department||'',pdfDate(t.due),st];})});
+          return [t.title,t.assignee,t.department||'',dmyTs(t.issued),pdfDate(t.due),st];})});
       y=doc.lastAutoTable.finalY+24;
     }
   });

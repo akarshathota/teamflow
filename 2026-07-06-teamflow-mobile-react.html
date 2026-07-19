@@ -360,7 +360,7 @@ function rowToMobileTask(row,assignRows,byId,logRows){
     init:primary&&byId[primary.staff_id]?byId[primary.staff_id].initials:'',
     coWho:co.length?co.map(a=>a.staff_short):undefined,
     due:'Due '+dueLabel(row.due_date,row.due_time?row.due_time.slice(0,5):''),
-    date:row.due_date,bucket:LABEL_TO_BUCKET[row.department]||'administration',type:row.type,prio:row.priority,
+    date:row.due_date,issued:row.created_at||undefined,bucket:LABEL_TO_BUCKET[row.department]||'administration',type:row.type,prio:row.priority,
     done:row.status==='done',
     /* legacy 'partial' rows collapse into 'inprogress' — the app no longer distinguishes them */
     progress:(row.status==='inprogress'||row.status==='partial')?'inprogress':undefined,
@@ -1721,7 +1721,7 @@ function DailyReportSheet({ctx,close}){
        freezes the full ordered task list the same way (not `shown`, which is capped to 8 for
        on-screen display only). */
     const taskSnapshot=ordered.map(t=>({title:t.t,assignee:t.who,department:(findMember(t.who)||{}).dept||'',
-      due:t.date,status:t.done?'done':(isOver(t)?'overdue':'pending')}));
+      due:t.date,issued:t.issued,status:t.done?'done':(isOver(t)?'overdue':'pending')}));
     /* resubmitting today updates the existing row instead of inserting a duplicate — enforced by
        the daily_reports_one_per_day unique constraint (20260718000001), same racefree upsert as
        console's DailyReportModal.submit(). */
