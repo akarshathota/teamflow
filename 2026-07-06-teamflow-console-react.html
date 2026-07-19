@@ -682,7 +682,7 @@ function deliveryStats(list){
   return [
     {l:'Completed on time',v:list.filter(t=>t.status==='done'&&(!t.doneOn||t.doneOn<=t.date)).length,c:'#1a7a48'},
     {l:'Completed late',v:list.filter(t=>t.status==='done'&&t.doneOn&&t.doneOn>t.date).length,c:'#b06e12'},
-    {l:'In progress · due',v:list.filter(t=>t.status!=='done'&&!isOverdue(t)).length,c:'#0e7a6f'},
+    {l:'In progress · due',v:list.filter(t=>t.status!=='done'&&!isOverdue(t)).length,c:'#39638f'}, // --blue, not the accent teal — too close to the on-time green in a donut
     {l:'Overdue',v:list.filter(isOverdue).length,c:'#c43a53'}];
 }
 function donutSVG(segs,size,stroke){
