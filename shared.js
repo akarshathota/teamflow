@@ -33,6 +33,13 @@ const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+Stri
 /* YYYY-MM-DD -> DD-MM-YYYY, for CSV/XLSX cells only. On-screen dates keep their human forms
    (fmtDate "Jul 7", ord "31st") — this is just so raw ISO strings don't land in a spreadsheet. */
 const dmy=s=>{if(!s)return '';const p=String(s).split('-');return p.length===3?p[2]+'-'+p[1]+'-'+p[0]:s;};
+/* Organisation name (org_settings, e.g. JHPS) as a prominent header for every downloadable
+   report/list. orgCsvRows: prepended by csvDownload so it lands in cell A1 of any CSV/XLSX.
+   orgHeadHtml: prepended to every print/PDF's HTML so the org name heads the page above the
+   TeamFlow line. Both no-op if ORG_NAME isn't set yet. */
+const orgName=()=>(typeof ORG_NAME!=='undefined'&&ORG_NAME)?ORG_NAME:'';
+const orgCsvRows=()=>orgName()?[[orgName()],[]]:[];
+const orgHeadHtml=()=>orgName()?'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:800;font-size:23px;color:#0a5c54;margin:0 0 2px">'+orgName()+'</div>':'';
 const fmtTime=t=>{if(!t)return '';const p=t.split(':'),h=+p[0],ap=h>=12?'PM':'AM';return (h%12||12)+':'+p[1]+' '+ap;};
 /* full ISO timestamptz (e.g. a task_log row's created_at) -> "14 Jul · 2:45 PM" in the viewer's
    local timezone. Distinct from fmtDate/fmtD, which only ever take a plain YYYY-MM-DD string and

@@ -699,7 +699,8 @@ function donutSVG(segs,size,stroke){
 }
 function csvDownload(name,rows){
   const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-  saveBlob(new Blob([rows.map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv'}),name);
+  const all=orgCsvRows().concat(rows); // org name in A1 for every CSV/XLSX export
+  saveBlob(new Blob([all.map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv'}),name);
 }
 
 /* ============ icons ============ */
@@ -1016,7 +1017,7 @@ function App(){
     repBucket=repBucket||'all';
     const list=tasks.filter(t=>inScope(t,shorts)&&(repBucket==='all'||t.bucket===repBucket)&&(repWho==='all'||hasWho(t,repWho)));
     const segs=deliveryStats(list);const tot=segs.reduce((a,x)=>a+x.v,0)||1;
-    let b='<h1 style="margin:0 0 4px;font-family:Bricolage Grotesque,sans-serif">TeamFlow — Team Report</h1>';
+    let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — Team Report</div>';
     b+='<div style="color:#555;margin-bottom:18px">Prepared for '+viewer.n+' ('+viewer.role+') · '+new Date().toDateString()+' · '+list.length+' tasks'+(repBucket==='all'?'':' · department: '+BUCKETS[repBucket])+(repWho==='all'?'':' · staff: '+(byShort(repWho)||{}).n)+'</div>';
     b+='<div style="display:flex;gap:34px;align-items:center;margin-bottom:24px">'+donutSVG(segs,140,24)
       +'<div style="flex:1">'+segs.map(x=>'<div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid #eee;font-size:13px"><span style="width:11px;height:11px;border-radius:3px;background:'+x.c+';display:inline-block"></span>'+x.l+'<b style="margin-left:auto">'+x.v+' · '+Math.round(x.v/tot*100)+'%</b></div>').join('')
@@ -1429,7 +1430,7 @@ function exportRows(rows,label){
   csvDownload(iso(new Date())+'-teamflow-'+label.toLowerCase().replace(/\s+/g,'-')+'.csv',csvRows);
 }
 function printRows(rows,label,viewerName){
-  let b='<h1 style="margin:0 0 4px;font-family:Bricolage Grotesque,sans-serif">TeamFlow — '+label+'</h1>';
+  let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — '+label+'</div>';
   b+='<div style="color:#555;margin-bottom:18px">Prepared for '+viewerName+' · '+new Date().toDateString()+' · '+rows.length+' tasks</div>';
   b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Task</th><th style="text-align:left;padding:6px">Assignee</th><th style="text-align:left;padding:6px">Assigned by</th><th style="text-align:left;padding:6px">Type</th><th style="text-align:left;padding:6px">Due</th><th style="text-align:left;padding:6px">Status</th></tr>';
   rows.forEach(({t})=>{b+='<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+t.t+'</td><td style="padding:6px">'+assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')+'</td><td style="padding:6px">'+(t.selfAssigned?'Self':(t.instructedBy||'—'))+'</td><td style="padding:6px">'+TYPES[t.type||'work']+'</td><td style="padding:6px">'+t.date+(isOverdue(t)?' (overdue)':'')+'</td><td style="padding:6px">'+ST[t.status].l+'</td></tr>';});
@@ -2800,7 +2801,7 @@ async function exportDailyReports(rows,label){
 }
 async function printDailyReports(rows,label,viewerName){
   const issuesByReport=await fetchIssuesByReport(rows);
-  let b='<h1 style="margin:0 0 4px;font-family:Bricolage Grotesque,sans-serif">TeamFlow — '+label+'</h1>';
+  let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — '+label+'</div>';
   b+='<div style="color:#555;margin-bottom:18px">Prepared for '+viewerName+' · '+new Date().toDateString()+' · '+rows.length+' report'+(rows.length!==1?'s':'')+'</div>';
   rows.forEach(({row,p})=>{
     b+='<div style="margin:14px 0 6px"><b style="font-size:14px">'+(p?p.n:'—')+'</b> · '+(p?p.dept:'')+' · '+fmtDate(row.report_date)+'</div>';

@@ -1128,7 +1128,8 @@ function Cal({ctx,personal,allowFilter}){
 
 function csvDownload(name,rows){
   const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-  saveBlob(new Blob([rows.map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv'}),name);
+  const all=orgCsvRows().concat(rows); // org name in A1 for every CSV/XLSX export
+  saveBlob(new Blob([all.map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv'}),name);
 }
 /* Mobile counterpart to console's DailyReportsPanel (same daily_reports table, same is_in_scope
    RLS) — browse past submissions from ctx.scope, a completeness indicator, and escalate-from-
