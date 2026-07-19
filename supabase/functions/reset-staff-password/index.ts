@@ -69,12 +69,18 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const staffId = body.staffId;
     if (!staffId) return json({ error: "staffId is required" }, 400);
+    // Optional caller-supplied password. Blank (the default) -> auto-generate as before. Supplied ->
+    // must clear Supabase Auth's 6-char floor; validated here so the admin gets a clean 400.
+    const requestedPassword = typeof body.password === "string" ? body.password : "";
+    if (requestedPassword && requestedPassword.length < 6) {
+      return json({ error: "Password must be at least 6 characters" }, 400);
+    }
 
     const { data: target } = await admin.from("staff").select("name, username, auth_user_id").eq("id", staffId).maybeSingle();
     if (!target) return json({ error: "Staff member not found" }, 404);
     if (!target.auth_user_id) return json({ error: target.name + " doesn't have a login yet — use Add employee instead" }, 400);
 
-    const password = randomPassword();
+    const password = requestedPassword || randomPassword();
     const { error: updErr } = await admin.auth.admin.updateUserById(target.auth_user_id, { password });
     if (updErr) return json({ error: "Could not reset password: " + updErr.message }, 500);
 
@@ -91,6 +97,7 @@ Deno.serve(async (req) => {
       login: authUser?.user?.email || null,
       username: target.username || null,
       password,
+      passwordGenerated: !requestedPassword,
     });
   } catch (e) {
     return json({ error: String(e) }, 500);

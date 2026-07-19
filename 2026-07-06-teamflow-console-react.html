@@ -2626,6 +2626,7 @@ function PeopleView({ctx}){
 function ResetPwModal({ctx,staff,close}){
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState('');
+  const [pw,setPw]=useState('');
   const [result,setResult]=useState(null); // {name, login, username, password}
   const go=async()=>{
     setBusy(true);setErr('');
@@ -2636,7 +2637,7 @@ function ResetPwModal({ctx,staff,close}){
         method:'POST',
         headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token,
           apikey:'sb_publishable_bEqR06srB99BHHdvLQy14g_-pLZPWwJ'},
-        body:JSON.stringify({staffId:staff.id})});
+        body:JSON.stringify({staffId:staff.id,password:pw.trim()||null})});
       j=await resp.json();
     }catch(e){setBusy(false);setErr('Could not reach the server — check your connection');return;}
     setBusy(false);
@@ -2647,7 +2648,7 @@ function ResetPwModal({ctx,staff,close}){
     <div className="modal" style={{width:440}}>
       <div className="qc-head"><h3>Password reset</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
       <div className="mf">
-        <div className="whysm" style={{marginTop:0,marginBottom:14}}>Share this with {result.name.split(' ')[0]} — the password won't be shown again.</div>
+        <div className="whysm" style={{marginTop:0,marginBottom:14}}>Share this with {result.name.split(' ')[0]}{result.passwordGenerated===false?'.':' — the password won\'t be shown again.'}</div>
         <label>{result.username?'Username':'Email'}</label>
         <input readOnly value={result.username||result.login} onFocus={e=>e.target.select()}/>
         <label>New password</label>
@@ -2662,7 +2663,9 @@ function ResetPwModal({ctx,staff,close}){
     <div className="modal" style={{width:420}}>
       <div className="qc-head"><h3>Reset password</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
       <div className="mf">
-        <div className="whysm" style={{marginTop:0}}>Generate a new password for {staff.n}? Their current password stops working immediately — you'll need to share the new one with them.</div>
+        <div className="whysm" style={{marginTop:0}}>Set a new password for {staff.n}? Their current password stops working immediately — you'll need to share the new one with them.</div>
+        <label style={{marginTop:12}}>New password (optional)</label>
+        <input type="text" value={pw} onChange={e=>setPw(e.target.value)} placeholder="auto-generated if left blank · min 6 chars"/>
         {err?<div style={{color:'var(--red)',fontSize:12.5,marginTop:10}}>{err}</div>:null}
       </div>
       <div className="qc-actions">
