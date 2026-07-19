@@ -1092,7 +1092,8 @@ function Cal({ctx,personal,allowFilter}){
   }
   function ics(){
     const openVis=vis.filter(o=>!o.t.done);
-    let s='BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//TeamFlow//EN\r\n';
+    const calName=(orgName()?orgName()+' — ':'')+'TeamFlow'; // shown as the calendar title in phone calendar apps
+    let s='BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//TeamFlow//EN\r\nX-WR-CALNAME:'+calName+'\r\n';
     openVis.forEach((o,ix)=>{s+='BEGIN:VEVENT\r\nUID:tf-'+ix+'-'+Date.now()+'@teamflow\r\nDTSTART;VALUE=DATE:'+o.t.date.replace(/-/g,'')+'\r\nSUMMARY:'+o.t.t+' ('+o.t.who+')\r\nEND:VEVENT\r\n';});
     s+='END:VCALENDAR';
     saveBlob(new Blob([s],{type:'text/calendar'}),iso(new Date())+'-teamflow-calendar.ics');
