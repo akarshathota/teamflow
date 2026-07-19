@@ -1267,7 +1267,7 @@ function Insights({ctx}){
     {(()=>{const at=attentionList();
       return at.length?at.map(x=><div className="attn" key={x.m.n}>
         <div className="ring" style={{background:x.od?'var(--red)':'var(--amber)'}}>{x.m.i}</div>
-        <div><div className="nm">{x.m.n}</div><div className="rs">{x.reason}</div></div></div>)
+        <div><div className="nm" style={{cursor:'pointer'}} onClick={()=>ctx.setSheet({kind:'day',title:x.m.n+' — pending tasks',events:tasks.map((t,i)=>({t,i})).filter(o=>!o.t.done&&hasWhoM(o.t,x.m.n))})}>{x.m.n}</div><div className="rs">{x.reason}</div></div></div>)
         :<div className="rs" style={{padding:'8px 2px'}}>Everyone's on track.</div>;})()}
     <DailyReportsSection ctx={ctx}/>
     <div className="sec" style={{marginTop:16}}>Ask anything</div>
@@ -1363,7 +1363,7 @@ function Sheets({ctx,acts,sheet}){
       {sheet.kind==='reopen'&&<ReopenSheet ctx={ctx} idx={sheet.idx} close={close}/>}
       {sheet.kind==='reassign'&&<ReassignSheet ctx={ctx} idx={sheet.idx} close={close}/>}
       {sheet.kind==='event'&&<EventSheet ctx={ctx} idx={sheet.idx} close={close}/>}
-      {sheet.kind==='day'&&<DaySheet ctx={ctx} day={sheet.day} events={sheet.events} close={close}/>}
+      {sheet.kind==='day'&&<DaySheet ctx={ctx} day={sheet.day} events={sheet.events} title={sheet.title} close={close}/>}
       {sheet.kind==='notifs'&&<NotifSheet ctx={ctx} acts={acts} close={close}/>}
     </div>
   </div>;
@@ -2147,9 +2147,9 @@ function EventSheet({ctx,idx,close}){
     {!t.done?<button className="send" onClick={()=>{ctx.setSheet({kind:'update',idx});}}>Update / Done ✓</button>:null}
   </>;
 }
-function DaySheet({ctx,day,events,close}){
+function DaySheet({ctx,day,events,title,close}){
   return <>
-    <h3>{day.toLocaleDateString('en',{weekday:'short'})+' · '+day.toLocaleDateString('en',{day:'numeric',month:'short'})}</h3>
+    <h3>{title||(day.toLocaleDateString('en',{weekday:'short'})+' · '+day.toLocaleDateString('en',{day:'numeric',month:'short'}))}</h3>
     <div className="sub">{events.length} task{events.length!==1?'s':''}</div>
     <div style={{maxHeight:360,overflowY:'auto'}}>
       {events.map(o=><div key={o.i} className="task" style={{cursor:'pointer'}} onClick={()=>ctx.setSheet({kind:'event',idx:o.i})}>
