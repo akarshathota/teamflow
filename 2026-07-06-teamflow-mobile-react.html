@@ -1248,7 +1248,7 @@ function DailyReportsSection({ctx}){
 function exportDailyReportsM(scoped){
   const rows=[['Person','Department','Date','Completed','Overdue','Open']];
   scoped.forEach(row=>{const p=ALL_PEOPLE.find(x=>x.id===row.created_by);
-    rows.push([p?p.n:'—',p?p.department:'',row.report_date,row.completed_count,row.overdue_count,row.pending_count]);});
+    rows.push([p?p.n:'—',p?p.department:'',dmy(row.report_date),row.completed_count,row.overdue_count,row.pending_count]);});
   csvDownload(iso(new Date())+'-teamflow-daily-reports.csv',rows);
 }
 

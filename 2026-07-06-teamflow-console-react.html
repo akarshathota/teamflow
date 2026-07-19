@@ -1002,7 +1002,7 @@ function App(){
     if(kind==='tasks'){
       const rows=[['Task','Type','Department','Priority','Repeats','Assignee','Assigned by','Due','Status','Overdue','Note']];
       tasks.filter(t=>inScope(t,shorts)).forEach(t=>rows.push([t.t,TYPES[t.type||'work'],BUCKETS[t.bucket]||'',PRIOS[t.prio||'med'].l,t.recur?recurLabel(t.recur,t.recurOn):'',
-        assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),t.selfAssigned?'Self':(t.instructedBy||'—'),t.date+(t.time?' '+fmtTime(t.time):''),ST[t.status].l,isOverdue(t)?'Yes':'No',t.note||'']));
+        assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),t.selfAssigned?'Self':(t.instructedBy||'—'),dmy(t.date)+(t.time?' '+fmtTime(t.time):''),ST[t.status].l,isOverdue(t)?'Yes':'No',t.note||'']));
       csvDownload(iso(new Date())+'-teamflow-tasks.csv',rows);say('Tasks exported (CSV)');
     }else{
       const load=workloadMap();const rows=[['Employee','Department','Role','Open','Overdue','Done']];
@@ -1422,7 +1422,7 @@ function QueuePanel({ctx}){
 function exportRows(rows,label){
   const csvRows=[['Task','Type','Department','Priority','Repeats','Assignee','Assigned by','Due','Status','Overdue','Note']];
   rows.forEach(({t})=>csvRows.push([t.t,TYPES[t.type||'work'],BUCKETS[t.bucket]||'',PRIOS[t.prio||'med'].l,t.recur?recurLabel(t.recur,t.recurOn):'',
-    assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),t.selfAssigned?'Self':(t.instructedBy||'—'),t.date+(t.time?' '+fmtTime(t.time):''),ST[t.status].l,isOverdue(t)?'Yes':'No',t.note||'']));
+    assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),t.selfAssigned?'Self':(t.instructedBy||'—'),dmy(t.date)+(t.time?' '+fmtTime(t.time):''),ST[t.status].l,isOverdue(t)?'Yes':'No',t.note||'']));
   csvDownload(iso(new Date())+'-teamflow-'+label.toLowerCase().replace(/\s+/g,'-')+'.csv',csvRows);
 }
 function printRows(rows,label,viewerName){
@@ -1891,7 +1891,7 @@ function exportPersonTasksCsv(root){
   tasks.filter(t=>t.status!=='done'&&assignees(t).some(a=>shorts.includes(a))).forEach(t=>{
     assignees(t).filter(a=>shorts.includes(a)).forEach(a=>{
       const p=byShortName[a];
-      rows.push([p.role,p.n,p.dept,t.t,(ST[t.status]||{l:t.status}).l,t.date||'',
+      rows.push([p.role,p.n,p.dept,t.t,(ST[t.status]||{l:t.status}).l,dmy(t.date),
         (t.files||[]).map(f=>f.name).join('; ')||'—',
         (t.log||[]).map(l=>l.when+' — '+l.by+': '+l.text).join(' | ')||'—']);
     });
@@ -2773,7 +2773,7 @@ async function exportDailyReports(rows,label){
   const csvRows=[];
   rows.forEach(({row,p})=>{
     csvRows.push(['Person','Department','Date','Completed','Overdue','Open · on track']);
-    csvRows.push([p?p.n:'—',p?p.dept:'',row.report_date,row.completed_count,row.overdue_count,row.pending_count]);
+    csvRows.push([p?p.n:'—',p?p.dept:'',dmy(row.report_date),row.completed_count,row.overdue_count,row.pending_count]);
     const snap=row.task_snapshot||[];
     if(snap.length){
       csvRows.push([]);csvRows.push(['Task','Assignee','Department','Due','Status']);
