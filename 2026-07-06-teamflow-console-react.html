@@ -1476,7 +1476,12 @@ function ExportFormatModal({target,close,say}){
 function TaskListModal({ctx,title,rows,close}){
   return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
     <div className="modal" style={{width:640,maxWidth:'92vw'}}>
-      <div className="qc-head"><h3>{title} · {rows.length}</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
+      <div className="qc-head"><h3>{title} · {rows.length}</h3>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          {rows.length?<button className="btn soft" style={{padding:'6px 12px'}}
+            onClick={()=>printRows(rows,title,ctx.viewer.n)}><I n="print" s={14}/>Print / PDF</button>:null}
+          <button className="iconbtn" onClick={close}><I n="x"/></button>
+        </div></div>
       <div className="scrollbox" style={{maxHeight:'62vh'}}>
         {rows.length?rows.map(o=><div key={o.i} onClickCapture={e=>{e.stopPropagation();close();ctx.setDrawerIdx(o.i);}}>
           <TaskRow t={o.t} i={o.i} ctx={ctx}/></div>):<Empty t="No tasks" s="Nothing behind this number right now."/>}
