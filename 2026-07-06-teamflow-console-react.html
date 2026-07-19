@@ -819,6 +819,7 @@ function App(){
   const [modal,setModal]=useState(false);
   const [dailyReport,setDailyReport]=useState(false);
   const [resetTarget,setResetTarget]=useState(null); // staff object being password-reset, or null
+  const [personTasks,setPersonTasks]=useState(null); // person object whose pending tasks are shown in a popup, or null
   const [orgEdit,setOrgEdit]=useState(false);
   const [orgDraft,setOrgDraft]=useState('');
   const [syncTick,setSyncTick]=useState(0);
@@ -1032,7 +1033,7 @@ function App(){
 
   const ctx={role,view,setView,say,R,scope,shorts,viewer,treeRoot,mine,canApprove,canAssignIssue,bossChain,previewing,syncTick,
     remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,approveCompletion,rejectCompletion,
-    setDrawerIdx,setModal,setDailyReport,setResetTarget,exportCSV,printReport,qReqs,qExts,qCompletions,attentionList,
+    setDrawerIdx,setModal,setDailyReport,setResetTarget,setPersonTasks,exportCSV,printReport,qReqs,qExts,qCompletions,attentionList,
     notifs,openNotif,markAllNotifsSeen,lastCronRun,activityLog};
 
   async function saveOrgName(){
@@ -1104,6 +1105,8 @@ function App(){
     {modal&&<QuickCapture ctx={ctx} close={()=>setModal(false)}/>}
     {dailyReport&&<DailyReportModal ctx={ctx} close={()=>setDailyReport(false)}/>}
     {resetTarget&&<ResetPwModal ctx={ctx} staff={resetTarget} close={()=>setResetTarget(null)}/>}
+    {personTasks&&<TaskListModal ctx={ctx} title={personTasks.n+' — pending tasks'}
+      rows={tasks.map((t,i)=>({t,i})).filter(o=>hasWho(o.t,personTasks.s)&&o.t.status!=='done')} close={()=>setPersonTasks(null)}/>}
     {toast&&<div className="toast"><I n="check"/>{toast}</div>}
   </div>;
 }
@@ -1167,7 +1170,7 @@ function Topbar({ctx,searchRef}){
             return <div key={'t'+o.i} className="sd-item" onClick={()=>{setQ('');ctx.setView('tasks');ctx.setDrawerIdx(o.i);}}>
               <span className="avex">{p?p.av:'?'}</span><div><div className="t">{o.t.t}</div><div className="m">{p?p.n:o.t.who} · {fmtDate(o.t.date)} · {ST[o.t.status].l}</div></div></div>;})}
           {pHits.length?<div className="sd-head">People</div>:null}
-          {pHits.map(p=><div key={'p'+p.s} className="sd-item" onClick={()=>{setQ('');ctx.setView('people');}}>
+          {pHits.map(p=><div key={'p'+p.s} className="sd-item" onClick={()=>{setQ('');ctx.setPersonTasks(p);}}>
             <span className="avex" style={{background:avColor(p.n),color:'#fff'}}>{p.av}</span><div><div className="t">{p.n}</div><div className="m">{p.role} · {p.dept}</div></div></div>)}
           {!tHits.length&&!pHits.length?<div className="sd-empty">No matches for “{q}”</div>:null}
         </div>:null}
