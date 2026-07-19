@@ -1277,15 +1277,18 @@ function Dashboard({ctx,open,over,today,done}){
   const ods=tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,shorts)&&isOverdue(o.t)).sort((a,b)=>a.t.date<b.t.date?-1:1);
   const attn=ctx.attentionList().slice(0,4);
   const attnColors=['var(--red)','var(--amber)','var(--accent)','var(--blue)'];
-  const KP=[['Open tasks',open,'var(--accent)','var(--accent-soft)','checkc',100],
-    ['Overdue',over,'var(--red)','var(--red-soft)','alert',open?over/open*100:0],
-    ['Due today',today,'var(--amber)','var(--amber-soft)','clock',open?today/open*100:0],
-    ['Completed',done,'var(--green)','var(--green-soft)','check',100]];
+  const [kpiPop,setKpiPop]=useState(null); // {title,pred} — resolved to rows at render so realtime refetches stay live
+  const kpiRows=pred=>tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,shorts)&&pred(o.t));
+  const KP=[['Open tasks',open,'var(--accent)','var(--accent-soft)','checkc',100,t=>t.status!=='done'],
+    ['Overdue',over,'var(--red)','var(--red-soft)','alert',open?over/open*100:0,isOverdue],
+    ['Due today',today,'var(--amber)','var(--amber-soft)','clock',open?today/open*100:0,isToday],
+    ['Completed',done,'var(--green)','var(--green-soft)','check',100,t=>t.status==='done']];
   const pIss=ctx.qReqs.filter(o=>o.r.kind==='issue').length;
   const pApp=ctx.qReqs.filter(o=>o.r.kind==='request').length+ctx.qExts.length+ctx.qCompletions.length;
   return <div className="view">
     <div className="kpis">
-      {KP.map(([l,n,c,cs,ic,p])=><div className="kpi" key={l}>
+      {KP.map(([l,n,c,cs,ic,p,pred])=><div className="kpi" key={l} style={{cursor:'pointer'}} title={'Review the tasks behind this number'}
+        onClick={()=>setKpiPop({title:l,pred})}>
         <div className="top"><span className="l">{l}</span><span className="ic" style={{background:cs,color:c}}><I n={ic}/></span></div>
         <div className="n" style={{color:c}}>{n}</div><div className="bar"><i style={{width:Math.max(6,p)+'%',background:c}}/></div></div>)}
       <div className="kpi" style={{cursor:'pointer',borderColor:pend?'var(--amber)':undefined}} title="Jump to the queue"
@@ -1295,6 +1298,7 @@ function Dashboard({ctx,open,over,today,done}){
         <div className="l" style={{marginTop:4}}>{pIss} to assign · {pApp} to approve</div>
       </div>
     </div>
+    {kpiPop?<TaskListModal ctx={ctx} title={kpiPop.title} rows={kpiRows(kpiPop.pred)} close={()=>setKpiPop(null)}/>:null}
     <div className="grid2">
       <div>
         <div className="panel">
@@ -1461,6 +1465,19 @@ function ExportFormatModal({target,close,say}){
           <button className="btn ghost" style={{flex:1,flexDirection:'column',height:70,gap:6}}
             onClick={()=>{exportRows(target.rows,target.label);say('Exported "'+target.label+'" — CSV, opens directly in Excel');close();}}><I n="dl"/>XLSX</button>
         </div>
+      </div>
+    </div>
+  </div>;
+}
+/* KPI drill-down: clicking a stat card opens this list of exactly the tasks behind the number.
+   Rows are real TaskRows, so clicking one closes the popup (the capture handler fires first) and
+   opens the normal task drawer. */
+function TaskListModal({ctx,title,rows,close}){
+  return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
+    <div className="modal" style={{width:640,maxWidth:'92vw'}}>
+      <div className="qc-head"><h3>{title} · {rows.length}</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
+      <div className="scrollbox" style={{maxHeight:'62vh'}} onClickCapture={close}>
+        {rows.length?rows.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx}/>):<Empty t="No tasks" s="Nothing behind this number right now."/>}
       </div>
     </div>
   </div>;
@@ -2811,10 +2828,12 @@ function ReportsView({ctx}){
     ?workers.map(p=>{const tt=mine.filter(t=>hasWho(t,p.s));return [p.n,tt.length?Math.round(tt.filter(t=>t.status==='done').length/tt.length*100):0];})
     :Object.keys(BUCKETS).map(k=>({k,tt:mine.filter(t=>t.bucket===k)})).filter(o=>o.tt.length)
       .map(o=>[BUCKETS[o.k],Math.round(o.tt.filter(t=>t.status==='done').length/o.tt.length*100)]);
-  const KP=[['Total tasks',mine.length,'var(--accent)','var(--accent-soft)','checkc'],
-    ['Completed',dn,'var(--green)','var(--green-soft)','check'],
-    ['Overdue',ov,'var(--red)','var(--red-soft)','alert'],
-    ['Completion rate',rate+'%','var(--blue)','var(--blue-soft)','chart']];
+  const [kpiPop,setKpiPop]=useState(null);
+  const kpiRows=pred=>tasks.map((t,i)=>({t,i})).filter(o=>mine.includes(o.t)&&pred(o.t));
+  const KP=[['Total tasks',mine.length,'var(--accent)','var(--accent-soft)','checkc',()=>true],
+    ['Completed',dn,'var(--green)','var(--green-soft)','check',t=>t.status==='done'],
+    ['Overdue',ov,'var(--red)','var(--red-soft)','alert',isOverdue],
+    ['Completion rate',rate+'%','var(--blue)','var(--blue-soft)','chart',null]]; // derived stat — nothing to list
   return <div className="view">
     <div className="selfseg" style={{margin:'0 0 14px',maxWidth:360}}>
       <button className={mode==='reports'?'':'on'} onClick={()=>setMode('tasks')}>Task analytics</button>
@@ -2837,9 +2856,11 @@ function ReportsView({ctx}){
     </div>
     {showMismatch?<DeptMismatchModal ctx={ctx} close={()=>setShowMismatch(false)}/>:null}
     {mode==='tasks'?<>
-    <div className="kpis">{KP.map(([l,n,c,cs,ic])=><div className="kpi" key={l}>
+    <div className="kpis">{KP.map(([l,n,c,cs,ic,pred])=><div className="kpi" key={l} style={pred?{cursor:'pointer'}:undefined}
+      title={pred?'Review the tasks behind this number':undefined} onClick={pred?()=>setKpiPop({title:l,pred}):undefined}>
       <div className="top"><span className="l">{l}</span><span className="ic" style={{background:cs,color:c}}><I n={ic}/></span></div>
       <div className="n" style={{color:c}}>{n}</div></div>)}</div>
+    {kpiPop?<TaskListModal ctx={ctx} title={kpiPop.title} rows={kpiRows(kpiPop.pred)} close={()=>setKpiPop(null)}/>:null}
     <div className="panel">
       <div className="h-row"><h3>Delivery performance</h3><span className="tag gray">{segTot?Math.round(segs[0].v/segTot*100)+'% completed on time':'no data yet'}</span></div>
       <div style={{display:'flex',gap:30,alignItems:'center',flexWrap:'wrap'}}>
