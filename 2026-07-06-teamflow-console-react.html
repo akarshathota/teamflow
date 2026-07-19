@@ -1866,13 +1866,13 @@ function personLabel(p){
   if(p.role==='Management'||p.role==='Director')return tier+' — '+p.n;
   return tier+' — '+p.n+' ('+p.dept+')';
 }
-async function createStaffAccount({name,role,department,subDept,boss,phone,email,username}){
+async function createStaffAccount({name,role,department,subDept,boss,phone,email,username,password}){
   const {data:{session}}=await sb.auth.getSession();
   const resp=await fetch('https://fumggrcamegejihenkhb.supabase.co/functions/v1/create-staff-account',{
     method:'POST',
     headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token,
       apikey:'sb_publishable_bEqR06srB99BHHdvLQy14g_-pLZPWwJ'},
-    body:JSON.stringify({name,role,department,subDept:subDept||null,boss:boss||null,phone:phone||null,email:email||null,username:username||null})});
+    body:JSON.stringify({name,role,department,subDept:subDept||null,boss:boss||null,phone:phone||null,email:email||null,username:username||null,password:password||null})});
   const j=await resp.json();
   if(!resp.ok)throw new Error(j.error||'Could not create account');
   return j;
@@ -1994,7 +1994,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
       <div className="mf">
         <div className="whysm" style={{marginTop:0,marginBottom:14}}>{result.changedLogin
           ?result.name.split(' ')[0]+' should use this to sign in from now on.'
-          :'Share these with '+result.name.split(' ')[0]+' — the password won\'t be shown again.'}</div>
+          :'Share these with '+result.name.split(' ')[0]+(result.passwordGenerated===false?'.':' — the password won\'t be shown again.')}</div>
         <label>{result.username?'Username':'Email'}</label>
         <input readOnly value={result.username||result.login} onFocus={e=>e.target.select()}/>
         {result.changedLogin?null:<><label>Password</label>
@@ -2010,6 +2010,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
       <div className="mf">
         <label>Name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Neha Kapoor" autoFocus/>
         <label>Email (their real login)</label><input value={f.email||''} onChange={e=>setF({...f,email:e.target.value})} placeholder="name@school.org"/>
+        <label>Password (optional)</label><input type="text" value={f.password||''} onChange={e=>setF({...f,password:e.target.value})} placeholder="auto-generated if left blank · min 6 chars"/>
       </div>
       <div className="qc-actions">
         <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
@@ -2020,7 +2021,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           setBusy(true);setErr('');
           try{
             const admin=STAFF.find(p=>p.role==='Administrator');
-            const j=await createStaffAccount({name,role:'Management',department:(mgmtMembers()[0]||{}).dept||'Administration',boss:admin.n,email:f.email.trim()});
+            const j=await createStaffAccount({name,role:'Management',department:(mgmtMembers()[0]||{}).dept||'Administration',boss:admin.n,email:f.email.trim(),password:(f.password||'').trim()||undefined});
             STAFF.push({n:j.name,s:j.short_name,role:'Management',dept:(mgmtMembers()[0]||{}).dept||'Administration',boss:admin.n,bossId:admin.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
             ctx.R();say('Added '+name+' to Management');setBusy(false);setResult(j);
           }catch(e){setBusy(false);setErr(e.message);}
@@ -2033,6 +2034,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
       <div className="mf">
         <label>Name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Priya Nair" autoFocus/>
         <label>Username (optional)</label><input value={f.username||''} onChange={e=>setF({...f,username:e.target.value})} placeholder="auto-generated from name if left blank"/>
+        <label>Password (optional)</label><input type="text" value={f.password||''} onChange={e=>setF({...f,password:e.target.value})} placeholder="auto-generated if left blank · min 6 chars"/>
       </div>
       <div className="qc-actions">
         <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
@@ -2044,7 +2046,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           setBusy(true);setErr('');
           try{
             const dept=boss.dept||'Administration';
-            const j=await createStaffAccount({name,role:'Director',department:dept,boss:boss.n,username:(f.username||'').trim()||undefined});
+            const j=await createStaffAccount({name,role:'Director',department:dept,boss:boss.n,username:(f.username||'').trim()||undefined,password:(f.password||'').trim()||undefined});
             STAFF.push({n:j.name,s:j.short_name,role:'Director',dept,boss:boss.n,bossId:boss.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
             ctx.R();say('Added Director '+name);setBusy(false);setResult(j);
           }catch(e){setBusy(false);setErr(e.message);}
@@ -2069,6 +2071,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
             <option value="mgmt">Management</option>
             {directorOpts.map(d=><option key={d.id} value={d.id}>{d.n} (Director)</option>)}
           </select></>:null}
+        <label>Password (optional)</label><input type="text" value={f.password||''} onChange={e=>setF({...f,password:e.target.value})} placeholder="auto-generated if left blank · min 6 chars"/>
       </div>
       <div className="qc-actions">
         <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
@@ -2079,7 +2082,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           setBusy(true);setErr('');
           try{
             const boss=(f.bossId&&f.bossId!=='mgmt')?byId(f.bossId):mgmtMembers()[0];
-            const j=await createStaffAccount({name,role:'Manager',department:dept,boss:boss.n,username:(f.username||'').trim()||undefined});
+            const j=await createStaffAccount({name,role:'Manager',department:dept,boss:boss.n,username:(f.username||'').trim()||undefined,password:(f.password||'').trim()||undefined});
             STAFF.push({n:j.name,s:j.short_name,role:'Manager',dept,boss:boss.n,bossId:boss.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
             ctx.R();say('Added department "'+dept+'" with Sr. Manager '+name+(boss.role==='Director'?' — reporting to '+boss.n:''));setBusy(false);setResult(j);
           }catch(e){setBusy(false);setErr(e.message);}
@@ -2105,6 +2108,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           <label>Sub-department name</label>
           <input value={f.subDept||''} onChange={e=>setF({...f,subDept:e.target.value})} placeholder="e.g. Network Support (optional)"/>
         </>:null}
+        <label>Password (optional)</label><input type="text" value={f.password||''} onChange={e=>setF({...f,password:e.target.value})} placeholder="auto-generated if left blank · min 6 chars"/>
       </div>
       <div className="qc-actions">
         <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
@@ -2130,7 +2134,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           }
           setBusy(true);setErr('');
           try{
-            const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,subDept,boss:attachPoint.n,username:(f.username||'').trim()||undefined});
+            const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,subDept,boss:attachPoint.n,username:(f.username||'').trim()||undefined,password:(f.password||'').trim()||undefined});
             STAFF.push({n:j.name,s:j.short_name,role:dbRole,dept:deptHead.dept,subDept,boss:attachPoint.n,bossId:attachPoint.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
             ctx.R();say('Added '+TIER_LABEL[dbRole]+' '+name+' under '+deptHead.dept);setBusy(false);setResult(j);
           }catch(e){setBusy(false);setErr(e.message);}
@@ -2153,7 +2157,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
           setBusy(true);setErr('');
           try{
-            const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,subDept,boss:attachPoint.n,username:(f.username||'').trim()||undefined});
+            const j=await createStaffAccount({name,role:dbRole,department:deptHead.dept,subDept,boss:attachPoint.n,username:(f.username||'').trim()||undefined,password:(f.password||'').trim()||undefined});
             const newPerson={n:j.name,s:j.short_name,role:dbRole,dept:deptHead.dept,subDept,boss:attachPoint.n,bossId:attachPoint.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null};
             STAFF.push(newPerson);
             const moved=candidates.filter(c=>checked[c.id]!==false);

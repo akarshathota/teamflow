@@ -77,6 +77,14 @@ Deno.serve(async (req) => {
     const bossName = body.boss || null;
     const phone = body.phone || null;
     const email = String(body.email || "").trim().toLowerCase();
+    // Optional caller-supplied password. Left blank (the default), we auto-generate as before.
+    // Supplied, it must clear Supabase Auth's own 6-char floor — validate here so the admin gets a
+    // clean 400 instead of a raw auth-gateway error. Whatever's used (typed or generated) is
+    // returned once for the admin to relay, unchanged.
+    const requestedPassword = typeof body.password === "string" ? body.password : "";
+    if (requestedPassword && requestedPassword.length < 6) {
+      return json({ error: "Password must be at least 6 characters" }, 400);
+    }
     // Optional caller-supplied username for non-admin-tier roles (Staff/Jr Manager/Team Lead/
     // Director/Sr. Manager — everyone whose login is username-based, not email-based). Same
     // normalization update-staff-login already applies to a post-creation username change, so a
@@ -132,7 +140,7 @@ Deno.serve(async (req) => {
     }
 
     const loginEmail = ADMIN_TIER.includes(role) ? email : `${username}@teamflow.demo`;
-    const password = randomPassword();
+    const password = requestedPassword || randomPassword();
 
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
       email: loginEmail,
@@ -179,6 +187,7 @@ Deno.serve(async (req) => {
       login: loginEmail,
       username: ADMIN_TIER.includes(role) ? null : username,
       password,
+      passwordGenerated: !requestedPassword, // UI tailors "here's their generated password" vs "the password you set"
     });
   } catch (e) {
     return json({ error: String(e) }, 500);
