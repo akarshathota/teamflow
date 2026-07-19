@@ -1337,7 +1337,7 @@ function Dashboard({ctx,open,over,today,done}){
           <div className="h-row"><h3><I n="spark" c="var(--accent-ink)"/>Who needs attention</h3><span className="tag green">FREE · LIVE</span></div>
           {attn.length?attn.map((x,ix)=><div className="attn" key={x.p.s}>
             <div className="ring" style={{background:attnColors[ix%4]}}>{x.p.av}</div>
-            <div><div className="nm">{x.p.n}</div><div className="rs">{x.reason} · {x.p.dept}</div></div>
+            <div><div className="nm" style={{cursor:'pointer'}} title="View pending tasks" onClick={()=>ctx.setPersonTasks(x.p)}>{x.p.n}</div><div className="rs">{x.reason} · {x.p.dept}</div></div>
             <div className="act"><button className="linkbtn" onClick={()=>ctx.remindPerson(x.p.s)}>Remind</button></div></div>)
           :<Empty t="Everyone is on track" s="No overdue work or overloaded people right now."/>}
         </div>
