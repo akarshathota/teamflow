@@ -1470,14 +1470,16 @@ function ExportFormatModal({target,close,say}){
   </div>;
 }
 /* KPI drill-down: clicking a stat card opens this list of exactly the tasks behind the number.
-   Rows are real TaskRows, so clicking one closes the popup (the capture handler fires first) and
-   opens the normal task drawer. */
+   Each row explicitly closes the popup AND opens the task drawer — deliberately not left to the
+   TaskRow's own click bubbling, which can be swallowed when the close-triggered re-render
+   unmounts the row mid-event. */
 function TaskListModal({ctx,title,rows,close}){
   return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
     <div className="modal" style={{width:640,maxWidth:'92vw'}}>
       <div className="qc-head"><h3>{title} · {rows.length}</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
-      <div className="scrollbox" style={{maxHeight:'62vh'}} onClickCapture={close}>
-        {rows.length?rows.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx}/>):<Empty t="No tasks" s="Nothing behind this number right now."/>}
+      <div className="scrollbox" style={{maxHeight:'62vh'}}>
+        {rows.length?rows.map(o=><div key={o.i} onClickCapture={e=>{e.stopPropagation();close();ctx.setDrawerIdx(o.i);}}>
+          <TaskRow t={o.t} i={o.i} ctx={ctx}/></div>):<Empty t="No tasks" s="Nothing behind this number right now."/>}
       </div>
     </div>
   </div>;
