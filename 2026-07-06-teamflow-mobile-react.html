@@ -1056,37 +1056,188 @@ function WorkerPending({ctx}){
 }
 
 /* ============ tasks tab ============ */
+/* ---- checklist write helpers (mobile copies; separate page from console, no global collision) ---- */
+const clDefAnchor=f=>f==='weekly'?{dow:0}:f==='monthly'?{dom:1}:f==='yearly'?{y_day:1,y_mon:1}:{};
+const clNextFreq={daily:'weekly',weekly:'monthly',monthly:'yearly',yearly:'daily'};
+async function clTick(item,date,on,R){const owner=item.staff_id;
+  if(on)clDone.push({id:'tmp'+Date.now(),item_id:item.id,staff_id:owner,occ_date:date});
+  else{const i=clDone.findIndex(c=>c.item_id===item.id&&c.occ_date===date);if(i>=0)clDone.splice(i,1);}
+  R();
+  try{if(on)await sb.from('checklist_completions').upsert({item_id:item.id,staff_id:owner,occ_date:date},{onConflict:'item_id,occ_date'});
+      else await sb.from('checklist_completions').delete().eq('item_id',item.id).eq('occ_date',date);}catch(e){console.error(e);}}
+async function clAdd(staffId,body,freq,anchor,R){
+  const row={staff_id:staffId,body,freq,sort_order:clItems.filter(i=>i.staff_id===staffId&&!i.archived).length,...anchor};
+  const {data,error}=await sb.from('checklist_items').insert(row).select().single();
+  if(error){console.error(error);return;}clItems.push(data);R();}
+async function clPatch(id,patch,R){const it=clItems.find(i=>i.id===id);if(it)Object.assign(it,patch);R();
+  const {error}=await sb.from('checklist_items').update(patch).eq('id',id);if(error)console.error(error);}
+async function clArchive(id,R){const i=clItems.findIndex(x=>x.id===id);if(i>=0)clItems.splice(i,1);R();
+  const {error}=await sb.from('checklist_items').update({archived:true}).eq('id',id);if(error)console.error(error);}
+async function clReorder(staffId,id,dir,R){const arr=clItemsFor(staffId),it=arr.find(x=>x.id===id);
+  const same=arr.filter(x=>x.freq===it.freq),p=same.indexOf(it),sw=dir<0?same[p-1]:same[p+1];if(!sw)return;
+  const a=it.sort_order,b=sw.sort_order;it.sort_order=b;sw.sort_order=a;R();
+  await sb.from('checklist_items').update({sort_order:it.sort_order}).eq('id',it.id);
+  await sb.from('checklist_items').update({sort_order:sw.sort_order}).eq('id',sw.id);}
+async function clMarkAbsent(staffId,date,on,markedBy,R){
+  if(on)clAbs.push({id:'tmp'+Date.now(),staff_id:staffId,absent_date:date,marked_by:markedBy});
+  else{const i=clAbs.findIndex(a=>a.staff_id===staffId&&a.absent_date===date);if(i>=0)clAbs.splice(i,1);}
+  R();
+  try{if(on)await sb.from('checklist_absences').upsert({staff_id:staffId,absent_date:date,marked_by:markedBy},{onConflict:'staff_id,absent_date'});
+      else await sb.from('checklist_absences').delete().eq('staff_id',staffId).eq('absent_date',date);}catch(e){console.error(e);}}
+function clPeriodDates(mode,anchorISO){const a=new Date(anchorISO+'T00:00:00'),out=[];
+  if(mode==='week'){const dow=(a.getDay()+6)%7,mon=new Date(a);mon.setDate(a.getDate()-dow);
+    for(let i=0;i<7;i++){const d=new Date(mon);d.setDate(mon.getDate()+i);out.push(iso(d));}}
+  else{const y=a.getFullYear(),m=a.getMonth(),last=new Date(y,m+1,0).getDate();for(let i=1;i<=last;i++)out.push(iso(new Date(y,m,i)));}
+  return out;}
+function clCellState(staffId,isoD,item,todayISO,doneOn){
+  if(!clDueOn(item,isoD))return 'nd'; if(isoD>todayISO)return 'future';
+  if(clAbsOn(staffId,isoD))return 'abs'; return doneOn(isoD).has(item.id)?'done':'miss';}
+async function clSnapshotPdf(staffId,mode,anchorISO){
+  await ensurePdfLibs();
+  const person=ALL_PEOPLE.find(p=>p.id===staffId),items=clItemsFor(staffId),days=clPeriodDates(mode,anchorISO),todayISO=iso(new Date());
+  const dc={},doneOn=d=>dc[d]||(dc[d]=clDoneSet(staffId,d));
+  const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'pt',format:'a4'});let y=42;
+  if(typeof ORG_NAME!=='undefined'&&ORG_NAME){doc.setFont('helvetica','bold');doc.setFontSize(20);doc.setTextColor(10,92,84);doc.text(ORG_NAME,40,y);
+    doc.setFontSize(12);doc.setTextColor(67,73,79);doc.text('Checklist Snapshot — '+(mode==='week'?'Weekly':'Monthly'),40+doc.getTextWidth(ORG_NAME)+16,y);y+=24;}
+  else{doc.setFont('helvetica','bold');doc.setFontSize(14);doc.text('Checklist Snapshot — '+(mode==='week'?'Weekly':'Monthly'),40,y);y+=20;}
+  const period=mode==='week'?pdfDate(days[0])+' – '+pdfDate(days[days.length-1])+', '+new Date(days[0]+'T00:00:00').getFullYear()
+    :new Date(days[0]+'T00:00:00').toLocaleDateString('en',{month:'long',year:'numeric'});
+  doc.setFont('helvetica','normal');doc.setFontSize(11);doc.setTextColor(27,30,33);
+  doc.text((person?person.n:'—')+'  ·  '+(person?person.role:'')+'  ·  '+(person?person.department:'')+'    —    '+period,40,y);y+=16;
+  let due=0,done=0;const absDays=new Set();
+  days.forEach(d=>{if(clAbsOn(staffId,d)&&d<=todayISO)absDays.add(d);
+    items.forEach(it=>{const s=clCellState(staffId,d,it,todayISO,doneOn);if(s==='done'){due++;done++;}else if(s==='miss')due++;});});
+  doc.setFontSize(10);doc.setTextColor(85,85,85);
+  doc.text((due?Math.round(done/due*100):0)+'% completed    ·    '+done+'/'+due+' due items done    ·    '+absDays.size+' day'+(absDays.size!==1?'s':'')+' absent',40,y);y+=4;
+  const SYM={done:'✓',miss:'·',abs:'A',nd:'–',future:''};
+  const head=[['Checklist item'].concat(days.map(d=>{const dt=new Date(d+'T00:00:00');return (mode==='week'?CL_DOW[(dt.getDay()+6)%7]+'\n':'')+dt.getDate();}))];
+  const ordered=[];CL_FREQORDER.forEach(f=>items.filter(i=>i.freq===f).forEach(i=>ordered.push(i)));
+  const body=ordered.map(it=>[it.body+'\n'+clSchedLabel(it)].concat(days.map(d=>SYM[clCellState(staffId,d,it,todayISO,doneOn)])));
+  doc.autoTable({startY:y+12,margin:{left:40,right:40},styles:{fontSize:7.5,halign:'center',valign:'middle',cellPadding:2,lineColor:[236,235,227],lineWidth:0.5},
+    headStyles:{fillColor:[250,249,245],textColor:[67,73,79],fontStyle:'bold',fontSize:7},columnStyles:{0:{halign:'left',cellWidth:150}},head,body,
+    didParseCell:function(data){if(data.section!=='body'||data.column.index===0)return;const v=data.cell.raw;
+      if(v==='✓'){data.cell.styles.textColor=[26,122,72];data.cell.styles.fillColor=[231,244,236];}
+      else if(v==='·'){data.cell.styles.textColor=[196,58,83];data.cell.styles.fillColor=[251,238,241];data.cell.styles.fontStyle='bold';}
+      else if(v==='A'){data.cell.styles.textColor=[154,106,16];data.cell.styles.fillColor=[246,239,219];data.cell.styles.fontStyle='bold';}
+      else if(v==='–'){data.cell.styles.textColor=[205,202,189];}}});
+  let ly=doc.lastAutoTable.finalY+16;doc.setFontSize(8);doc.setTextColor(85,85,85);
+  doc.text('Legend:   ✓ done      · missed      A absent      – not due',40,ly);
+  doc.save(iso(new Date())+'-'+(person?person.n.toLowerCase().replace(/[^a-z0-9]+/g,'-'):'staff')+'-checklist-'+mode+'.pdf');
+}
+
+// grouped item rows for mobile (mode: 'tick' | 'roview' | 'edit')
+function clMobGroups({staffId,date,mode,ctx}){
+  const items=clItemsFor(staffId),done=clDoneSet(staffId,date);
+  return CL_FREQORDER.map(f=>{const grp=items.filter(i=>i.freq===f);if(!grp.length)return null;
+    const dn=grp.filter(i=>done.has(i.id)).length;
+    return <div key={f}>
+      <div style={{fontSize:11,fontWeight:800,letterSpacing:'.6px',textTransform:'uppercase',color:'#9a938a',margin:'16px 0 2px'}}>{CL_FREQMETA[f].label} <span style={{color:'#b7b3a6'}}>{dn}/{grp.length}</span></div>
+      {grp.map(it=>{const on=done.has(it.id);
+        if(mode==='edit')return <div key={it.id} style={{display:'flex',alignItems:'center',gap:9,padding:'11px 2px',borderBottom:'1px solid #efece3'}}>
+          <input defaultValue={it.body} onBlur={e=>{if(e.target.value.trim()&&e.target.value!==it.body)clPatch(it.id,{body:e.target.value.trim()},ctx.R);}} style={{flex:1,fontSize:14,fontFamily:'inherit',border:'1px solid #e7e5dc',borderRadius:7,padding:'8px 9px',outline:'none'}}/>
+          <span onClick={()=>{const nf=clNextFreq[it.freq];clPatch(it.id,{freq:nf,dow:null,dom:null,y_day:null,y_mon:null,...clDefAnchor(nf)},ctx.R);}} style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',padding:'4px 7px',borderRadius:99,color:'#43494f',background:'#f6f5f0',border:'1px solid #e7e5dc',whiteSpace:'nowrap'}}>{clSchedLabel(it)}</span>
+          <button onClick={()=>clArchive(it.id,ctx.R)} style={{border:'none',background:'none',color:'#c43a53',fontSize:16,padding:'4px 6px'}}>✕</button>
+        </div>;
+        return <div key={it.id} onClick={()=>{if(mode==='tick')clTick(it,date,!on,ctx.R);}} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 2px',borderBottom:'1px solid #efece3',cursor:mode==='tick'?'pointer':'default'}}>
+          <div style={{width:26,height:26,borderRadius:7,flex:'0 0 auto',border:'2px solid '+(on?'#0e7a6f':'#cfccbf'),background:on?'#0e7a6f':'#fff',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:15}}>{on?'✓':''}</div>
+          <div style={{flex:1,fontSize:15,color:on?'#9a938a':'#1b1e21',textDecoration:on?'line-through':'none'}}>{it.body}</div>
+          <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',padding:'3px 8px',borderRadius:99,color:'#43494f',background:'#f6f5f0',border:'1px solid #e7e5dc',whiteSpace:'nowrap'}}>{clSchedLabel(it)}</span>
+        </div>;})}
+    </div>;});
+}
 function ChecklistMobile({ctx}){
   const meP=ALL_PEOPLE.find(p=>p.s===ctx.realSelf);
+  const teamPeople=(ctx.r.team||[]).filter(s=>s!==ctx.r.self).map(s=>ALL_PEOPLE.find(p=>p.s===s)).filter(Boolean);
+  const hasTeam=teamPeople.length>0;
+  const [tab,setTab]=useState(hasTeam?'team':'mine');
+  const [sel,setSel]=useState(null);
+  if(!meP)return <div><div className="sec">Checklist</div><div className="task" style={{textAlign:'center',color:'#71797f',padding:24}}>Unavailable.</div></div>;
+  const tabBtn=(id,l)=><button onClick={()=>{setTab(id);setSel(null);}} style={{border:'none',background:'none',padding:'9px 12px',fontSize:14,fontWeight:600,color:tab===id?'#0a5c54':'#71797f',borderBottom:'2.5px solid '+(tab===id?'#0e7a6f':'transparent'),marginBottom:-1}}>{l}</button>;
+  return <div>
+    {hasTeam&&<div style={{display:'flex',gap:4,borderBottom:'1px solid #e7e5dc',marginBottom:12}}>{tabBtn('mine','My checklist')}{tabBtn('team','My team')}</div>}
+    {tab==='mine'?<ClMineMobile ctx={ctx} meP={meP}/>:sel?<ClTeamDetailMobile ctx={ctx} person={sel} back={()=>setSel(null)}/>:<ClTeamListMobile ctx={ctx} people={teamPeople} pick={setSel}/>}
+  </div>;
+}
+function ClMineMobile({ctx,meP}){
   const today=iso(new Date());
-  if(!meP)return <div><div className="sec">My checklist</div><div className="task" style={{textAlign:'center',color:'#71797f',padding:24}}>Checklist unavailable.</div></div>;
-  const all=clItemsFor(meP.id).filter(it=>clDueOn(it,today));
-  const done=clDoneSet(meP.id,today);
+  const all=clItemsFor(meP.id).filter(it=>clDueOn(it,today)),done=clDoneSet(meP.id,today);
   const n=all.length,d=all.filter(i=>done.has(i.id)).length,pct=n?Math.round(d/n*100):0;
-  const tick=it=>{const on=!done.has(it.id);
-    if(on)clDone.push({id:'tmp'+Date.now(),item_id:it.id,staff_id:meP.id,occ_date:today});
-    else{const i=clDone.findIndex(c=>c.item_id===it.id&&c.occ_date===today);if(i>=0)clDone.splice(i,1);}
-    ctx.R();
-    (on?sb.from('checklist_completions').upsert({item_id:it.id,staff_id:meP.id,occ_date:today},{onConflict:'item_id,occ_date'})
-       :sb.from('checklist_completions').delete().eq('item_id',it.id).eq('occ_date',today)).then(()=>{},e=>console.error(e));};
   return <div>
     <div className="sec">My checklist <span className="free">TODAY</span></div>
     {n===0?<div className="task" style={{textAlign:'center',color:'#71797f',padding:'28px 16px'}}>Nothing on your checklist today. A manager above you sets these — they refresh each morning.</div>
     :<div className="task" style={{padding:16}}>
       <div style={{fontSize:12,color:'#71797f',marginBottom:8}}>{fmtD(today)} · {d} of {n} done · {pct}%</div>
       <div style={{height:8,background:'#eeece4',borderRadius:99,overflow:'hidden',marginBottom:2}}><div style={{height:'100%',width:pct+'%',background:'#0e7a6f'}}/></div>
-      {CL_FREQORDER.map(f=>{const grp=all.filter(i=>i.freq===f);if(!grp.length)return null;
-        return <div key={f}>
-          <div style={{fontSize:11,fontWeight:800,letterSpacing:'.6px',textTransform:'uppercase',color:'#9a938a',margin:'16px 0 2px'}}>{CL_FREQMETA[f].label}</div>
-          {grp.map(it=>{const on=done.has(it.id);
-            return <div key={it.id} onClick={()=>tick(it)} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 2px',borderBottom:'1px solid #efece3',cursor:'pointer'}}>
-              <div style={{width:26,height:26,borderRadius:7,flex:'0 0 auto',border:'2px solid '+(on?'#0e7a6f':'#cfccbf'),background:on?'#0e7a6f':'#fff',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:15}}>{on?'✓':''}</div>
-              <div style={{flex:1,fontSize:15,color:on?'#9a938a':'#1b1e21',textDecoration:on?'line-through':'none'}}>{it.body}</div>
-              <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',padding:'3px 8px',borderRadius:99,color:'#43494f',background:'#f6f5f0',border:'1px solid #e7e5dc',whiteSpace:'nowrap'}}>{clSchedLabel(it)}</span>
-            </div>;})}
-        </div>;})}
-      <div style={{fontSize:11.5,color:'#71797f',marginTop:14,lineHeight:1.5}}>↻ Your list refreshes each morning; weekly / monthly / yearly items appear on their day. A manager above you sets it.</div>
+      {clMobGroups({staffId:meP.id,date:today,mode:'tick',ctx})}
+      <div style={{fontSize:11.5,color:'#71797f',marginTop:14,lineHeight:1.5}}>↻ Your list refreshes each morning; weekly / monthly / yearly items appear on their day.</div>
     </div>}
+  </div>;
+}
+function ClTeamListMobile({ctx,people,pick}){
+  const today=iso(new Date());
+  const [q,setQ]=useState('');
+  const shown=people.filter(p=>!q||p.n.toLowerCase().includes(q.toLowerCase())||(p.department||'').toLowerCase().includes(q.toLowerCase()));
+  return <div>
+    <div className="sec">My team · {people.length}</div>
+    {people.length>6&&<input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 Search name or department…" style={{width:'100%',fontFamily:'inherit',fontSize:14,padding:'10px 12px',border:'1px solid #e7e5dc',borderRadius:10,outline:'none',marginBottom:10}}/>}
+    {shown.map(p=>{const n=clItemsFor(p.id).length,d=clDoneSet(p.id,today).size;
+      return <div key={p.id} className="task" onClick={()=>pick(p)} style={{display:'flex',alignItems:'center',gap:11,cursor:'pointer',padding:12}}>
+        <span style={{width:34,height:34,borderRadius:'50%',background:"#0e7a6f",color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:13,flex:'0 0 auto'}}>{p.i||p.n[0]}</span>
+        <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14}}>{p.n}</div><div style={{fontSize:11.5,color:'#71797f'}}>{p.role} · {p.department}</div></div>
+        <div style={{textAlign:'right'}}><b style={{fontSize:14}}>{d}/{n}</b><div style={{fontSize:9.5,color:'#71797f',textTransform:'uppercase',letterSpacing:.4}}>today</div></div>
+      </div>;})}
+    {!shown.length&&<div className="task" style={{textAlign:'center',color:'#71797f',padding:24}}>No one matches.</div>}
+  </div>;
+}
+function ClTeamDetailMobile({ctx,person,back}){
+  const meP=ALL_PEOPLE.find(p=>p.s===ctx.realSelf);
+  const today=iso(new Date());
+  const [editing,setEditing]=useState(false);
+  const [vDate,setVDate]=useState(today);
+  const [body,setBody]=useState(''),[freq,setFreq]=useState('daily'),[dow,setDow]=useState(0),[dom,setDom]=useState(1),[yd,setYd]=useState(1),[ym,setYm]=useState(1);
+  const items=clItemsFor(person.id),n=items.length,le=items[0];
+  const leBy=le&&le.last_edited_by?(ALL_PEOPLE.find(p=>p.id===le.last_edited_by)||{}).n:null;
+  const absent=clAbsOn(person.id,vDate),isPast=vDate!==today;
+  const add=()=>{if(!body.trim())return;const a=freq==='weekly'?{dow}:freq==='monthly'?{dom}:freq==='yearly'?{y_day:yd,y_mon:ym}:{};clAdd(person.id,body.trim(),freq,a,ctx.R);setBody('');};
+  const d=absent?0:items.filter(i=>clDoneSet(person.id,vDate).has(i.id)).length;
+  return <div>
+    <div style={{display:'flex',alignItems:'center',gap:10,margin:'2px 0 12px'}}>
+      <button onClick={back} style={{border:'1px solid #e7e5dc',background:'#fff',borderRadius:8,padding:'6px 11px',fontSize:13,fontWeight:600}}>‹ Team</button>
+      <span style={{width:32,height:32,borderRadius:'50%',background:"#0e7a6f",color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:13}}>{person.i||person.n[0]}</span>
+      <div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,fontSize:15}}>{person.n}’s checklist</div><div style={{fontSize:11,color:'#71797f'}}>{n} item{n!==1?'s':''}{leBy?' · last edited by '+leBy:''}</div></div>
+    </div>
+    <div className="task" style={{padding:16}}>
+      <div style={{fontSize:12,color:'#0a5c54',background:'#e2f1ee',border:'1px solid #bcdcd6',borderRadius:9,padding:'8px 11px',marginBottom:12,lineHeight:1.4}}>📋 Completion feeds {person.n}’s daily report.</div>
+      {!editing&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+        <button onClick={()=>{const x=new Date(vDate+'T00:00:00');x.setDate(x.getDate()-1);setVDate(iso(x));}} style={{border:'1px solid #e7e5dc',background:'#fff',borderRadius:7,width:34,height:34}}>◀</button>
+        <input type="date" value={vDate} max={today} onChange={e=>{if(e.target.value&&e.target.value<=today)setVDate(e.target.value);}} style={{flex:1,fontFamily:'inherit',fontSize:13,fontWeight:600,padding:'8px',border:'1px solid #e7e5dc',borderRadius:8}}/>
+        <button disabled={vDate>=today} onClick={()=>{const x=new Date(vDate+'T00:00:00');x.setDate(x.getDate()+1);const ni=iso(x);if(ni<=today)setVDate(ni);}} style={{border:'1px solid #e7e5dc',background:'#fff',borderRadius:7,width:34,height:34,opacity:vDate>=today?.4:1}}>▶</button>
+      </div>}
+      <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+        {editing?<button onClick={()=>setEditing(false)} style={{flex:1,border:'none',background:'#0e7a6f',color:'#fff',borderRadius:9,padding:'10px',fontWeight:600,fontSize:13}}>✓ Done editing</button>
+        :<>
+          <button onClick={()=>setEditing(true)} style={{border:'1px solid #e7e5dc',background:'#fff',borderRadius:9,padding:'9px 12px',fontWeight:600,fontSize:13}}>✎ Edit list</button>
+          <select value="" onChange={e=>{if(e.target.value){clSnapshotPdf(person.id,e.target.value,vDate);e.target.value='';}}} style={{border:'1px solid #e7e5dc',background:'#fff',borderRadius:9,padding:'9px 10px',fontWeight:600,fontSize:13}}><option value="">📄 Snapshot</option><option value="week">Weekly PDF</option><option value="month">Monthly PDF</option></select>
+        </>}
+      </div>
+      {editing?<>
+        {n>0&&clMobGroups({staffId:person.id,date:today,mode:'edit',ctx})}
+        <div style={{display:'flex',gap:7,marginTop:14,paddingTop:14,borderTop:'1px dashed #e7e5dc',flexWrap:'wrap'}}>
+          <input value={body} onChange={e=>setBody(e.target.value)} placeholder="Add a checklist item…" style={{flex:'1 1 100%',fontFamily:'inherit',fontSize:14,padding:'10px 12px',border:'1px solid #e7e5dc',borderRadius:9,outline:'none'}}/>
+          <select value={freq} onChange={e=>setFreq(e.target.value)} style={{fontFamily:'inherit',fontSize:13,fontWeight:600,padding:'0 9px',border:'1px solid #e7e5dc',borderRadius:9}}>{CL_FREQORDER.map(f=><option key={f} value={f}>{CL_FREQMETA[f].label}</option>)}</select>
+          {freq==='weekly'&&<select value={dow} onChange={e=>setDow(+e.target.value)} style={{fontSize:13,padding:'0 9px',border:'1px solid #e7e5dc',borderRadius:9}}>{CL_DOW.map((x,i)=><option key={i} value={i}>{x}</option>)}</select>}
+          {freq==='monthly'&&<select value={dom} onChange={e=>setDom(+e.target.value)} style={{fontSize:13,padding:'0 9px',border:'1px solid #e7e5dc',borderRadius:9}}>{Array.from({length:31},(_,i)=><option key={i} value={i+1}>{i+1}</option>)}</select>}
+          {freq==='yearly'&&<><select value={yd} onChange={e=>setYd(+e.target.value)} style={{fontSize:13,padding:'0 8px',border:'1px solid #e7e5dc',borderRadius:9}}>{Array.from({length:31},(_,i)=><option key={i} value={i+1}>{i+1}</option>)}</select><select value={ym} onChange={e=>setYm(+e.target.value)} style={{fontSize:13,padding:'0 8px',border:'1px solid #e7e5dc',borderRadius:9}}>{CL_MON.map((x,i)=><option key={i} value={i+1}>{x}</option>)}</select></>}
+          <button onClick={add} style={{border:'none',background:'#0e7a6f',color:'#fff',borderRadius:9,padding:'10px 14px',fontWeight:600,fontSize:13}}>＋ Add</button>
+        </div>
+      </>:<>
+        <div style={{fontSize:12,color:'#71797f',marginBottom:10}}>{isPast?'📆 Viewing '+fmtD(vDate)+' — read-only':'📆 Today, '+fmtD(vDate)}</div>
+        <label style={{display:'inline-flex',alignItems:'center',gap:8,fontSize:13,fontWeight:700,color:'#9a6a10',background:'#f6efdb',border:'1px solid #e6d7ad',borderRadius:9,padding:'8px 12px',marginBottom:12}}><input type="checkbox" checked={absent} onChange={e=>clMarkAbsent(person.id,vDate,e.target.checked,meP.id,ctx.R)} style={{width:17,height:17,accentColor:'#9a6a10'}}/> 🌴 Absent</label>
+        {n===0?<div style={{textAlign:'center',color:'#71797f',padding:'24px 10px'}}>Empty checklist — tap “Edit list” to add {person.n}’s duties.</div>
+         :absent?<div style={{background:'#f6efdb',border:'1px solid #e6d7ad',borderRadius:10,padding:14,color:'#9a6a10',fontSize:13.5}}>🌴 <b>{person.n} was absent on {fmtD(vDate)}</b> — checklist not expected this day.</div>
+         :<><div style={{fontSize:12,color:'#71797f',marginBottom:6}}>{d} of {n} done</div>{clMobGroups({staffId:person.id,date:vDate,mode:'roview',ctx})}</>}
+      </>}
+    </div>
   </div>;
 }
 function AllTasks({ctx,acts}){
