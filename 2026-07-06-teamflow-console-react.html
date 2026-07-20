@@ -912,6 +912,12 @@ function App(){
   const treeRoot=(role==='admin'||role==='mgmt')?(STAFF.find(p=>!p.boss)||viewer).n:viewer.n;
   const shorts=scope.map(p=>p.s);
   const bossChain=(()=>{let c=[],cur=viewer.boss;while(cur){c.push(cur);const b=byName(cur);cur=b?b.boss:null;}return c;})();
+  /* "On instruction of" in the New Task form lists all leadership (Administrator/Director/Management),
+     not just the creator's own boss chain — anyone at that tier can hand down a task. Excludes the
+     creator themselves ("own initiative" covers that). Ordered top tier first, then by name. */
+  const INSTRUCT_RANK={Administrator:0,Director:1,Management:2};
+  const instructors=STAFF.filter(p=>p.role in INSTRUCT_RANK&&p.n!==viewer.n)
+    .sort((a,b)=>INSTRUCT_RANK[a.role]-INSTRUCT_RANK[b.role]||a.n.localeCompare(b.n));
   const canApprove=from=>{const p=byShort(from);return role==='admin'||role==='mgmt'||!!(p&&p.boss===viewer.n);};
   const canAssignIssue=role==='admin'||role==='mgmt'||!!(maintHead()&&viewer.n===maintHead().n);
 
@@ -1034,7 +1040,7 @@ function App(){
     setTimeout(()=>{pr.style.display='none';document.title=ot;},300);
   }
 
-  const ctx={role,view,setView,say,R,scope,shorts,viewer,treeRoot,mine,canApprove,canAssignIssue,bossChain,previewing,syncTick,
+  const ctx={role,view,setView,say,R,scope,shorts,viewer,treeRoot,mine,canApprove,canAssignIssue,bossChain,instructors,previewing,syncTick,
     remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,approveCompletion,rejectCompletion,
     setDrawerIdx,setModal,setDailyReport,setResetTarget,setPersonTasks,exportCSV,printReport,qReqs,qExts,qCompletions,attentionList,
     notifs,openNotif,markAllNotifsSeen,lastCronRun,activityLog};
@@ -3463,7 +3469,7 @@ function QuickCapture({ctx,close}){
           <label>On instruction of</label>
           <select value={boss} onChange={e=>setBoss(e.target.value)}>
             <option value="">No one — own initiative</option>
-            {ctx.bossChain.map(n=><option key={n} value={n}>{bossLabelOf(n)}</option>)}
+            {ctx.instructors.map(p=><option key={p.s} value={p.n}>{bossLabelOf(p.n)}</option>)}
           </select>
           <label>Note (optional)</label>
           <textarea rows={2} value={note} onChange={e=>setNote(e.target.value)} placeholder="Any details…"/>
