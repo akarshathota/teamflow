@@ -252,10 +252,10 @@ const peopleDemo=[
 ];
 const ROLES={
   admin:{name:"Admin",org:"Admin",av:"A",team:ALL_STAFF,self:"Admin",
-    tabs:["home","alltasks","calendar","insights","notices","more"],admin:true,billing:true,canPost:true,
+    tabs:["home","alltasks","checklist","calendar","insights","notices","more"],admin:true,billing:true,canPost:true,
     brief:"Across all 4 teams: 2 tasks at risk today and 1 person is overloaded. You have full visibility and control."},
   mgmt:{name:"Rajesh Menon",org:"Management",av:"R",team:ALL_STAFF,self:"Rajesh",
-    tabs:["home","alltasks","calendar","insights","notices","more"],admin:true,billing:false,canPost:true,
+    tabs:["home","alltasks","checklist","calendar","insights","notices","more"],admin:true,billing:false,canPost:true,
     brief:"Org-wide view: 2 tasks at risk and 1 overloaded person. You can manage people and see every report."},
   /* 'Director' (DB_ROLE_TO_KEY, shared.js) sits between mgmt and srm — oversees several Sr.
      Managers' departments at once. Same shape as srm (self + full subtree scope, direct-reports-
@@ -263,13 +263,13 @@ const ROLES={
      role-key gate exists today. name/org/av/team/self are placeholder demo values only — never
      actually shown, see the lead entry's comment below for why. */
   dir:{name:"Director",org:"Director",av:"D",team:[],self:"",
-    tabs:["home","alltasks","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
+    tabs:["home","alltasks","checklist","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
     brief:""},
   srm:{name:"Anita Desai",org:"Manager · Academic + Admin",av:"A",team:["Meena","Kavya","Ravi","Anita","Hari","Suresh"],self:"Anita",
-    tabs:["home","alltasks","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
+    tabs:["home","alltasks","checklist","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
     brief:"Your teams (Academic, Admin): 1 task likely to slip by Friday and Hari is behind."},
   jrm:{name:"Vikram Rao",org:"Team Member · Maintenance head",av:"V",team:["Hari","Suresh","Latha"],self:"Vikram",
-    tabs:["home","alltasks","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
+    tabs:["home","alltasks","checklist","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
     brief:"Your team: Hari has 1 task overdue 4 days. Assign or remind to keep things on track."},
   /* 'Team Lead' (DB_ROLE_TO_KEY, shared.js) sits between jrm and worker in the reporting chain and
      "behaves like jrm everywhere a role-key gate exists today" — same tabs/admin/billing/canPost
@@ -278,10 +278,10 @@ const ROLES={
      App's `person` lookup below), so these are never actually shown. Without this entry, a real
      Team Lead login hit ROLES[role] being undefined and crashed. */
   lead:{name:"Team Lead",org:"Team Lead",av:"T",team:[],self:"",
-    tabs:["home","alltasks","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
+    tabs:["home","alltasks","checklist","calendar","insights","notices","more"],admin:false,billing:false,canPost:true,
     brief:""},
   worker:{name:"Hari Charan",org:"Teacher",av:"H",team:["Hari"],self:"Hari",
-    tabs:["alltasks","calendar","notices"],admin:false,billing:false,canPost:false,brief:""}
+    tabs:["alltasks","checklist","calendar","notices"],admin:false,billing:false,canPost:false,brief:""}
 };
 /* Walks the REAL boss_id chain upward from a real person (by short name), collecting
    {n: raw name, label: "Name (Role)"} for every real boss above them. Replaces a static
@@ -339,6 +339,7 @@ function approvalQueue(role,self){
 /* every staff row, incl. Priya/Rajesh/Anita-the-manager — for resolving requesters/approvers.
    MEMBERS (Teachers + the maintenance Team Member) is just the assignable operational subset. */
 let ALL_PEOPLE=[];
+let clItems=[],clDone=[],clAbs=[]; // checklist tables (own, via RLS)
 const findPerson=n=>ALL_PEOPLE.find(p=>p.n.toLowerCase()===String(n).toLowerCase()||p.s.toLowerCase()===String(n).toLowerCase());
 /* Called from the Daily Report submit toast and the escalate button (DailyReportSheet) but was
    never actually defined anywhere in this file — a real ReferenceError on every submit/escalate
@@ -390,7 +391,8 @@ function rowToMobileTask(row,assignRows,byId,logRows){
   return t;
 }
 async function loadAll(){
-  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},{data:noticeRows},notifRows,{data:orgRow}]=await Promise.all([
+  const clSince=iso(new Date(Date.now()-90*864e5));
+  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},{data:noticeRows},notifRows,{data:orgRow},{data:clItemRows},{data:clDoneRows},{data:clAbsRows}]=await Promise.all([
     sb.from('staff').select('*'),
     sb.from('tasks').select('*'),
     sb.from('task_assignees').select('*'),
@@ -398,9 +400,15 @@ async function loadAll(){
     sb.from('requests').select('*').order('created_at'),
     sb.from('notices').select('*').order('created_at',{ascending:false}),
     loadNotifs(),
-    sb.from('org_settings').select('name').eq('id',true).maybeSingle()
+    sb.from('org_settings').select('name').eq('id',true).maybeSingle(),
+    sb.from('checklist_items').select('*').eq('archived',false),
+    sb.from('checklist_completions').select('*').gte('occ_date',clSince),
+    sb.from('checklist_absences').select('*').gte('absent_date',clSince)
   ]);
   if(orgRow&&orgRow.name)ORG_NAME=orgRow.name;
+  clItems.length=0;clItems.push(...(clItemRows||[]));
+  clDone.length=0;clDone.push(...(clDoneRows||[]));
+  clAbs.length=0;clAbs.push(...(clAbsRows||[]));
   const byId=Object.fromEntries((staffRows||[]).map(r=>[r.id,{name:r.name,short:r.short_name,initials:r.initials}]));
   ALL_PEOPLE.length=0;ALL_PEOPLE.push(...(staffRows||[]).map(r=>({n:r.name,s:r.short_name,id:r.id,authId:r.auth_user_id,role:r.role,department:r.department,
     boss:r.boss_id&&byId[r.boss_id]?byId[r.boss_id].short:null,bossId:r.boss_id||null})));
@@ -731,6 +739,8 @@ function App(){
       .on('postgres_changes',{event:'*',schema:'public',table:'task_activity_notifications'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'daily_reports'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'report_issues'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'checklist_items'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'checklist_completions'},refetch)
       .subscribe();
     return ()=>{clearTimeout(t);sb.removeChannel(ch);};
   },[session]);
@@ -899,6 +909,7 @@ function App(){
     <div className="content">
       {page==='home'&&<Home ctx={ctx} acts={acts}/>}
       {page==='alltasks'&&<AllTasks ctx={ctx} acts={acts}/>}
+      {page==='checklist'&&<ChecklistMobile ctx={ctx}/>}
       {page==='calendar'&&<div><div className="sec">My calendar · due dates</div><Cal ctx={ctx} personal/></div>}
       {page==='insights'&&<Insights ctx={ctx}/>}
       {page==='notices'&&<Notices ctx={ctx}/>}
@@ -907,7 +918,7 @@ function App(){
     </div>
     <button className="fab" onClick={()=>setSheet({kind:'actions'})} aria-label="Add"><I n="plus" s={26}/></button>
     <div className="nav">
-      {[['home','home','Home'],['alltasks','checkc','Tasks'],['calendar','cal','Calendar'],['insights','chart','Insights'],['notices','horn','Notices'],['more','dots','More']]
+      {[['home','home','Home'],['alltasks','checkc','Tasks'],['checklist','checkc','Checklist'],['calendar','cal','Calendar'],['insights','chart','Insights'],['notices','horn','Notices'],['more','dots','More']]
         .filter(([p])=>r.tabs.includes(p))
         .map(([p,ic,l])=><button key={p} className={page===p?'on':''} onClick={()=>setPage(p)}>
           <span className="ic"><I n={ic}/></span>{l}</button>)}
@@ -1044,6 +1055,39 @@ function WorkerPending({ctx}){
 }
 
 /* ============ tasks tab ============ */
+function ChecklistMobile({ctx}){
+  const meP=ALL_PEOPLE.find(p=>p.s===ctx.realSelf);
+  const today=iso(new Date());
+  if(!meP)return <div><div className="sec">My checklist</div><div className="task" style={{textAlign:'center',color:'#71797f',padding:24}}>Checklist unavailable.</div></div>;
+  const all=clItemsFor(meP.id).filter(it=>clDueOn(it,today));
+  const done=clDoneSet(meP.id,today);
+  const n=all.length,d=all.filter(i=>done.has(i.id)).length,pct=n?Math.round(d/n*100):0;
+  const tick=it=>{const on=!done.has(it.id);
+    if(on)clDone.push({id:'tmp'+Date.now(),item_id:it.id,staff_id:meP.id,occ_date:today});
+    else{const i=clDone.findIndex(c=>c.item_id===it.id&&c.occ_date===today);if(i>=0)clDone.splice(i,1);}
+    ctx.R();
+    (on?sb.from('checklist_completions').upsert({item_id:it.id,staff_id:meP.id,occ_date:today},{onConflict:'item_id,occ_date'})
+       :sb.from('checklist_completions').delete().eq('item_id',it.id).eq('occ_date',today)).then(()=>{},e=>console.error(e));};
+  return <div>
+    <div className="sec">My checklist <span className="free">TODAY</span></div>
+    {n===0?<div className="task" style={{textAlign:'center',color:'#71797f',padding:'28px 16px'}}>Nothing on your checklist today. A manager above you sets these — they refresh each morning.</div>
+    :<div className="task" style={{padding:16}}>
+      <div style={{fontSize:12,color:'#71797f',marginBottom:8}}>{fmtD(today)} · {d} of {n} done · {pct}%</div>
+      <div style={{height:8,background:'#eeece4',borderRadius:99,overflow:'hidden',marginBottom:2}}><div style={{height:'100%',width:pct+'%',background:'#0e7a6f'}}/></div>
+      {CL_FREQORDER.map(f=>{const grp=all.filter(i=>i.freq===f);if(!grp.length)return null;
+        return <div key={f}>
+          <div style={{fontSize:11,fontWeight:800,letterSpacing:'.6px',textTransform:'uppercase',color:'#9a938a',margin:'16px 0 2px'}}>{CL_FREQMETA[f].label}</div>
+          {grp.map(it=>{const on=done.has(it.id);
+            return <div key={it.id} onClick={()=>tick(it)} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 2px',borderBottom:'1px solid #efece3',cursor:'pointer'}}>
+              <div style={{width:26,height:26,borderRadius:7,flex:'0 0 auto',border:'2px solid '+(on?'#0e7a6f':'#cfccbf'),background:on?'#0e7a6f':'#fff',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:15}}>{on?'✓':''}</div>
+              <div style={{flex:1,fontSize:15,color:on?'#9a938a':'#1b1e21',textDecoration:on?'line-through':'none'}}>{it.body}</div>
+              <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',padding:'3px 8px',borderRadius:99,color:'#43494f',background:'#f6f5f0',border:'1px solid #e7e5dc',whiteSpace:'nowrap'}}>{clSchedLabel(it)}</span>
+            </div>;})}
+        </div>;})}
+      <div style={{fontSize:11.5,color:'#71797f',marginTop:14,lineHeight:1.5}}>↻ Your list refreshes each morning; weekly / monthly / yearly items appear on their day. A manager above you sets it.</div>
+    </div>}
+  </div>;
+}
 function AllTasks({ctx,acts}){
   const [mode,setMode]=useState('byme'); // 'byme' = assigned by me (to my team) · 'mine' = assigned to me
   const [f,setF]=useState('all');

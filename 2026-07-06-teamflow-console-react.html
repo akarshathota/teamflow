@@ -374,6 +374,86 @@
     .calhead .spacer{flex-basis:100%;height:0}
     .calhead .fsel{flex:1;min-width:0}
   }
+  /* ---- checklists ---- */
+  .ktabs{display:flex;gap:4px;margin-bottom:18px;border-bottom:1px solid var(--line)}
+  .ktab{border:none;background:none;padding:10px 14px;font-size:13.5px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2.5px solid transparent;margin-bottom:-1px}
+  .ktab:hover{color:var(--ink)}
+  .ktab.on{color:var(--accent-ink);border-bottom-color:var(--accent)}
+  .ktab .cnt{font-size:11px;background:#f0efe8;color:var(--ink2);border-radius:999px;padding:1px 7px;font-weight:700;margin-left:7px}
+  .ktab.on .cnt{background:var(--accent-soft);color:var(--accent-ink)}
+  .khead{display:flex;align-items:center;gap:14px;margin-bottom:8px;flex-wrap:wrap}
+  .kwho{display:flex;align-items:center;gap:11px}
+  .kh-t{font-weight:700;font-size:16px;font-family:'Bricolage Grotesque',sans-serif}
+  .ksetby{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .kspacer{margin-left:auto}
+  .kav{width:36px;height:36px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex:0 0 auto}
+  .ktoday{font-size:11px;font-weight:700;color:var(--ink2);background:#f0efe8;border:1px solid var(--line);padding:4px 11px;border-radius:999px;white-space:nowrap}
+  .kreset{font-size:12px;color:var(--muted);margin:2px 0 14px;line-height:1.5}
+  .kreset .r{color:var(--accent);font-size:14px}
+  .kreset b{color:var(--ink2)}
+  .kfeeds{font-size:12.5px;color:var(--accent-ink);background:var(--accent-soft);border:1px solid var(--accent-border);border-radius:10px;padding:9px 13px;margin:0 0 14px;display:flex;gap:9px;align-items:flex-start;line-height:1.5}
+  .kprogtxt{font-size:12.5px;color:var(--ink2);font-weight:600;margin-bottom:4px}
+  .kprogbar{height:8px;background:#eeece4;border-radius:999px;overflow:hidden;margin:2px 0 16px}
+  .kprogbar>span{display:block;height:100%;background:var(--accent);border-radius:999px}
+  .ksec+.ksec{margin-top:16px}
+  .ksec-h{display:flex;align-items:center;gap:9px;font-size:11px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:var(--ink2);padding:8px 4px 6px;border-bottom:1.5px solid var(--line);margin-bottom:2px}
+  .ksec-c{color:var(--muted);font-weight:700;letter-spacing:0;font-size:11.5px}
+  .ksec-hint{color:var(--muted);font-weight:500;letter-spacing:.2px;text-transform:none;font-size:11px}
+  .krow{display:flex;align-items:center;gap:12px;padding:11px 6px;border-bottom:1px solid var(--line)}
+  .krow:last-child{border-bottom:none}
+  .kgrip{color:#c9c6ba;cursor:grab;font-size:15px}
+  .kchk{width:22px;height:22px;border-radius:6px;border:2px solid #cfccbf;flex:0 0 auto;cursor:pointer;display:flex;align-items:center;justify-content:center;background:#fff}
+  .kchk.on{background:var(--accent);border-color:var(--accent)}
+  .kchk.on::after{content:"✓";color:#fff;font-size:13px;font-weight:700}
+  .kchk.ro{cursor:default}
+  .ktext{flex:1;font-size:13.5px;color:var(--ink)}
+  .krow.done .ktext{color:var(--muted);text-decoration:line-through}
+  .ktext-in{flex:1;font-size:13.5px;font-family:inherit;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 9px;outline:none}
+  .ktext-in:focus{border-color:var(--accent-border);box-shadow:0 0 0 3px var(--accent-soft)}
+  .kfreq{font-size:10.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--ink2);background:#f6f5f0;white-space:nowrap}
+  .kfreq.daily{color:var(--accent-ink);background:var(--accent-soft);border-color:var(--accent-border)}
+  .kfreq.weekly{color:var(--blue);background:var(--blue-soft);border-color:#cdddee}
+  .kfreq.monthly{color:var(--amber);background:var(--amber-soft);border-color:#e6d7ad}
+  .kfreq.yearly{color:#7a4b7d;background:#f3e9f4;border-color:#e2cde4}
+  .kediting .kfreq{cursor:pointer}
+  .kreorder button,.kdel{border:none;background:none;cursor:pointer;color:#b7b3a6;font-size:13px;padding:2px 5px;border-radius:5px}
+  .kreorder button:hover{color:var(--ink);background:#f0efe8}
+  .kdel:hover{color:var(--red);background:var(--red-soft)}
+  .kaddrow{display:flex;gap:9px;margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);flex-wrap:wrap}
+  .kaddrow input{flex:1;min-width:200px;font-family:inherit;font-size:13.5px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;outline:none}
+  .kaddrow input:focus{border-color:var(--accent-border);box-shadow:0 0 0 3px var(--accent-soft)}
+  .kaddrow select{font-family:inherit;font-size:12.5px;font-weight:600;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:#f6f5f0;color:var(--ink2);outline:none;cursor:pointer}
+  .kaddhint{font-size:11.5px;color:var(--muted);margin-top:8px}
+  .kteamwrap{display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start}
+  .kmem{display:flex;align-items:center;gap:11px;padding:11px;border:1px solid var(--line);border-radius:10px;cursor:pointer;background:var(--card);width:100%;text-align:left;margin-bottom:8px}
+  .kmem:hover{background:#faf9f5}
+  .kmem.on{border-color:var(--accent-border);background:var(--accent-soft)}
+  .kmem-n{font-weight:600;font-size:13.5px}
+  .kmem-r{font-size:11.5px;color:var(--muted)}
+  .kmem-p{margin-left:auto;text-align:right}
+  .kmem-p b{font-size:13px;font-weight:700}
+  .kmem-p .lab{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .knote{font-size:12px;color:var(--muted);background:#faf9f5;border:1px solid var(--line);border-radius:9px;padding:10px 13px;margin-bottom:16px;display:flex;gap:9px;align-items:flex-start;line-height:1.5}
+  .kfilter{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+  .kfilter input,.kfilter select{font-family:inherit;font-size:13px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;outline:none;background:var(--card);color:var(--ink);width:100%}
+  .kfilter select{background:#f6f5f0;font-weight:600;color:var(--ink2);cursor:pointer}
+  .kdate{display:inline-flex;align-items:center;gap:5px}
+  .kdate button{border:1px solid var(--line);background:var(--card);border-radius:7px;width:30px;height:32px;cursor:pointer;color:var(--ink2);font-size:11px}
+  .kdate button:disabled{opacity:.35;cursor:default}
+  .kdate input{font-family:inherit;font-size:12.5px;font-weight:600;padding:7px 9px;border:1px solid var(--line);border-radius:8px;color:var(--ink);outline:none;background:var(--card)}
+  .kdatectx{font-size:12px;color:var(--muted);margin:-2px 0 12px}
+  .kdatectx b{color:var(--ink2)}
+  .kabsent-row{display:flex;align-items:center;gap:12px;margin:0 0 14px;flex-wrap:wrap}
+  .kabschk{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--amber);background:var(--amber-soft);border:1px solid #e6d7ad;border-radius:9px;padding:8px 12px;cursor:pointer;white-space:nowrap}
+  .kabschk input{width:17px;height:17px;accent-color:var(--amber);cursor:pointer;margin:0}
+  .kabsent-b{display:flex;align-items:flex-start;gap:12px;background:var(--amber-soft);border:1px solid #e6d7ad;border-radius:11px;padding:15px 16px;color:var(--amber);font-size:13.5px;line-height:1.5}
+  .kabsent-b b{color:#7a5410}
+  .ksnap{cursor:pointer;font-weight:600;padding:8px 10px}
+  .kempty{text-align:center;color:var(--muted);padding:40px 20px}
+  .kempty .big{font-size:32px;margin-bottom:8px}
+  .kempty h3{margin:0 0 4px;color:var(--ink2);font-size:15px}
+  @media(max-width:820px){.kteamwrap{grid-template-columns:1fr}}
+
   @media print{
     @page{margin:12mm}
     body>*{display:none!important}
@@ -416,6 +496,9 @@ let requests=[];
 let notifs=[];
 let lastCronRun=null; // most recent cron_runs row — "is check-due-tasks actually running?" (RLS: admin/mgmt only, empty for everyone else)
 let activityLog=[]; // recent admin_activity_log rows — RLS: admin/mgmt only
+let clItems=[]; // checklist_items rows (in scope)
+let clDone=[];  // checklist_completions rows (recent window)
+let clAbs=[];   // checklist_absences rows
 
 function rowsToStaff(rows){
   const byId=Object.fromEntries(rows.map(r=>[r.id,r]));
@@ -456,7 +539,8 @@ function rowToRequest(row){
 async function loadAll(){
   /* cron_runs/admin_activity_log are both RLS-gated to admin/mgmt (see their migrations) — for
      everyone else these just come back empty, same as any other out-of-scope query in this app. */
-  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},notifRows,{data:cronRows},{data:activityRows},{data:orgRow}]=await Promise.all([
+  const clSince=iso(new Date(Date.now()-90*864e5)); // last 90 days of completion/absence history
+  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},notifRows,{data:cronRows},{data:activityRows},{data:orgRow},{data:clItemRows},{data:clDoneRows},{data:clAbsRows}]=await Promise.all([
     sb.from('staff').select('*'),
     sb.from('tasks').select('*'),
     sb.from('task_assignees').select('*'),
@@ -465,7 +549,10 @@ async function loadAll(){
     loadNotifs(),
     sb.from('cron_runs').select('*').order('ran_at',{ascending:false}).limit(1),
     sb.from('admin_activity_log').select('*').order('created_at',{ascending:false}).limit(30),
-    sb.from('org_settings').select('name').eq('id',true).maybeSingle()
+    sb.from('org_settings').select('name').eq('id',true).maybeSingle(),
+    sb.from('checklist_items').select('*').eq('archived',false),
+    sb.from('checklist_completions').select('*').gte('occ_date',clSince),
+    sb.from('checklist_absences').select('*').gte('absent_date',clSince)
   ]);
   if(orgRow&&orgRow.name)ORG_NAME=orgRow.name;
   STAFF.length=0;STAFF.push(...rowsToStaff(staffRows||[]));
@@ -479,6 +566,9 @@ async function loadAll(){
   notifs.length=0;notifs.push(...(notifRows||[]));
   lastCronRun=(cronRows&&cronRows[0])||null;
   activityLog.length=0;activityLog.push(...(activityRows||[]));
+  clItems.length=0;clItems.push(...(clItemRows||[]));
+  clDone.length=0;clDone.push(...(clDoneRows||[]));
+  clAbs.length=0;clAbs.push(...(clAbsRows||[]));
 }
 function taskRow(t){
   return {title:t.t,type:t.type||'work',department:BUCKETS[t.bucket]||t.bucket,priority:t.prio||'med',
@@ -862,6 +952,9 @@ function App(){
       .on('postgres_changes',{event:'*',schema:'public',table:'task_activity_notifications'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'daily_reports'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'report_issues'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'checklist_items'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'checklist_completions'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'checklist_absences'},refetch)
       .subscribe();
     return ()=>{clearTimeout(t);sb.removeChannel(ch);};
   },[session]);
@@ -1064,7 +1157,7 @@ function App(){
         {myRoleKey==='admin'&&role==='admin'?<span className="org-edit-dept" title="Rename organisation" role="button"
           onClick={()=>{setOrgDraft(ORG_NAME);setOrgEdit(true);}}>✎</span>:null}
       </div>}
-      {[['dashboard','grid','Dashboard','1'],['tasks','checkc','Tasks','2'],['calendar','cal','Calendar','3'],['people','users','People & roles','4'],['reports','chart','Reports','5']].map(([v,ic,l,k])=>
+      {[['dashboard','grid','Dashboard','1'],['tasks','checkc','Tasks','2'],['checklists','checkc','Checklists','3'],['calendar','cal','Calendar','4'],['people','users','People & roles','5'],['reports','chart','Reports','6']].map(([v,ic,l,k])=>
         <button key={v} className={'navitem'+(view===v?' on':'')} onClick={()=>setView(v)}>
           <I n={ic}/><span className="lb">{l}</span><span className="kbd">{k}</span></button>)}
       <div className="side-foot">
@@ -1106,6 +1199,7 @@ function App(){
       </div>
       {view==='dashboard'&&<Dashboard ctx={ctx} open={open} over={over} today={today} done={done}/>}
       {view==='tasks'&&<TasksView ctx={ctx}/>}
+      {view==='checklists'&&<ChecklistsView ctx={ctx}/>}
       {view==='calendar'&&<CalendarView ctx={ctx}/>}
       {view==='people'&&<PeopleView ctx={ctx}/>}
       {view==='reports'&&<ReportsView ctx={ctx}/>}
@@ -1499,6 +1593,195 @@ function TaskListModal({ctx,title,rows,close}){
           <TaskRow t={o.t} i={o.i} ctx={ctx}/></div>):<Empty t="No tasks" s="Nothing behind this number right now."/>}
       </div>
     </div>
+  </div>;
+}
+/* ============ Checklists ============ (clItemsFor/clDoneSet/clAbsOn live in shared.js) */
+const clDefAnchor=f=>f==='weekly'?{dow:0}:f==='monthly'?{dom:1}:f==='yearly'?{y_day:1,y_mon:1}:{};
+const clNextFreq={daily:'weekly',weekly:'monthly',monthly:'yearly',yearly:'daily'};
+async function clTick(item,date,on,R){const owner=item.staff_id;
+  if(on)clDone.push({id:'tmp'+Date.now(),item_id:item.id,staff_id:owner,occ_date:date});
+  else{const i=clDone.findIndex(c=>c.item_id===item.id&&c.occ_date===date);if(i>=0)clDone.splice(i,1);}
+  R();
+  try{if(on)await sb.from('checklist_completions').upsert({item_id:item.id,staff_id:owner,occ_date:date},{onConflict:'item_id,occ_date'});
+      else await sb.from('checklist_completions').delete().eq('item_id',item.id).eq('occ_date',date);}catch(e){console.error(e);}}
+async function clAdd(staffId,body,freq,anchor,R){
+  const row={staff_id:staffId,body,freq,sort_order:clItems.filter(i=>i.staff_id===staffId&&!i.archived).length,...anchor};
+  const {data,error}=await sb.from('checklist_items').insert(row).select().single();
+  if(error){console.error(error);return;}clItems.push(data);R();}
+async function clPatch(id,patch,R){const it=clItems.find(i=>i.id===id);if(it)Object.assign(it,patch);R();
+  const {error}=await sb.from('checklist_items').update(patch).eq('id',id);if(error)console.error(error);}
+async function clArchive(id,R){const i=clItems.findIndex(x=>x.id===id);if(i>=0)clItems.splice(i,1);R();
+  const {error}=await sb.from('checklist_items').update({archived:true}).eq('id',id);if(error)console.error(error);}
+async function clReorder(staffId,id,dir,R){const arr=clItemsFor(staffId),it=arr.find(x=>x.id===id);
+  const same=arr.filter(x=>x.freq===it.freq),p=same.indexOf(it),sw=dir<0?same[p-1]:same[p+1];if(!sw)return;
+  const a=it.sort_order,b=sw.sort_order;it.sort_order=b;sw.sort_order=a;R();
+  await sb.from('checklist_items').update({sort_order:it.sort_order}).eq('id',it.id);
+  await sb.from('checklist_items').update({sort_order:sw.sort_order}).eq('id',sw.id);}
+async function clMarkAbsent(staffId,date,on,markedBy,R){
+  if(on)clAbs.push({id:'tmp'+Date.now(),staff_id:staffId,absent_date:date,marked_by:markedBy});
+  else{const i=clAbs.findIndex(a=>a.staff_id===staffId&&a.absent_date===date);if(i>=0)clAbs.splice(i,1);}
+  R();
+  try{if(on)await sb.from('checklist_absences').upsert({staff_id:staffId,absent_date:date,marked_by:markedBy},{onConflict:'staff_id,absent_date'});
+      else await sb.from('checklist_absences').delete().eq('staff_id',staffId).eq('absent_date',date);}catch(e){console.error(e);}}
+/* ---- checklist weekly/monthly snapshot PDF (landscape, org header, jsPDF+autotable) ---- */
+function clPeriodDates(mode,anchorISO){const a=new Date(anchorISO+'T00:00:00'),out=[];
+  if(mode==='week'){const dow=(a.getDay()+6)%7,mon=new Date(a);mon.setDate(a.getDate()-dow);
+    for(let i=0;i<7;i++){const d=new Date(mon);d.setDate(mon.getDate()+i);out.push(iso(d));}}
+  else{const y=a.getFullYear(),m=a.getMonth(),last=new Date(y,m+1,0).getDate();
+    for(let i=1;i<=last;i++)out.push(iso(new Date(y,m,i)));}
+  return out;}
+function clCellState(staffId,isoD,item,todayISO,doneOn){
+  if(!clDueOn(item,isoD))return 'nd';
+  if(isoD>todayISO)return 'future';
+  if(clAbsOn(staffId,isoD))return 'abs';
+  return doneOn(isoD).has(item.id)?'done':'miss';}
+async function clSnapshotPdf(staffId,mode,anchorISO){
+  await ensurePdfLibs();
+  const person=STAFF.find(p=>p.id===staffId),items=clItemsFor(staffId),days=clPeriodDates(mode,anchorISO),todayISO=iso(TODAY);
+  const dc={},doneOn=d=>dc[d]||(dc[d]=clDoneSet(staffId,d));
+  const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'pt',format:'a4'});
+  let y=42;
+  if(typeof ORG_NAME!=='undefined'&&ORG_NAME){doc.setFont('helvetica','bold');doc.setFontSize(20);doc.setTextColor(10,92,84);doc.text(ORG_NAME,40,y);
+    doc.setFontSize(12);doc.setTextColor(67,73,79);doc.text('Checklist Snapshot — '+(mode==='week'?'Weekly':'Monthly'),40+doc.getTextWidth(ORG_NAME)+16,y);y+=24;}
+  else{doc.setFont('helvetica','bold');doc.setFontSize(14);doc.text('Checklist Snapshot — '+(mode==='week'?'Weekly':'Monthly'),40,y);y+=20;}
+  const period=mode==='week'?pdfDate(days[0])+' – '+pdfDate(days[days.length-1])+', '+new Date(days[0]+'T00:00:00').getFullYear()
+    :new Date(days[0]+'T00:00:00').toLocaleDateString('en',{month:'long',year:'numeric'});
+  doc.setFont('helvetica','normal');doc.setFontSize(11);doc.setTextColor(27,30,33);
+  doc.text((person?person.n:'—')+'  ·  '+(person?person.role:'')+'  ·  '+(person?person.dept:'')+'    —    '+period,40,y);y+=16;
+  let due=0,done=0;const absDays=new Set();
+  days.forEach(d=>{if(clAbsOn(staffId,d)&&d<=todayISO)absDays.add(d);
+    items.forEach(it=>{const s=clCellState(staffId,d,it,todayISO,doneOn);if(s==='done'){due++;done++;}else if(s==='miss')due++;});});
+  doc.setFontSize(10);doc.setTextColor(85,85,85);
+  doc.text((due?Math.round(done/due*100):0)+'% completed    ·    '+done+'/'+due+' due items done    ·    '+absDays.size+' day'+(absDays.size!==1?'s':'')+' absent',40,y);y+=4;
+  const SYM={done:'✓',miss:'·',abs:'A',nd:'–',future:''};
+  const head=[['Checklist item'].concat(days.map(d=>{const dt=new Date(d+'T00:00:00');return (mode==='week'?CL_DOW[(dt.getDay()+6)%7]+'\n':'')+dt.getDate();}))];
+  const ordered=[];CL_FREQORDER.forEach(f=>items.filter(i=>i.freq===f).forEach(i=>ordered.push(i)));
+  const body=ordered.map(it=>[it.body+'\n'+clSchedLabel(it)].concat(days.map(d=>SYM[clCellState(staffId,d,it,todayISO,doneOn)])));
+  doc.autoTable({startY:y+12,margin:{left:40,right:40},
+    styles:{fontSize:7.5,halign:'center',valign:'middle',cellPadding:2,lineColor:[236,235,227],lineWidth:0.5},
+    headStyles:{fillColor:[250,249,245],textColor:[67,73,79],fontStyle:'bold',fontSize:7},
+    columnStyles:{0:{halign:'left',cellWidth:150}},head,body,
+    didParseCell:function(data){if(data.section!=='body'||data.column.index===0)return;const v=data.cell.raw;
+      if(v==='✓'){data.cell.styles.textColor=[26,122,72];data.cell.styles.fillColor=[231,244,236];}
+      else if(v==='·'){data.cell.styles.textColor=[196,58,83];data.cell.styles.fillColor=[251,238,241];data.cell.styles.fontStyle='bold';}
+      else if(v==='A'){data.cell.styles.textColor=[154,106,16];data.cell.styles.fillColor=[246,239,219];data.cell.styles.fontStyle='bold';}
+      else if(v==='–'){data.cell.styles.textColor=[205,202,189];}}});
+  let ly=doc.lastAutoTable.finalY+16;doc.setFontSize(8);doc.setTextColor(85,85,85);
+  doc.text('Legend:   ✓ done      · missed      A absent      – not due',40,ly);
+  const le=items[0],leBy=le&&le.last_edited_by?byId2Name(le.last_edited_by):null;
+  doc.text('Generated '+new Date().toLocaleDateString('en',{day:'numeric',month:'short',year:'numeric'})+(leBy?' · list last edited by '+leBy:'')+' · TeamFlow',40,ly+13);
+  doc.save(iso(new Date())+'-'+(person?person.n.toLowerCase().replace(/[^a-z0-9]+/g,'-'):'staff')+'-checklist-'+mode+'.pdf');
+}
+
+function KItemRows({staffId,date,mode,ctx}){
+  const items=clItemsFor(staffId),done=clDoneSet(staffId,date);
+  return <>{CL_FREQORDER.map(f=>{const grp=items.filter(i=>i.freq===f);if(!grp.length)return null;
+    const d=grp.filter(i=>done.has(i.id)).length;
+    return <div className="ksec" key={f}><div className="ksec-h">{CL_FREQMETA[f].label}<span className="ksec-c">{d}/{grp.length}</span><span className="ksec-hint">· {CL_FREQMETA[f].hint}</span></div>
+      {grp.map(it=>{const isDone=done.has(it.id);
+        const chip=<span className={'kfreq '+f} {...(mode==='edit'?{title:'Change frequency',onClick:()=>{const nf=clNextFreq[it.freq];clPatch(it.id,{freq:nf,dow:null,dom:null,y_day:null,y_mon:null,...clDefAnchor(nf)},ctx.R);}}:{})}>{clSchedLabel(it)}</span>;
+        if(mode==='edit')return <div className="krow" key={it.id}>
+          <span className="kgrip">⠿</span><div className="kchk ro"/>
+          <input className="ktext-in" defaultValue={it.body} onBlur={e=>{if(e.target.value.trim()&&e.target.value!==it.body)clPatch(it.id,{body:e.target.value.trim()},ctx.R);}}/>
+          {chip}
+          <span className="kreorder"><button onClick={()=>clReorder(staffId,it.id,-1,ctx.R)}>▲</button><button onClick={()=>clReorder(staffId,it.id,1,ctx.R)}>▼</button></span>
+          <button className="kdel" title="Remove" onClick={()=>clArchive(it.id,ctx.R)}>✕</button></div>;
+        const tickable=mode==='tick';
+        return <div className={'krow'+(isDone?' done':'')} key={it.id}>
+          <div className={'kchk'+(isDone?' on':'')+(tickable?'':' ro')} {...(tickable?{onClick:()=>clTick(it,date,!isDone,ctx.R)}:{})}/>
+          <div className="ktext">{it.body}</div>{chip}</div>;})}</div>;})}</>;
+}
+function KAddRow({staffId,ctx}){
+  const [body,setBody]=useState(''),[freq,setFreq]=useState('daily'),[dow,setDow]=useState(0),[dom,setDom]=useState(1),[yd,setYd]=useState(1),[ym,setYm]=useState(1);
+  const add=()=>{if(!body.trim())return;const a=freq==='weekly'?{dow}:freq==='monthly'?{dom}:freq==='yearly'?{y_day:yd,y_mon:ym}:{};clAdd(staffId,body.trim(),freq,a,ctx.R);setBody('');};
+  return <div><div className="kaddrow">
+    <input placeholder="Add a checklist item — e.g. “Lock the store room”" value={body} onChange={e=>setBody(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')add();}}/>
+    <select value={freq} onChange={e=>setFreq(e.target.value)}>{CL_FREQORDER.map(f=><option key={f} value={f}>{CL_FREQMETA[f].label}</option>)}</select>
+    {freq==='weekly'&&<select value={dow} onChange={e=>setDow(+e.target.value)}>{CL_DOW.map((d,i)=><option key={i} value={i}>{d}</option>)}</select>}
+    {freq==='monthly'&&<select value={dom} onChange={e=>setDom(+e.target.value)}>{Array.from({length:31},(_,i)=><option key={i} value={i+1}>{i+1}</option>)}</select>}
+    {freq==='yearly'&&<><select value={yd} onChange={e=>setYd(+e.target.value)}>{Array.from({length:31},(_,i)=><option key={i} value={i+1}>{i+1}</option>)}</select><select value={ym} onChange={e=>setYm(+e.target.value)}>{CL_MON.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select></>}
+    <button className="btn primary" onClick={add}>＋ Add</button></div>
+    <div className="kaddhint">Weekly asks for a weekday, Monthly a date, Yearly a day &amp; month — each item recurs on its own schedule.</div></div>;
+}
+function KProgress({staffId,date}){const items=clItemsFor(staffId),done=clDoneSet(staffId,date),n=items.length,d=items.filter(i=>done.has(i.id)).length,p=n?Math.round(d/n*100):0;
+  return <><div className="kprogtxt">{d} of {n} done <span style={{color:'var(--muted)',fontWeight:500}}>· {p}%</span></div><div className="kprogbar"><span style={{width:p+'%'}}/></div></>;}
+
+function ChecklistsView({ctx}){
+  const {viewer,R}=ctx;
+  const team=ctx.scope.filter(p=>p.id!==viewer.id);
+  const [tab,setTab]=useState(team.length?'team':'mine');
+  const [sel,setSel]=useState(null);
+  const [editing,setEditing]=useState(false);
+  const [fDept,setFDept]=useState('all');
+  const [fName,setFName]=useState('');
+  const [vDate,setVDate]=useState(iso(TODAY));
+  const today=iso(TODAY);
+  const feeds=(name,own)=><div className="kfeeds"><span>📋</span><div>Completion feeds {own?'your':name+'’s'} <b>daily report</b> — it shows whether the day’s (and any due weekly / monthly / yearly) checklist items were done.</div></div>;
+
+  if(tab==='mine'||!team.length){
+    const boss=viewer.boss?byName(viewer.boss):null;const le=clItemsFor(viewer.id)[0];const leById=le&&le.last_edited_by?byId2Name(le.last_edited_by):null;const n=clItemsFor(viewer.id).length;
+    return <div>
+      <div className="ktabs">{tabBtns()}</div>
+      <div className="panel">
+        <div className="khead"><div className="kwho"><span className="kav" style={{background:avColor(viewer.n)}}>{viewer.av}</span><div><div className="kh-t">Your checklist</div><div className="ksetby">{boss?<>Set by <b>{boss.n}</b> ({boss.role})</>:'Self-managed'}{leById?' · last edited by '+leById:''}</div></div></div><span className="kspacer"/><span className="ktoday">Today · {fmtDate(today)}</span></div>
+        <div className="kreset"><span className="r">↻</span> Fresh every day — <b>Daily</b> resets each morning, <b>Weekly</b> on its weekday, <b>Monthly</b> on its date, <b>Yearly</b> on its day. You tick these off; a manager above you sets the list.</div>
+        {feeds(viewer.n,true)}
+        <KProgress staffId={viewer.id} date={today}/>
+        {n?<KItemRows staffId={viewer.id} date={today} mode="tick" ctx={ctx}/>:<div className="kempty"><div className="big">🗒️</div><h3>No checklist yet</h3><div>{boss?boss.n+' hasn’t set one for you yet.':'No one manages your checklist.'}</div></div>}
+      </div>
+    </div>;
+  }
+  // My team
+  if(!sel||!team.some(p=>p.id===sel))var selId=(team[0]||{}).id; else selId=sel;
+  const depts=['all',...Array.from(new Set(team.map(p=>p.dept))).sort()];
+  const people=team.filter(p=>(fDept==='all'||p.dept===fDept)&&(!fName||p.n.toLowerCase().includes(fName.toLowerCase())));
+  if(people.length&&!people.some(p=>p.id===selId))selId=people[0].id;
+  const showFilter=team.length>8;
+  const r=STAFF.find(p=>p.id===selId);
+  return <div>
+    <div className="ktabs">{tabBtns()}</div>
+    <div className="knote"><span>💡</span><div>Pick anyone below you to view and <b>edit</b> the recurring checklist you’ve assigned them. Add, rename, reorder or remove items any time. Use the date picker to check a past day, and tick <b>Absent</b> for a leave day. Ticks show <b>their</b> progress (read-only for you).</div></div>
+    <div className="kteamwrap">
+      <div>
+        <div className="side-lab" style={{margin:'0 2px 8px'}}>People below you{showFilter?' · '+people.length+' of '+team.length:''}</div>
+        {showFilter&&<div className="kfilter"><input placeholder="🔍  Search by name…" value={fName} onChange={e=>setFName(e.target.value)}/><select value={fDept} onChange={e=>{setFDept(e.target.value);}}>{depts.map(d=><option key={d} value={d}>{d==='all'?'All departments':d}</option>)}</select></div>}
+        {people.length?people.map(p=>{const n=clItemsFor(p.id).length,d=clDoneSet(p.id,today).size;
+          return <button key={p.id} className={'kmem'+(selId===p.id?' on':'')} onClick={()=>{setSel(p.id);setEditing(false);setVDate(today);}}>
+            <span className="kav" style={{background:avColor(p.n)}}>{p.av}</span><div><div className="kmem-n">{p.n}</div><div className="kmem-r">{p.role} · {p.dept}</div></div>
+            <div className="kmem-p"><b>{d}/{n}</b><div className="lab">done</div></div></button>;})
+          :<div className="kempty" style={{padding:'26px 10px'}}><div>No one matches that filter.</div></div>}
+      </div>
+      <div>{r&&<KTeamDetail key={selId} ctx={ctx} r={r} editing={editing} setEditing={setEditing} vDate={vDate} setVDate={setVDate} today={today} feeds={feeds}/>}</div>
+    </div>
+  </div>;
+  function tabBtns(){return <>
+    <button className={'ktab'+(tab==='mine'?' on':'')} onClick={()=>setTab('mine')}>My checklist</button>
+    <button className={'ktab'+(tab==='team'?' on':'')} onClick={()=>setTab('team')}>My team{team.length?<span className="cnt">{team.length}</span>:null}</button></>;}
+}
+function KTeamDetail({ctx,r,editing,setEditing,vDate,setVDate,today,feeds}){
+  const items=clItemsFor(r.id),n=items.length;const le=items[0];const leBy=le&&le.last_edited_by?byId2Name(le.last_edited_by):null;const leAt=le&&le.last_edited_at?dmyTs(le.last_edited_at):null;
+  const absent=clAbsOn(r.id,vDate),isPast=vDate!==today;
+  return <div className={'panel'+(editing?' kediting':'')}>
+    <div className="khead"><div className="kwho"><span className="kav" style={{background:avColor(r.n)}}>{r.av}</span><div><div className="kh-t">{r.n}’s checklist</div><div className="ksetby">{n} item{n!==1?'s':''} across Daily / Weekly / Monthly / Yearly{leBy?<> · last edited by <b>{leBy}</b>{leAt?' on '+leAt:''}</>:''}</div></div></div><span className="kspacer"/>
+      {editing?<button className="btn primary" onClick={()=>setEditing(false)}>✓ Done editing</button>
+        :<><span className="kdate"><button onClick={()=>{const d=new Date(vDate+'T00:00:00');d.setDate(d.getDate()-1);setVDate(iso(d));}}>◀</button><input type="date" value={vDate} max={today} onChange={e=>{if(e.target.value&&e.target.value<=today)setVDate(e.target.value);}}/><button disabled={vDate>=today} onClick={()=>{const d=new Date(vDate+'T00:00:00');d.setDate(d.getDate()+1);const ni=iso(d);if(ni<=today)setVDate(ni);}}>▶</button></span>
+        <select className="btn ksnap" style={{marginLeft:8}} value="" onChange={e=>{const v=e.target.value;if(v){clSnapshotPdf(r.id,v,vDate);e.target.value='';}}}><option value="">📄 Snapshot</option><option value="week">Weekly PDF</option><option value="month">Monthly PDF</option></select>
+        <button className="btn" style={{marginLeft:8}} onClick={()=>setEditing(true)}>✎ Edit list</button></>}
+    </div>
+    {editing?<>{feeds(r.n,false)}
+      <div className="kreset"><span className="r">↻</span> Any manager above {r.n} can edit this — your name is recorded as the last editor. Each item recurs on its own schedule.</div>
+      {n?<KItemRows staffId={r.id} date={today} mode="edit" ctx={ctx}/>:null}
+      <KAddRow staffId={r.id} ctx={ctx}/></>
+    :<>
+      <div className="kdatectx">{isPast?<>📆 Viewing <b>{fmtDate(vDate)}</b> — read-only history</>:<>📆 <b>Today</b>, {fmtDate(vDate)} — live</>}</div>
+      {feeds(r.n,false)}
+      {n===0?<div className="kempty"><div className="big">➕</div><h3>Empty checklist</h3><div>Hit “Edit list” to add {r.n}’s routine duties.</div></div>
+       :<>
+        <div className="kabsent-row"><label className="kabschk"><input type="checkbox" checked={absent} onChange={e=>clMarkAbsent(r.id,vDate,e.target.checked,ctx.viewer.id,ctx.R)}/> 🌴 Absent</label><span className="muted" style={{fontSize:11.5}}>Tick if {r.n} was on leave on {fmtDate(vDate)} — the checklist is then excused.</span></div>
+        {absent?<div className="kabsent-b"><span style={{fontSize:19}}>🌴</span><div><b>{r.n} was absent on {fmtDate(vDate)}</b><div className="muted" style={{marginTop:3}}>Checklist not expected this day.</div></div></div>
+         :<><KProgress staffId={r.id} date={vDate}/><KItemRows staffId={r.id} date={vDate} mode="roview" ctx={ctx}/></>}
+       </>}
+    </>}
   </div>;
 }
 function TasksView({ctx}){
@@ -2798,6 +3081,11 @@ async function exportDailyReports(rows,label){
       csvRows.push([]);csvRows.push(['Task','Assignee','Department','Issued','Due','Status']);
       snap.forEach(t=>csvRows.push([t.title,t.assignee,t.department,dmyTs(t.issued),fmtDate(t.due),snapStatusLabel(t.status)]));
     }
+    const clSnap=row.checklist_snapshot||[];
+    if(clSnap.length){
+      csvRows.push([]);csvRows.push(['Checklist item ('+clSnap.filter(c=>c.done).length+'/'+clSnap.length+' done)','Schedule','Done']);
+      clSnap.forEach(c=>csvRows.push([c.body,c.sched,c.done?'Yes':'No']));
+    }
     const issues=issuesByReport[row.id]||[];
     if(issues.length){
       csvRows.push([]);csvRows.push(['Issue/Incident','Priority','Status','Resolution']);
@@ -2830,6 +3118,14 @@ async function printDailyReports(rows,label,viewerName){
       b+='<div style="font-size:12px;font-weight:700;margin:8px 0 4px">Tasks this period</div>';
       b+='<table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:5px">Task</th><th style="text-align:left;padding:5px">Assignee</th><th style="text-align:left;padding:5px">Department</th><th style="text-align:left;padding:5px">Issued</th><th style="text-align:left;padding:5px">Due</th><th style="text-align:left;padding:5px">Status</th></tr>';
       snap.forEach(t=>{b+='<tr style="border-bottom:1px solid #eee"><td style="padding:5px">'+t.title+'</td><td style="padding:5px">'+t.assignee+'</td><td style="padding:5px">'+(t.department||'')+'</td><td style="padding:5px">'+dmyTs(t.issued)+'</td><td style="padding:5px">'+fmtDate(t.due)+'</td><td style="padding:5px">'+snapStatusLabel(t.status)+'</td></tr>';});
+      b+='</table>';
+    }
+    const clSnap=row.checklist_snapshot||[];
+    if(clSnap.length){
+      const cd=clSnap.filter(c=>c.done).length;
+      b+='<div style="font-size:12px;font-weight:700;margin:8px 0 4px">Checklist — '+cd+' of '+clSnap.length+' done</div>';
+      b+='<table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:5px">Checklist item</th><th style="text-align:left;padding:5px">Schedule</th><th style="text-align:left;padding:5px">Done</th></tr>';
+      clSnap.forEach(c=>{b+='<tr style="border-bottom:1px solid #eee"><td style="padding:5px">'+c.body+'</td><td style="padding:5px">'+c.sched+'</td><td style="padding:5px;color:'+(c.done?'#1a7a48':'#c43a53')+'">'+(c.done?'✓ Done':'○ Not done')+'</td></tr>';});
       b+='</table>';
     }
   });
@@ -3070,11 +3366,15 @@ function DailyReportModal({ctx,close}){
     const taskSnapshot=ordered.map(t=>({title:t.t,assignee:(byShort(t.who)||{n:t.who}).n,
       department:(byShort(t.who)||{}).dept||'',due:t.date,issued:t.issued,
       status:t.status==='done'?'done':(isOverdue(t)?'overdue':'pending')}));
+    /* freeze today's checklist status too (items due today + whether each was done) */
+    const clDay=iso(TODAY),clDoneT=clDoneSet(viewer.id,clDay);
+    const checklistSnapshot=CL_FREQORDER.flatMap(f=>clItemsFor(viewer.id).filter(i=>i.freq===f&&clDueOn(i,clDay)))
+      .map(it=>({body:it.body,freq:it.freq,sched:clSchedLabel(it),done:clDoneT.has(it.id)}));
     /* resubmitting today updates the existing row instead of inserting a duplicate — enforced by
        the daily_reports_one_per_day unique constraint (20260718000001), so this is one racefree
        upsert rather than a check-then-write. */
     const {data:dr,error:drErr}=await sb.from('daily_reports').upsert({created_by:viewer.id,report_date:iso(TODAY),
-      completed_count:segs[0].v,overdue_count:segs[1].v,pending_count:segs[2].v,task_snapshot:taskSnapshot},
+      completed_count:segs[0].v,overdue_count:segs[1].v,pending_count:segs[2].v,task_snapshot:taskSnapshot,checklist_snapshot:checklistSnapshot},
       {onConflict:'created_by,report_date'}).select().single();
     if(drErr){console.error(drErr);say('Could not send report — try again');setBusy(false);return;}
     for(const r of clean){

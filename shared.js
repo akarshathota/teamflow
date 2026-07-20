@@ -36,6 +36,28 @@ const dmy=s=>{if(!s)return '';const p=String(s).split('-');return p.length===3?p
 /* timestamptz (e.g. tasks.created_at, the "issued"/assigned date) -> DD-MM-YYYY in local time.
    Blank for missing (old daily-report snapshots that predate the issued column). */
 const dmyTs=ts=>ts?dmy(iso(new Date(ts))):'';
+/* ---- checklists: recurring schedule helpers (shared by console + mobile) ---- */
+const CL_DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];         // dow stored 0=Mon..6=Sun
+const CL_MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const clOrd=n=>{const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);};
+const clLastDom=(y,m)=>new Date(y,m,0).getDate();                 // m 1-based
+const clDow=isoDate=>(new Date(isoDate+'T00:00:00').getDay()+6)%7; // Mon=0
+function clDueOn(it,isoDate){const d=new Date(isoDate+'T00:00:00');
+  if(it.freq==='daily')return true;
+  if(it.freq==='weekly')return clDow(isoDate)===it.dow;
+  if(it.freq==='monthly')return d.getDate()===Math.min(it.dom,clLastDom(d.getFullYear(),d.getMonth()+1));
+  return (d.getMonth()+1)===it.y_mon && d.getDate()===Math.min(it.y_day,clLastDom(d.getFullYear(),it.y_mon));}
+function clSchedLabel(it){
+  if(it.freq==='daily')return 'Daily';
+  if(it.freq==='weekly')return 'Every '+CL_DOW[it.dow];
+  if(it.freq==='monthly')return 'Monthly · '+clOrd(it.dom);
+  return 'Yearly · '+it.y_day+' '+CL_MON[(it.y_mon||1)-1];}
+const CL_FREQMETA={daily:{label:'Daily',hint:'resets every morning'},weekly:{label:'Weekly',hint:'resets on the set weekday'},monthly:{label:'Monthly',hint:'resets on the set date'},yearly:{label:'Yearly',hint:'resets on the set day'}};
+const CL_FREQORDER=['daily','weekly','monthly','yearly'];
+/* read helpers over each app's clItems/clDone/clAbs globals (declared in the app's own script) */
+const clItemsFor=id=>clItems.filter(i=>i.staff_id===id&&!i.archived).slice().sort((a,b)=>(a.sort_order-b.sort_order)||((a.created_at||'')<(b.created_at||'')?-1:1));
+const clDoneSet=(id,date)=>{const s=new Set();clDone.forEach(c=>{if(c.staff_id===id&&c.occ_date===date)s.add(c.item_id);});return s;};
+const clAbsOn=(id,date)=>(typeof clAbs!=='undefined'?clAbs:[]).some(a=>a.staff_id===id&&a.absent_date===date);
 /* Organisation name (org_settings, e.g. JHPS) as a prominent header for every downloadable
    report/list. orgCsvRows: prepended by csvDownload so it lands in cell A1 of any CSV/XLSX.
    orgHeadHtml: prepended to every print/PDF's HTML so the org name heads the page above the
@@ -348,6 +370,17 @@ async function downloadDailyReportPdf(rows,label,viewerName){
           if(t.status==='overdue'&&t.due){const d=Math.round((new Date(row.report_date+'T00:00:00')-new Date(t.due+'T00:00:00'))/86400000);
             if(d>0)st='Overdue · '+d+'d late';}
           return [t.title,t.assignee,t.department||'',dmyTs(t.issued),pdfDate(t.due),st];})});
+      y=doc.lastAutoTable.finalY+24;
+    }
+    const clSnap=row.checklist_snapshot||[];
+    if(clSnap.length){
+      if(y>560){doc.addPage();y=48;}
+      const cd=clSnap.filter(c=>c.done).length;
+      doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(27,30,33);doc.text('Checklist — '+cd+' of '+clSnap.length+' done',40,y);
+      doc.autoTable({startY:y+6,margin:{left:40,right:40},styles:{fontSize:8.5},headStyles:{fillColor:[14,122,111]},
+        head:[['Checklist item','Schedule','Done']],
+        body:clSnap.map(c=>[c.body,c.sched,c.done?'Done':'Not done']),
+        didParseCell:function(data){if(data.section==='body'&&data.column.index===2){data.cell.styles.textColor=data.cell.raw==='Done'?[26,122,72]:[196,58,83];}}});
       y=doc.lastAutoTable.finalY+24;
     }
   });
