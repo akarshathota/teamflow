@@ -1098,7 +1098,7 @@ async function clSnapshotPdf(staffId,mode,anchorISO){
   const dc={},doneOn=d=>dc[d]||(dc[d]=clDoneSet(staffId,d));
   const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'pt',format:'a4'});let y=42;
   if(typeof ORG_NAME!=='undefined'&&ORG_NAME){doc.setFont('helvetica','bold');doc.setFontSize(20);doc.setTextColor(10,92,84);doc.text(ORG_NAME,40,y);
-    doc.setFontSize(12);doc.setTextColor(67,73,79);doc.text('Checklist Snapshot — '+(mode==='week'?'Weekly':'Monthly'),40+doc.getTextWidth(ORG_NAME)+16,y);y+=24;}
+    const orgW=doc.getTextWidth(ORG_NAME);doc.setFontSize(12);doc.setTextColor(67,73,79);doc.text('Checklist Snapshot — '+(mode==='week'?'Weekly':'Monthly'),40+orgW+18,y);y+=24;}
   else{doc.setFont('helvetica','bold');doc.setFontSize(14);doc.text('Checklist Snapshot — '+(mode==='week'?'Weekly':'Monthly'),40,y);y+=20;}
   const period=mode==='week'?pdfDate(days[0])+' – '+pdfDate(days[days.length-1])+', '+new Date(days[0]+'T00:00:00').getFullYear()
     :new Date(days[0]+'T00:00:00').toLocaleDateString('en',{month:'long',year:'numeric'});
@@ -1109,19 +1109,25 @@ async function clSnapshotPdf(staffId,mode,anchorISO){
     items.forEach(it=>{const s=clCellState(staffId,d,it,todayISO,doneOn);if(s==='done'){due++;done++;}else if(s==='miss')due++;});});
   doc.setFontSize(10);doc.setTextColor(85,85,85);
   doc.text((due?Math.round(done/due*100):0)+'% completed    ·    '+done+'/'+due+' due items done    ·    '+absDays.size+' day'+(absDays.size!==1?'s':'')+' absent',40,y);y+=4;
-  const SYM={done:'✓',miss:'·',abs:'A',nd:'–',future:''};
+  const SYM={done:'',miss:'·',abs:'A',nd:'–',future:''};
   const head=[['Checklist item'].concat(days.map(d=>{const dt=new Date(d+'T00:00:00');return (mode==='week'?CL_DOW[(dt.getDay()+6)%7]+'\n':'')+dt.getDate();}))];
   const ordered=[];CL_FREQORDER.forEach(f=>items.filter(i=>i.freq===f).forEach(i=>ordered.push(i)));
-  const body=ordered.map(it=>[it.body+'\n'+clSchedLabel(it)].concat(days.map(d=>SYM[clCellState(staffId,d,it,todayISO,doneOn)])));
+  const states=ordered.map(it=>days.map(d=>clCellState(staffId,d,it,todayISO,doneOn)));
+  const body=ordered.map((it,ri)=>[it.body+'\n'+clSchedLabel(it)].concat(states[ri].map(s=>SYM[s])));
   doc.autoTable({startY:y+12,margin:{left:40,right:40},styles:{fontSize:7.5,halign:'center',valign:'middle',cellPadding:2,lineColor:[236,235,227],lineWidth:0.5},
     headStyles:{fillColor:[250,249,245],textColor:[67,73,79],fontStyle:'bold',fontSize:7},columnStyles:{0:{halign:'left',cellWidth:150}},head,body,
-    didParseCell:function(data){if(data.section!=='body'||data.column.index===0)return;const v=data.cell.raw;
-      if(v==='✓'){data.cell.styles.textColor=[26,122,72];data.cell.styles.fillColor=[231,244,236];}
-      else if(v==='·'){data.cell.styles.textColor=[196,58,83];data.cell.styles.fillColor=[251,238,241];data.cell.styles.fontStyle='bold';}
-      else if(v==='A'){data.cell.styles.textColor=[154,106,16];data.cell.styles.fillColor=[246,239,219];data.cell.styles.fontStyle='bold';}
-      else if(v==='–'){data.cell.styles.textColor=[205,202,189];}}});
-  let ly=doc.lastAutoTable.finalY+16;doc.setFontSize(8);doc.setTextColor(85,85,85);
-  doc.text('Legend:   ✓ done      · missed      A absent      – not due',40,ly);
+    didParseCell:function(data){if(data.section!=='body'||data.column.index===0)return;const s=states[data.row.index][data.column.index-1];
+      if(s==='miss'){data.cell.styles.textColor=[196,58,83];data.cell.styles.fillColor=[251,238,241];data.cell.styles.fontStyle='bold';}
+      else if(s==='abs'){data.cell.styles.textColor=[154,106,16];data.cell.styles.fillColor=[246,239,219];data.cell.styles.fontStyle='bold';}
+      else if(s==='done'){data.cell.styles.fillColor=[231,244,236];}
+      else if(s==='nd'){data.cell.styles.textColor=[205,202,189];}},
+    didDrawCell:function(data){if(data.section!=='body'||data.column.index===0)return;const s=states[data.row.index][data.column.index-1];
+      if(s==='done'){const c=data.cell,cx=c.x+c.width/2,cy=c.y+c.height/2;doc.setDrawColor(26,122,72);doc.setLineWidth(1.1);doc.line(cx-3,cy,cx-1,cy+2.6);doc.line(cx-1,cy+2.6,cx+3.6,cy-3);}}});
+  let ly=doc.lastAutoTable.finalY+18,lx=40;doc.setFontSize(8.5);doc.setTextColor(85,85,85);doc.text('Legend:',40,ly);lx=40+doc.getTextWidth('Legend:')+12;
+  [['done',[231,244,236],[26,122,72]],['missed',[251,238,241],[196,58,83]],['absent',[246,239,219],[154,106,16]],['not due',[245,244,240],[150,148,138]]].forEach(function(g){
+    doc.setFillColor(g[1][0],g[1][1],g[1][2]);doc.setDrawColor(225,224,216);doc.rect(lx,ly-6.5,9,9,'FD');
+    if(g[0]==='done'){doc.setDrawColor(26,122,72);doc.setLineWidth(0.9);doc.line(lx+2,ly-1.6,lx+3.6,ly);doc.line(lx+3.6,ly,lx+7,ly-4);}
+    doc.setTextColor(g[2][0],g[2][1],g[2][2]);doc.text(g[0],lx+13,ly);lx+=13+doc.getTextWidth(g[0])+16;});
   doc.save(iso(new Date())+'-'+(person?person.n.toLowerCase().replace(/[^a-z0-9]+/g,'-'):'staff')+'-checklist-'+mode+'.pdf');
 }
 
