@@ -955,6 +955,7 @@ function App(){
       .on('postgres_changes',{event:'*',schema:'public',table:'checklist_items'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'checklist_completions'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'checklist_absences'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'checklist_notifications'},refetch)
       .subscribe();
     return ()=>{clearTimeout(t);sb.removeChannel(ch);};
   },[session]);
@@ -1242,13 +1243,16 @@ function Topbar({ctx,searchRef}){
   // grouping is just two labeled slices of the same already recency-sorted ctx.notifs list.
   const notifItem=n=>{
     const t=tasks.find(x=>x.id===n.task_id);
-    const isAct=n.source==='activity';
+    const isAct=n.source==='activity',isCl=n.source==='checklist';
     const entry=isAct&&n.task_log_id&&t&&t.log?t.log.find(x=>x.id===n.task_log_id):null;
     const desc=entry?'“'+(entry.text.length>60?entry.text.slice(0,60)+'…':entry.text)+'” · ':n.label?n.label+' · ':'';
-    return <div key={n.source+n.id} className="sd-item" style={{opacity:n.read_at?0.55:1}} onClick={()=>{setBellOpen(false);ctx.openNotif(n);}}>
-      <span className="avex" style={{background:isAct?'var(--accent)':n.kind==='overdue'?'var(--red)':'var(--amber)',color:'#fff'}}>{isAct?'✎':n.kind==='overdue'?'!':'•'}</span>
-      <div><div className="t">{isAct?(byId2Name(n.actor_staff_id)||'Someone')+' updated “'+(t?t.t:'a task')+'”':(t?t.t:'(task removed)')}</div>
-        <div className="m">{isAct?desc+fmtDateTime(n.created_at):(n.kind==='overdue'?'Overdue':'Due today')+' · '+fmtDate(n.for_date)}</div></div>
+    const clTitle=n.kind==='checklist_missed'?(byId2Name(n.subject_id)||'Someone')+' — checklist not completed':'Your checklist for today';
+    const clMsg=n.kind==='checklist_missed'?'Completed '+n.done_count+'/'+n.total_count+' · '+fmtDate(n.for_date):n.total_count+' item'+(n.total_count!=1?'s':'')+' today'+(n.done_count?' · '+n.done_count+' done':'');
+    const bg=isCl?(n.kind==='checklist_missed'?'var(--red)':'var(--accent)'):isAct?'var(--accent)':n.kind==='overdue'?'var(--red)':'var(--amber)';
+    return <div key={n.source+n.id} className="sd-item" style={{opacity:n.read_at?0.55:1}} onClick={()=>{setBellOpen(false);if(isCl){ctx.setView('checklists');markNotifRead(n).catch(()=>{});n.read_at=new Date().toISOString();ctx.R();}else ctx.openNotif(n);}}>
+      <span className="avex" style={{background:bg,color:'#fff'}}>{isCl?'☑':isAct?'✎':n.kind==='overdue'?'!':'•'}</span>
+      <div><div className="t">{isCl?clTitle:isAct?(byId2Name(n.actor_staff_id)||'Someone')+' updated “'+(t?t.t:'a task')+'”':(t?t.t:'(task removed)')}</div>
+        <div className="m">{isCl?clMsg:isAct?desc+fmtDateTime(n.created_at):(n.kind==='overdue'?'Overdue':'Due today')+' · '+fmtDate(n.for_date)}</div></div>
     </div>;
   };
   // "Needs your approval" item — deliberately simpler than notifItem (no read/unread dimming,

@@ -741,6 +741,7 @@ function App(){
       .on('postgres_changes',{event:'*',schema:'public',table:'report_issues'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'checklist_items'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'checklist_completions'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'checklist_notifications'},refetch)
       .subscribe();
     return ()=>{clearTimeout(t);sb.removeChannel(ch);};
   },[session]);
@@ -1427,14 +1428,18 @@ function NotifSheet({ctx,acts,close}){
   // order (loadNotifs already sorts the merged list by created_at before this ever runs).
   const notifItem=n=>{
     const t=tasks.find(x=>x.id===n.task_id);
-    const isAct=n.source==='activity';
+    const isAct=n.source==='activity',isCl=n.source==='checklist';
     const entry=isAct&&n.task_log_id&&t&&t.log?t.log.find(x=>x.id===n.task_log_id):null;
     const actor=isAct?(ALL_PEOPLE.find(p=>p.id===n.actor_staff_id)||{}).n:null;
     const desc=entry?'“'+(entry.text.length>60?entry.text.slice(0,60)+'…':entry.text)+'” · ':n.label?n.label+' · ':'';
-    return <div key={n.source+n.id} className="task" style={{cursor:'pointer',opacity:n.read_at?0.55:1}} onClick={()=>acts.openNotif(n)}>
-      <div className="stripe" style={{background:isAct?'var(--accent)':n.kind==='overdue'?'var(--red)':'var(--amber)'}}/>
-      <div className="tt">{isAct?(actor||'Someone')+' updated “'+(t?t.t:'a task')+'”':(t?t.t:'(task removed)')}</div>
-      <div className="meta">{isAct?desc+fmtDateTime(n.created_at):(n.kind==='overdue'?'Overdue':'Due today')+' · '+fmtD(n.for_date)}</div>
+    const subj=isCl&&n.subject_id?(ALL_PEOPLE.find(p=>p.id===n.subject_id)||{}).n:'';
+    const clTitle=n.kind==='checklist_missed'?(subj||'Someone')+' — checklist not completed':'Your checklist for today';
+    const clMsg=n.kind==='checklist_missed'?'Completed '+n.done_count+'/'+n.total_count+' · '+fmtD(n.for_date):n.total_count+' item'+(n.total_count!=1?'s':'')+' today'+(n.done_count?' · '+n.done_count+' done':'');
+    const clOpen=()=>{if(n.kind!=='checklist_missed')ctx.setPage('checklist');markNotifRead(n).catch(()=>{});n.read_at=new Date().toISOString();ctx.R();};
+    return <div key={n.source+n.id} className="task" style={{cursor:'pointer',opacity:n.read_at?0.55:1}} onClick={()=>isCl?clOpen():acts.openNotif(n)}>
+      <div className="stripe" style={{background:isCl?(n.kind==='checklist_missed'?'var(--red)':'var(--accent)'):isAct?'var(--accent)':n.kind==='overdue'?'var(--red)':'var(--amber)'}}/>
+      <div className="tt">{isCl?clTitle:isAct?(actor||'Someone')+' updated “'+(t?t.t:'a task')+'”':(t?t.t:'(task removed)')}</div>
+      <div className="meta">{isCl?clMsg:isAct?desc+fmtDateTime(n.created_at):(n.kind==='overdue'?'Overdue':'Due today')+' · '+fmtD(n.for_date)}</div>
     </div>;
   };
   const attn=ctx.notifs.filter(n=>n.source!=='activity');

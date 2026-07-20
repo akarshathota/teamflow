@@ -180,14 +180,17 @@ async function removeAttachment(path){
    tagged with `source` so mark-read (below) and the UI (which table it came from, how to render
    it) can tell them apart without a second bell/dropdown. */
 async function loadNotifs(){
-  const [a,b]=await Promise.all([
+  const [a,b,c]=await Promise.all([
     sb.from('task_notifications').select('*').order('created_at',{ascending:false}),
-    sb.from('task_activity_notifications').select('*').order('created_at',{ascending:false})
+    sb.from('task_activity_notifications').select('*').order('created_at',{ascending:false}),
+    sb.from('checklist_notifications').select('*').order('created_at',{ascending:false})
   ]);
   if(a.error)console.error(a.error);
   if(b.error)console.error(b.error);
+  if(c.error)console.error(c.error);
   return (a.data||[]).map(n=>({...n,source:'notif'}))
     .concat((b.data||[]).map(n=>({...n,source:'activity'})))
+    .concat((c.data||[]).map(n=>({...n,source:'checklist'})))
     .sort((x,y)=>x.created_at<y.created_at?1:-1);
 }
 /* wrapped in async functions (not bare arrows returning the query builder) so the result is a
@@ -195,17 +198,19 @@ async function loadNotifs(){
    site here does `markNotifRead(n).catch(...)`. Takes the merged notification object (not just an
    id) so it can route the update to whichever table it actually came from. */
 async function markNotifRead(n){
-  const table=n.source==='activity'?'task_activity_notifications':'task_notifications';
+  const table=n.source==='activity'?'task_activity_notifications':n.source==='checklist'?'checklist_notifications':'task_notifications';
   return sb.from(table).update({read_at:new Date().toISOString()}).eq('id',n.id);
 }
 async function markAllNotifsRead(ns){
   if(!ns.length)return;
   const now=new Date().toISOString();
-  const ids1=ns.filter(n=>n.source!=='activity').map(n=>n.id);
+  const ids1=ns.filter(n=>n.source==='notif').map(n=>n.id);
   const ids2=ns.filter(n=>n.source==='activity').map(n=>n.id);
+  const ids3=ns.filter(n=>n.source==='checklist').map(n=>n.id);
   return Promise.all([
     ids1.length?sb.from('task_notifications').update({read_at:now}).in('id',ids1):null,
-    ids2.length?sb.from('task_activity_notifications').update({read_at:now}).in('id',ids2):null
+    ids2.length?sb.from('task_activity_notifications').update({read_at:now}).in('id',ids2):null,
+    ids3.length?sb.from('checklist_notifications').update({read_at:now}).in('id',ids3):null
   ]);
 }
 /* One task_activity_notifications row per recipient in `staffIds`, for the freshly-inserted
