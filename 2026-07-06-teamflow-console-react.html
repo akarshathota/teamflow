@@ -449,6 +449,16 @@
   .kabsent-b{display:flex;align-items:flex-start;gap:12px;background:var(--amber-soft);border:1px solid #e6d7ad;border-radius:11px;padding:15px 16px;color:var(--amber);font-size:13.5px;line-height:1.5}
   .kabsent-b b{color:#7a5410}
   .ksnap{cursor:pointer;font-weight:600;padding:8px 10px}
+  .kwin{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .kwin button{border:none;background:none;padding:7px 13px;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--ink2);cursor:pointer}
+  .kwin button.on{background:var(--accent);color:#fff}
+  .kavg{display:flex;align-items:center;gap:16px;background:var(--accent-soft);border:1px solid var(--accent-border);border-radius:12px;padding:16px 20px;margin-bottom:14px}
+  .kavg-n{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:38px;letter-spacing:-1px}
+  .kavg-l{font-size:12.5px;color:var(--ink2);line-height:1.4}
+  .kcrow{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+  .kcrow:last-child{border-bottom:none}
+  .kcbar{height:7px;background:#eeece4;border-radius:999px;overflow:hidden;margin-top:6px}
+  .kcbar>span{display:block;height:100%;border-radius:999px}
   .kempty{text-align:center;color:var(--muted);padding:40px 20px}
   .kempty .big{font-size:32px;margin-bottom:8px}
   .kempty h3{margin:0 0 4px;color:var(--ink2);font-size:15px}
@@ -1710,6 +1720,46 @@ function KAddRow({staffId,ctx}){
 function KProgress({staffId,date}){const items=clItemsFor(staffId),done=clDoneSet(staffId,date),n=items.length,d=items.filter(i=>done.has(i.id)).length,p=n?Math.round(d/n*100):0;
   return <><div className="kprogtxt">{d} of {n} done <span style={{color:'var(--muted)',fontWeight:500}}>· {p}%</span></div><div className="kprogbar"><span style={{width:p+'%'}}/></div></>;}
 
+/* ---- compliance analytics (pure client-side over loaded clItems/clDone/clAbs) ---- */
+function clWindowDates(n){const out=[];for(let k=n-1;k>=0;k--){const d=new Date(TODAY);d.setDate(d.getDate()-k);out.push(iso(d));}return out;}
+function clStats(staffId,days){let due=0,done=0,absent=0,full=0,evald=0;const items=clItemsFor(staffId);
+  days.forEach(d=>{if(clAbsOn(staffId,d)){absent++;return;}const di=items.filter(it=>clDueOn(it,d));if(!di.length)return;evald++;
+    const ds=clDoneSet(staffId,d);const dn=di.filter(i=>ds.has(i.id)).length;due+=di.length;done+=dn;if(dn===di.length)full++;});
+  return {pct:due?Math.round(done/due*100):null,due,done,absent,full,evald};}
+function clStreak(staffId){const items=clItemsFor(staffId);let streak=0;
+  for(let k=0;k<=60;k++){const dd=new Date(TODAY);dd.setDate(dd.getDate()-k);const d=iso(dd);
+    if(clAbsOn(staffId,d))continue;const di=items.filter(it=>clDueOn(it,d));if(!di.length)continue;
+    const ds=clDoneSet(staffId,d);const dn=di.filter(i=>ds.has(i.id)).length;
+    if(dn===di.length)streak++;else if(k===0)continue;else break;}
+  return streak;}
+function KCompliance({ctx,team}){
+  const [win,setWin]=useState(7);
+  const days=clWindowDates(win);
+  const rows=team.map(p=>({p,st:clStats(p.id,days),streak:clStreak(p.id),n:clItemsFor(p.id).length}))
+    .filter(x=>x.n>0).sort((a,b)=>(a.st.pct==null?101:a.st.pct)-(b.st.pct==null?101:b.st.pct));
+  const withCl=rows.length,avg=withCl?Math.round(rows.reduce((s,x)=>s+(x.st.pct||0),0)/withCl):null;
+  return <div>
+    <div className="khead" style={{marginBottom:14}}>
+      <div><div className="kh-t">Checklist compliance</div><div className="ksetby">{withCl} of {team.length} people have a checklist · last {win} days</div></div>
+      <span className="kspacer"/>
+      <div className="kwin">{[7,30].map(w=><button key={w} className={win===w?'on':''} onClick={()=>setWin(w)}>{w} days</button>)}</div>
+    </div>
+    {withCl?<>
+      <div className="kavg"><div className="kavg-n" style={{color:avg>=85?'#1a7a48':avg>=60?'#9a6a10':'#c43a53'}}>{avg}%</div><div className="kavg-l">team average completion<br/>over the last {win} days</div></div>
+      <div className="panel" style={{padding:'4px 18px'}}>
+        {rows.map(({p,st,streak})=>{const pct=st.pct==null?0:st.pct,col=pct>=85?'#1a7a48':pct>=60?'#9a6a10':'#c43a53';
+          return <div key={p.id} className="kcrow">
+            <span className="kav" style={{background:avColor(p.n),width:32,height:32,fontSize:13}}>{p.av}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:13.5}}><b>{p.n}</b><span style={{color:col,fontWeight:700}}>{st.pct==null?'—':st.pct+'%'}</span></div>
+              <div style={{fontSize:11,color:'var(--muted)'}}>{p.role} · {p.dept} · {st.full}/{st.evald} full days{st.absent?' · '+st.absent+' absent':''}{streak?' · 🔥 '+streak+'-day streak':''}</div>
+              <div className="kcbar"><span style={{width:pct+'%',background:col}}/></div>
+            </div></div>;})}
+      </div>
+      <div style={{fontSize:11.5,color:'var(--muted)',margin:'12px 2px'}}>Completion = done ÷ due items over the window; absent days are excluded. A “full day” is one where every due item was done. Sorted lowest-first so anyone slipping is at the top.</div>
+    </>:<div className="kempty"><div className="big">📊</div><h3>No checklists yet</h3><div>Assign checklists to your team to see compliance here.</div></div>}
+  </div>;
+}
 function ChecklistsView({ctx}){
   const {viewer,R}=ctx;
   const team=ctx.scope.filter(p=>p.id!==viewer.id);
@@ -1735,6 +1785,7 @@ function ChecklistsView({ctx}){
       </div>
     </div>;
   }
+  if(tab==='compliance')return <div><div className="ktabs">{tabBtns()}</div><KCompliance ctx={ctx} team={team}/></div>;
   // My team
   if(!sel||!team.some(p=>p.id===sel))var selId=(team[0]||{}).id; else selId=sel;
   const depts=['all',...Array.from(new Set(team.map(p=>p.dept))).sort()];
@@ -1760,7 +1811,8 @@ function ChecklistsView({ctx}){
   </div>;
   function tabBtns(){return <>
     <button className={'ktab'+(tab==='mine'?' on':'')} onClick={()=>setTab('mine')}>My checklist</button>
-    <button className={'ktab'+(tab==='team'?' on':'')} onClick={()=>setTab('team')}>My team{team.length?<span className="cnt">{team.length}</span>:null}</button></>;}
+    <button className={'ktab'+(tab==='team'?' on':'')} onClick={()=>setTab('team')}>My team{team.length?<span className="cnt">{team.length}</span>:null}</button>
+    <button className={'ktab'+(tab==='compliance'?' on':'')} onClick={()=>setTab('compliance')}>Compliance</button></>;}
 }
 function KTeamDetail({ctx,r,editing,setEditing,vDate,setVDate,today,feeds}){
   const items=clItemsFor(r.id),n=items.length;const le=items[0];const leBy=le&&le.last_edited_by?byId2Name(le.last_edited_by):null;const leAt=le&&le.last_edited_at?dmyTs(le.last_edited_at):null;
