@@ -1004,8 +1004,8 @@ function App(){
 
   function exportCSV(kind){
     if(kind==='tasks'){
-      const rows=[['Task','Type','Department','Priority','Repeats','Assignee','Assigned by','Issued','Due','Status','Overdue','Note']];
-      tasks.filter(t=>inScope(t,shorts)).forEach(t=>rows.push([t.t,TYPES[t.type||'work'],BUCKETS[t.bucket]||'',PRIOS[t.prio||'med'].l,t.recur?recurLabel(t.recur,t.recurOn):'',
+      const rows=[['Task','Department','Task department','Priority','Repeats','Assignee','Assigned by','Issued','Due','Status','Overdue','Note']];
+      tasks.filter(t=>inScope(t,shorts)).forEach(t=>rows.push([t.t,(byShort(t.who)||{}).dept||'',BUCKETS[t.bucket]||'',PRIOS[t.prio||'med'].l,t.recur?recurLabel(t.recur,t.recurOn):'',
         assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),t.selfAssigned?'Self':(t.instructedBy||'—'),dmyTs(t.issued),dmy(t.date)+(t.time?' '+fmtTime(t.time):''),ST[t.status].l,isOverdue(t)?'Yes':'No',t.note||'']));
       csvDownload(iso(new Date())+'-teamflow-tasks.csv',rows);say('Tasks exported (CSV)');
     }else{
@@ -1025,8 +1025,8 @@ function App(){
       +'<div style="flex:1">'+segs.map(x=>'<div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid #eee;font-size:13px"><span style="width:11px;height:11px;border-radius:3px;background:'+x.c+';display:inline-block"></span>'+x.l+'<b style="margin-left:auto">'+x.v+' · '+Math.round(x.v/tot*100)+'%</b></div>').join('')
       +'<div style="font-size:12px;color:#555;margin-top:8px"><b>'+Math.round(segs[0].v/tot*100)+'%</b> of tasks were completed on time.</div></div></div>';
     b+='<hr style="border:none;border-top:1px solid #ddd;margin:4px 0 24px"/>';
-    b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Task</th><th style="text-align:left;padding:6px">Assignee</th><th style="text-align:left;padding:6px">Assigned by</th><th style="text-align:left;padding:6px">Type</th><th style="text-align:left;padding:6px">Issued</th><th style="text-align:left;padding:6px">Due</th><th style="text-align:left;padding:6px">Status</th></tr>';
-    list.forEach(t=>{b+='<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+t.t+'</td><td style="padding:6px">'+assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')+'</td><td style="padding:6px">'+(t.selfAssigned?'Self':(t.instructedBy||'—'))+'</td><td style="padding:6px">'+TYPES[t.type||'work']+'</td><td style="padding:6px;white-space:nowrap">'+dmyTs(t.issued)+'</td><td style="padding:6px;white-space:nowrap">'+dmy(t.date)+(isOverdue(t)?' (overdue)':'')+'</td><td style="padding:6px">'+ST[t.status].l+(isOverdue(t)?' · '+overdueDays(t)+' day'+(overdueDays(t)!=1?'s':'')+' late':'')+'</td></tr>';});
+    b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Task</th><th style="text-align:left;padding:6px">Assignee</th><th style="text-align:left;padding:6px">Assigned by</th><th style="text-align:left;padding:6px">Department</th><th style="text-align:left;padding:6px">Issued</th><th style="text-align:left;padding:6px">Due</th><th style="text-align:left;padding:6px">Status</th></tr>';
+    list.forEach(t=>{b+='<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+t.t+'</td><td style="padding:6px">'+assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')+'</td><td style="padding:6px">'+(t.selfAssigned?'Self':(t.instructedBy||'—'))+'</td><td style="padding:6px">'+((byShort(t.who)||{}).dept||'—')+'</td><td style="padding:6px;white-space:nowrap">'+dmyTs(t.issued)+'</td><td style="padding:6px;white-space:nowrap">'+dmy(t.date)+(isOverdue(t)?' (overdue)':'')+'</td><td style="padding:6px">'+ST[t.status].l+(isOverdue(t)?' · '+overdueDays(t)+' day'+(overdueDays(t)!=1?'s':'')+' late':'')+'</td></tr>';});
     b+='</table>';
     const pr=document.getElementById('print-report');pr.innerHTML=b;pr.style.display='block';
     const ot=document.title;document.title=iso(new Date())+'-teamflow-team-report';
@@ -1426,16 +1426,16 @@ function QueuePanel({ctx}){
    exportCSV/printReport, just parameterized by an arbitrary row set + label instead of always
    being the whole scope. */
 function exportRows(rows,label){
-  const csvRows=[['Task','Type','Department','Priority','Repeats','Assignee','Assigned by','Issued','Due','Status','Overdue','Note']];
-  rows.forEach(({t})=>csvRows.push([t.t,TYPES[t.type||'work'],BUCKETS[t.bucket]||'',PRIOS[t.prio||'med'].l,t.recur?recurLabel(t.recur,t.recurOn):'',
+  const csvRows=[['Task','Department','Task department','Priority','Repeats','Assignee','Assigned by','Issued','Due','Status','Overdue','Note']];
+  rows.forEach(({t})=>csvRows.push([t.t,(byShort(t.who)||{}).dept||'',BUCKETS[t.bucket]||'',PRIOS[t.prio||'med'].l,t.recur?recurLabel(t.recur,t.recurOn):'',
     assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),t.selfAssigned?'Self':(t.instructedBy||'—'),dmyTs(t.issued),dmy(t.date)+(t.time?' '+fmtTime(t.time):''),ST[t.status].l,isOverdue(t)?'Yes':'No',t.note||'']));
   csvDownload(iso(new Date())+'-teamflow-'+label.toLowerCase().replace(/\s+/g,'-')+'.csv',csvRows);
 }
 function printRows(rows,label,viewerName){
   let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — '+label+'</div>';
   b+='<div style="color:#555;margin-bottom:18px">Prepared for '+viewerName+' · '+new Date().toDateString()+' · '+rows.length+' tasks</div>';
-  b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Task</th><th style="text-align:left;padding:6px">Assignee</th><th style="text-align:left;padding:6px">Assigned by</th><th style="text-align:left;padding:6px">Type</th><th style="text-align:left;padding:6px">Issued</th><th style="text-align:left;padding:6px">Due</th><th style="text-align:left;padding:6px">Status</th></tr>';
-  rows.forEach(({t})=>{b+='<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+t.t+'</td><td style="padding:6px">'+assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')+'</td><td style="padding:6px">'+(t.selfAssigned?'Self':(t.instructedBy||'—'))+'</td><td style="padding:6px">'+TYPES[t.type||'work']+'</td><td style="padding:6px;white-space:nowrap">'+dmyTs(t.issued)+'</td><td style="padding:6px;white-space:nowrap">'+dmy(t.date)+(isOverdue(t)?' (overdue)':'')+'</td><td style="padding:6px">'+ST[t.status].l+(isOverdue(t)?' · '+overdueDays(t)+' day'+(overdueDays(t)!=1?'s':'')+' late':'')+'</td></tr>';});
+  b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Task</th><th style="text-align:left;padding:6px">Assignee</th><th style="text-align:left;padding:6px">Assigned by</th><th style="text-align:left;padding:6px">Department</th><th style="text-align:left;padding:6px">Issued</th><th style="text-align:left;padding:6px">Due</th><th style="text-align:left;padding:6px">Status</th></tr>';
+  rows.forEach(({t})=>{b+='<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+t.t+'</td><td style="padding:6px">'+assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')+'</td><td style="padding:6px">'+(t.selfAssigned?'Self':(t.instructedBy||'—'))+'</td><td style="padding:6px">'+((byShort(t.who)||{}).dept||'—')+'</td><td style="padding:6px;white-space:nowrap">'+dmyTs(t.issued)+'</td><td style="padding:6px;white-space:nowrap">'+dmy(t.date)+(isOverdue(t)?' (overdue)':'')+'</td><td style="padding:6px">'+ST[t.status].l+(isOverdue(t)?' · '+overdueDays(t)+' day'+(overdueDays(t)!=1?'s':'')+' late':'')+'</td></tr>';});
   b+='</table>';
   const pr=document.getElementById('print-report');pr.innerHTML=b;pr.style.display='block';
   const ot=document.title;document.title=iso(new Date())+'-teamflow-'+label.toLowerCase().replace(/\s+/g,'-');
