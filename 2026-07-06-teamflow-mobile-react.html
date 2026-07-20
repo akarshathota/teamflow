@@ -306,6 +306,14 @@ const bossesFor=(role,self)=>{
   }
   return out;
 };
+/* "On instruction of" in the New Task form: all leadership (Administrator/Director/Management), not
+   just the creator's boss chain — anyone at that tier can hand a task down. Excludes the creator
+   ("own initiative" covers that). Kept separate from bossesFor(), which stays a real boss chain for
+   approval routing (its .slice(-1)[0] = the topmost boss who approves). self is a short name. */
+const INSTRUCT_RANK_M={Administrator:0,Director:1,Management:2};
+const instructorsFor=self=>ALL_PEOPLE.filter(p=>p.role in INSTRUCT_RANK_M&&p.s!==self)
+  .sort((a,b)=>INSTRUCT_RANK_M[a.role]-INSTRUCT_RANK_M[b.role]||a.n.localeCompare(b.n))
+  .map(p=>({n:p.n,label:p.n+' ('+p.role+')'}));
 /* same approval model as the console's canApprove: admin/mgmt approve anything, otherwise only the
    person's real direct boss (checked live via ALL_PEOPLE/findPerson, matching console's
    `p.boss===viewer.n` exactly) — not a hardcoded name→role table. The old BOSS_ROLE map only ever
@@ -1517,7 +1525,7 @@ function TaskSheet({ctx,close}){
   const depts=['all',...new Set(MEMBERS.map(m=>m.dept))];
   const load=workload();
   const emp=MEMBERS.filter(m=>(dept==='all'||m.dept===dept)&&(!q||m.n.toLowerCase().includes(q.toLowerCase())||m.dept.toLowerCase().includes(q.toLowerCase())||m.role.toLowerCase().includes(q.toLowerCase())));
-  const bosses=bossesFor(ctx.role,ctx.r.self);
+  const bosses=instructorsFor(ctx.r.self);
   return <>
     <h3>New task</h3>
     <div className="sub">Type it or speak it — your choice.</div>
