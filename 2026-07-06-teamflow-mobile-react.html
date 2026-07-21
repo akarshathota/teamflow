@@ -1725,7 +1725,7 @@ function TaskSheet({ctx,close}){
       // instructedBy doubles as "who assigned this" (defaults to me, the creator) and the optional
       // "relaying on behalf of X" override — without the default, tasks assigned to someone else
       // never recorded who assigned them, so boss-filtered views stayed empty for the common case.
-      selfAssigned:self,instructedBy:self?null:(instruct||ctx.r.name)};
+      selfAssigned:self,instructedBy:instruct||(self?null:ctx.r.name)};
     tasks.unshift(nt);
     close();ctx.R();
     saveTask(nt).catch(console.error);

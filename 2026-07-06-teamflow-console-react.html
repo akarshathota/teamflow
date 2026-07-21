@@ -3720,7 +3720,7 @@ function QuickCapture({ctx,close}){
     // stayed empty for the common case and only ever worked for the rare manual-relay one.
     const nt={t:cleanTask(clean),who:list[0],coWho:list.length>1?list.slice(1):undefined,
       type,bucket,prio,recur,recurOn:recur?recurOn:null,date:when||iso(TODAY),time:dueTime||null,status:'open',note:note.trim(),
-      selfAssigned:mode==='self',instructedBy:mode==='self'?null:(boss||ctx.viewer.n)};
+      selfAssigned:mode==='self',instructedBy:boss||(mode==='self'?null:ctx.viewer.n)};
     tasks.unshift(nt);
     close();ctx.R();
     saveTask(nt).catch(console.error);
