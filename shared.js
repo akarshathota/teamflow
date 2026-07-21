@@ -14,6 +14,29 @@ const BUCKETS={academic:"Academic",maintenance:"Maintenance",construction:"Const
 const BUCKET_COLORS={academic:'#39638f',maintenance:'#b06e12',construction:'#8a6a52',hr:'#a34d78',accounts:'#1a7a48',administration:'#5d6672',transport:'#0e7a8f',it:'#5b5ea6'};
 const LABEL_TO_BUCKET=Object.fromEntries(Object.entries(BUCKETS).map(([k,v])=>[v,k]));
 const bucketColor=b=>BUCKET_COLORS[b]||'#5d6672';
+/* Admin-configurable, RECIPIENT-based routing (routing_rules table). Replaces the old hardcoded
+   category→department-head mapping: an Administrator now edits, in Settings, which specific staff
+   member receives each report/request. Loaded into each app's ROUTING_RULES global (declared in the
+   app's own script, same pattern as ORG_NAME / clItems) by loadAll + realtime. Every helper below
+   reads that global and no-ops safely before it's loaded.
+     • maintenance categories = rows kind='maintenance' ({id,label,icon,staff_id,sort_order})
+     • supply recipient       = the single row kind='supply' → staff_id
+   A maintenance report stores routing_rule_id (its category) + target_staff_id (the recipient
+   snapshot). issueRecipientId() resolves it LIVE from the category first, so re-configuring a
+   category re-routes existing reports; it falls back to the stored snapshot, then to the default
+   (first / 'Building') category for legacy pre-feature reports that carry neither. */
+const routingRules=()=>(typeof ROUTING_RULES!=='undefined'&&ROUTING_RULES)?ROUTING_RULES:[];
+const maintCats=()=>routingRules().filter(r=>r.kind==='maintenance').slice().sort((a,b)=>(a.sort_order-b.sort_order)||((a.created_at||'')<(b.created_at||'')?-1:1));
+const catById=id=>maintCats().find(c=>c.id===id)||null;
+const defaultMaintCat=()=>maintCats()[0]||null;              // legacy fallback = first (Building)
+const supplyRule=()=>routingRules().find(r=>r.kind==='supply')||null;
+const supplyRecipientId=()=>{const r=supplyRule();return r?r.staff_id:null;};
+function issueRecipientId(r){                                  // live-resolved recipient staff id, or null
+  const c=r&&r.routing_rule_id?catById(r.routing_rule_id):null;
+  if(c)return c.staff_id||null;
+  if(r&&r.target_staff_id)return r.target_staff_id;
+  const d=defaultMaintCat();return d?d.staff_id:null;
+}
 /* mobile's superset — includes Teacher, which console never looks up (it has no console-facing
    Teacher role), so sharing the superset is harmless rather than trimming it per app.
    'Team Lead' sits between Team Member (jrm) and Teacher (worker) in the reporting chain — added

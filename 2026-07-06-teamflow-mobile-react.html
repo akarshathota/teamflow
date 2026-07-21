@@ -239,6 +239,7 @@ const JOB_TITLE={Hari:"Repairs & electrical",Suresh:"Plumbing & carpentry",Latha
 
 let MEMBERS=[];
 let ORG_NAME='';
+let ROUTING_RULES=[]; // routing_rules rows (admin-configured recipients) — read via shared.js helpers
 const ALL_STAFF=[];
 let tasks=[];
 let pendingReqs=[];
@@ -320,19 +321,46 @@ const instructorsFor=self=>ALL_PEOPLE.filter(p=>p.role in INSTRUCT_RANK_M&&p.s!=
    covered the original ~10 demo first names and silently failed (denied) for anyone hired since,
    e.g. Chandu (Construction) or Prashant (IT & Systems). viewerShort is the short name of whoever
    is actually viewing (real login or Preview As person), passed in by each call site. */
-const canApproveFrom=(role,from,viewerShort)=>{const p=findPerson(from);return role==='admin'||role==='mgmt'||!!(p&&p.boss===viewerShort);};
-const canAssignIssues=role=>role==='admin'||role==='mgmt'||role==='jrm'; /* jrm = Vikram, maintenance head */
-/* single source of truth for "items needing this viewer's approval/assignment" — same shape Home
-   builds inline (completions/exts/reqs wrapped as {t,i}/{q,qi} for its action buttons, issues left
-   as the raw pendingIssues array since assignIssue takes a plain pendingIssues index). Also used by
-   NotifSheet's bell "Needs your approval" group so the two screens can't drift apart from each
-   other — same arrays, same filters, just rendered differently. */
-function approvalQueue(role,self){
+/* Issuer-based approval (matches console's canApprove): admin/mgmt approve anything; otherwise the
+   person who ISSUED the task approves its completion — t.instructedBy is a full name, compared to
+   the viewer's full name (viewerName). Legacy tasks with no instructedBy (and purchase requests,
+   which pass no task) fall back to the old direct-boss rule so nothing already in flight breaks. */
+const canApproveFrom=(role,from,viewerShort,t,viewerName)=>{
+  if(role==='admin'||role==='mgmt')return true;
+  if(t&&t.instructedBy)return viewerName===t.instructedBy;
+  const p=findPerson(from);return !!(p&&p.boss===viewerShort);};
+/* the staff object a maintenance report resolves to — its category's CURRENT admin-configured
+   recipient (issueRecipientId lives in shared.js, reads the ROUTING_RULES global). Replaces the old
+   deptHeadM() dept-head lookup: recipients are now specific, admin-picked staff, not derived from a
+   department. Returns null when nothing resolves (no config / unset recipient). */
+function issueRecipientM(q){const id=issueRecipientId(q);return id?ALL_PEOPLE.find(p=>p.id===id)||null:null;}
+/* Supply two-stage. supplyApproverIdM = the Sr. Manager of the REQUESTER's department (role='Manager'
+   AND same department); if the requester IS that Sr. Manager (or none exists), escalate to their boss
+   so it never dead-ends. supplyRecipientId (shared.js) is the single configured recipient. */
+function supplyApproverIdM(q){const req=findPerson(q.from);if(!req)return null;
+  const mgr=ALL_PEOPLE.find(p=>p.role==='Manager'&&p.department===req.department);
+  if(mgr&&mgr.s!==req.s)return mgr.id;
+  const boss=req.boss?findPerson(req.boss):null;return boss?boss.id:null;}
+/* Reports this viewer may see & assign. admin/mgmt see all org-wide; otherwise the configured
+   recipient sees ONLY the reports routed to them (identity-based — surfaces reports filed by someone
+   ABOVE them too, the original above-scope-reporter bug). */
+function issuesForViewer(role,self){
+  if(role==='admin'||role==='mgmt')return pendingIssues;
+  const me=findPerson(self);if(!me)return [];
+  return pendingIssues.filter(q=>{const id=issueRecipientId(q);return id&&id===me.id;});
+}
+/* single source of truth for "items needing this viewer's approval/assignment". reqs = supply
+   requests awaiting the requester's Sr. Manager approval; fulfil = approved supply requests routed
+   to the configured supply recipient to procure; issues = maintenance reports routed to this viewer.
+   Also used by NotifSheet's bell so the two screens can't drift apart. */
+function approvalQueue(role,self,name){
+  const me=findPerson(self);const meId=me?me.id:null;const all=role==='admin'||role==='mgmt';
   return {
-    completions:tasks.map((t,i)=>({t,i})).filter(o=>o.t.completionPending&&canApproveFrom(role,o.t.who,self)),
-    exts:tasks.map((t,i)=>({t,i})).filter(o=>o.t.extReq&&canApproveFrom(role,o.t.who,self)),
-    reqs:pendingReqs.map((q,qi)=>({q,qi})).filter(o=>canApproveFrom(role,o.q.from,self)),
-    issues:canAssignIssues(role)?pendingIssues:[]
+    completions:tasks.map((t,i)=>({t,i})).filter(o=>o.t.completionPending&&canApproveFrom(role,o.t.who,self,o.t,name)),
+    exts:tasks.map((t,i)=>({t,i})).filter(o=>o.t.extReq&&canApproveFrom(role,o.t.who,self,o.t,name)),
+    reqs:pendingReqs.map((q,qi)=>({q,qi})).filter(o=>o.q.stage!=='approved'&&(all||supplyApproverIdM(o.q)===meId)),
+    fulfil:pendingReqs.map((q,qi)=>({q,qi})).filter(o=>o.q.stage==='approved'&&(all||o.q.target_staff_id===meId)),
+    issues:issuesForViewer(role,self)
   };
 }
 
@@ -392,7 +420,7 @@ function rowToMobileTask(row,assignRows,byId,logRows){
 }
 async function loadAll(){
   const clSince=iso(new Date(Date.now()-90*864e5));
-  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},{data:noticeRows},notifRows,{data:orgRow},{data:clItemRows},{data:clDoneRows},{data:clAbsRows}]=await Promise.all([
+  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},{data:noticeRows},notifRows,{data:orgRow},{data:ruleRows},{data:clItemRows},{data:clDoneRows},{data:clAbsRows}]=await Promise.all([
     sb.from('staff').select('*'),
     sb.from('tasks').select('*'),
     sb.from('task_assignees').select('*'),
@@ -401,11 +429,13 @@ async function loadAll(){
     sb.from('notices').select('*').order('created_at',{ascending:false}),
     loadNotifs(),
     sb.from('org_settings').select('name').eq('id',true).maybeSingle(),
+    sb.from('routing_rules').select('*'),
     sb.from('checklist_items').select('*').eq('archived',false),
     sb.from('checklist_completions').select('*').gte('occ_date',clSince),
     sb.from('checklist_absences').select('*').gte('absent_date',clSince)
   ]);
   if(orgRow&&orgRow.name)ORG_NAME=orgRow.name;
+  ROUTING_RULES.length=0;ROUTING_RULES.push(...(ruleRows||[]).map(r=>({id:r.id,kind:r.kind,label:r.label,icon:r.icon||'',staff_id:r.target_staff_id||null,sort_order:r.sort_order||0,created_at:r.created_at})));
   clItems.length=0;clItems.push(...(clItemRows||[]));
   clDone.length=0;clDone.push(...(clDoneRows||[]));
   clAbs.length=0;clAbs.push(...(clAbsRows||[]));
@@ -421,9 +451,9 @@ async function loadAll(){
   tasks.length=0;tasks.push(...(taskRows||[]).map(r=>rowToMobileTask(r,assignRows||[],byId,logRows||[]))
     .sort((a,b)=>(a.date||'')<(b.date||'')?-1:1));
   pendingReqs.length=0;pendingReqs.push(...(reqRows||[]).filter(r=>r.kind==='request').map(r=>
-    ({id:r.id,t:r.title,note:r.note||'',from:r.from_short,av:r.from_init})));
+    ({id:r.id,t:r.title,note:r.note||'',from:r.from_short,av:r.from_init,stage:r.stage||null,target_staff_id:r.target_staff_id||null})));
   pendingIssues.length=0;pendingIssues.push(...(reqRows||[]).filter(r=>r.kind==='issue').map(r=>
-    ({id:r.id,t:r.title,from:r.from_short,av:r.from_init,files:r.files&&r.files.length?r.files:undefined})));
+    ({id:r.id,t:r.title,from:r.from_short,av:r.from_init,routing_rule_id:r.routing_rule_id||null,target_staff_id:r.target_staff_id||null,files:r.files&&r.files.length?r.files:undefined})));
   notices.length=0;notices.push(...(noticeRows||[]).map(r=>({id:r.id,t:r.title,b:r.body||'',d:fmtD(r.created_at.slice(0,10))})));
   notifs.length=0;notifs.push(...(notifRows||[]));
 }
@@ -473,9 +503,12 @@ async function logTask(t,authorName,text){
 async function saveRequestRow(q,kind){
   const p=findPerson(q.from)||{};
   const {data}=await sb.from('requests').insert({kind,title:q.t,
-    from_staff_id:p.id||null,note:q.note||'',files:q.files||[]}).select().single();
+    from_staff_id:p.id||null,routing_rule_id:q.routing_rule_id||null,target_staff_id:q.target_staff_id||null,
+    stage:q.stage||null,note:q.note||'',files:q.files||[]}).select().single();
   q.id=data.id;
 }
+/* patch the routing/stage columns on an existing request (supply approval) */
+async function updateRequestRow(q){if(q.id)await sb.from('requests').update({stage:q.stage||null,target_staff_id:q.target_staff_id||null}).eq('id',q.id);}
 async function deleteRequestRow(q){if(q.id)await sb.from('requests').delete().eq('id',q.id);}
 async function postNotice(n){await sb.from('notices').insert({title:n.t,body:n.b});}
 
@@ -499,9 +532,14 @@ function guessTime(t){t=t.toLowerCase();
 function workload(){const l={};MEMBERS.forEach(m=>l[m.n]=tasks.filter(t=>!t.done&&hasWhoM(t,m.n)).length);return l;}
 /* real overdue/overloaded staff for Insights' "Who needs attention" — was hardcoded demo names
    (Hari Charan, Meena R.) with no real-data path at all; mirrors console's attentionList(). */
-function attentionList(){
+function attentionList(scope){
   const load=workload();
-  return MEMBERS.map(m=>{
+  /* Scope "who needs attention" to the viewer's own oversight team. Matters now that a Director
+     loads org-wide non-leadership staff into MEMBERS (RLS widened for cross-department ASSIGNMENT)
+     — their oversight surfaces must still show only their subtree. admin/mgmt pass their org-wide
+     team (ALL_STAFF), so they are unchanged; without a scope arg it falls back to all MEMBERS. */
+  const pool=scope?MEMBERS.filter(m=>scope.includes(m.n)):MEMBERS;
+  return pool.map(m=>{
     const mine=tasks.filter(t=>!t.done&&hasWhoM(t,m.n));
     const od=mine.filter(t=>t.date&&t.date<iso(TODAY));
     const worst=od.length?Math.max(...od.map(t=>Math.round((TODAY-new Date(t.date+'T00:00:00'))/86400000))):0;
@@ -734,6 +772,7 @@ function App(){
       .on('postgres_changes',{event:'*',schema:'public',table:'task_assignees'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'task_log'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'requests'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'routing_rules'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'notices'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'task_notifications'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'task_activity_notifications'},refetch)
@@ -798,8 +837,8 @@ function App(){
      true even if some future data quirk made those filters return non-empty for one. Both waitN
      (badge count) and the bell's "Needs your approval" group (ctx.approvalQueue) come from this same
      zeroed object for a worker, so they can never disagree. */
-  const aq=role==='worker'?{completions:[],exts:[],reqs:[],issues:[]}:approvalQueue(role,person.s);
-  const waitN=aq.completions.length+aq.exts.length+aq.reqs.length+aq.issues.length;
+  const aq=role==='worker'?{completions:[],exts:[],reqs:[],issues:[]}:approvalQueue(role,person.s,person.n);
+  const waitN=aq.completions.length+aq.exts.length+aq.reqs.length+(aq.fulfil?aq.fulfil.length:0)+aq.issues.length;
 
   const switchRole=v=>{setPreviewRole(v);const rr=ROLES[v];if(!rr.tabs.includes(page))setPage(rr.tabs[0]);setSheet(null);};
   /* previewing/realSelf: same real-signed-in-vs-Preview-As distinction the console keeps on ctx
@@ -812,16 +851,28 @@ function App(){
   /* actions shared */
   const acts={
     remind:i=>say('Reminder sent to '+assigneesM(tasks[i]).join(' & ')+' 🔔'),
+    /* Supply stage 1: the requester's Sr. Manager approves — no longer buys/deletes here; moves the
+       request to stage='approved' and stamps the configured supply recipient, so it now surfaces on
+       THAT person's dashboard to fulfil (stage 2 = fulfilReq). */
     approveReq:qi=>{if(previewing){say("You're previewing — switch back to approve for real");return;}
+      const q=pendingReqs[qi];if(!q)return;
+      const rid=supplyRecipientId();const rec=rid?ALL_PEOPLE.find(p=>p.id===rid):null;
+      q.stage='approved';q.target_staff_id=rid||null;R();
+      updateRequestRow(q).catch(console.error);
+      say('Approved · routed to '+(rec?rec.n.split(' ')[0]:'the supply recipient')+' to fulfil 📦');},
+    /* Supply stage 2: the configured recipient fulfils — turns it into a procurement task on their
+       own list and clears the request. */
+    fulfilReq:qi=>{if(previewing){say("You're previewing — switch back to fulfil for real");return;}
       const q=pendingReqs.splice(qi,1)[0];if(!q)return;
-      const s=suggestAssignee('purchase','accounts');
+      const rec=q.target_staff_id?ALL_PEOPLE.find(p=>p.id===q.target_staff_id):null;
+      const m=rec?findMember(rec.s):null;const s=m||suggestAssignee('purchase','accounts');
       const nt={t:"Buy: "+q.t,who:s.n,init:s.i,due:"This week",date:whenToDate("this week"),
         bucket:"accounts",type:"purchase",done:false,origin:"request",
-        note:'From '+q.from+(q.note?' — “'+q.note+'”':'')};
+        note:'Approved supply request from '+q.from+(q.note?' — “'+q.note+'”':'')};
       tasks.unshift(nt);
       R();
       saveTask(nt).catch(console.error);deleteRequestRow(q).catch(console.error);
-      say('Approved · '+s.n+' (procurement · accounts) will buy 📦');},
+      say('Marked for procurement 📦 · added to '+s.n+'’s list');},
     declineReq:qi=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
       const q=pendingReqs.splice(qi,1)[0];if(q){R();deleteRequestRow(q).catch(console.error);say('Request declined — '+q.from.split(' ')[0]+' will be notified');}},
     assignIssue:(qi,who)=>{if(previewing){say("You're previewing — switch back to assign for real");return;}
@@ -983,7 +1034,7 @@ function TaskCard({o,ctx,acts}){
 function Home({ctx,acts}){
   // ctx.approvalQueue is the single source of truth (see approvalQueue()) — also feeds the bell's
   // "Needs your approval" group and the waitN badge count, so all three can't drift apart.
-  const {completions,exts,reqs,issues:pendingIssuesQ}=ctx.approvalQueue;
+  const {completions,exts,reqs,fulfil,issues:pendingIssuesQ}=ctx.approvalQueue;
   return <div>
     {ctx.role!=='worker'?<>
       {completions.length?<><div className="sec">Completion approvals</div>
@@ -1009,25 +1060,47 @@ function Home({ctx,acts}){
             <button className="btn primary" onClick={()=>acts.approveExt(o.i)}>Approve ⏳</button>
             <button className="btn ghost" onClick={()=>acts.rejectExt(o.i)}><I n="x" s={16}/></button>
           </div></div>)}</>:null}
-      {pendingIssuesQ.length?<><div className="sec">Maintenance issues — assign</div>
-        {pendingIssuesQ.map((q,qi)=>{const sug=suggestFixer(q.t);
+      {pendingIssuesQ.length?<><div className="sec">Repair/maintenance reports — assign</div>
+        {pendingIssuesQ.map(q=>{
+          // pendingIssuesQ can be a FILTERED subset (a recipient sees only reports routed to them),
+          // so map back to the real pendingIssues index that acts.assignIssue splices on — filter keeps
+          // object identity, so indexOf is exact (and === qi for admin/mgmt, where the list is full).
+          const qi=pendingIssues.indexOf(q);
+          const rec=issueRecipientM(q);
+          const poolDept=rec?rec.department:'Maintenance';
+          const pool=MEMBERS.filter(m=>m.dept===poolDept);
+          // Suggest someone in the recipient's department (they staff the repair). suggestFixer's
+          // keyword rules can name someone from another department, so only honour it when they're in
+          // the pool; otherwise suggest the department's first member.
+          const rawSug=poolDept==='Maintenance'?suggestFixer(q.t):null;
+          const sug=(rawSug&&pool.some(m=>m.n===rawSug.n))?rawSug:(pool[0]?{n:pool[0].n,why:'in '+poolDept}:null);
           return <div className="task" key={'i'+qi}>
-            <span className="pill today">🔧 Maintenance issue</span>
+            <span className="pill today">🔧 Routed to {rec?rec.n.split(' ')[0]:'you'}</span>
             <div className="tt">{q.t}</div>
             <div className="meta"><span className="who">{q.av}</span> Reported by {q.from}</div>
             {q.files&&q.files.length?<div className="attrow">{q.files.map((f,ix)=><FileChip key={ix} f={f}/>)}</div>:null}
-            <div className="meta" style={{marginTop:7,color:'var(--accent-ink)',fontWeight:600}}>✨ Suggested: {sug.n} — {sug.why}</div>
+            {sug?<div className="meta" style={{marginTop:7,color:'var(--accent-ink)',fontWeight:600}}>✨ Suggested: {sug.n} — {sug.why}</div>:null}
             <div className="picker" style={{marginTop:8}}>
-              {['Hari','Suresh','Latha'].map(n=>{const m=findMember(n);
-                return <button key={n} className={'pickchip'+(n===sug.n?' cur':'')} onClick={()=>acts.assignIssue(qi,n)}>{n} · {m?m.role:''}</button>;})}
+              {pool.length?pool.map(m=>
+                <button key={m.n} className={'pickchip'+(sug&&m.n===sug.n?' cur':'')} onClick={()=>acts.assignIssue(qi,m.n)}>{m.n} · {m.role}</button>)
+                :<span className="meta">No {poolDept} staff to assign yet</span>}
             </div></div>;})}</>:null}
-      {reqs.length?<><div className="sec">Waiting for your approval</div>
+      {reqs.length?<><div className="sec">Supply requests — approve</div>
         {reqs.map(o=><div className="task" key={'q'+o.qi}>
           <span className="pill today">📦 Supply request</span>
           <div className="tt">{o.q.t}</div>
           <div className="meta"><span className="who">{o.q.av}</span> From {o.q.from}{o.q.note?' · “'+o.q.note+'”':''}</div>
           <div className="cardbtns">
-            <button className="btn primary" onClick={()=>acts.approveReq(o.qi)}>Approve → procurement ✓</button>
+            <button className="btn primary" onClick={()=>acts.approveReq(o.qi)}>Approve ✓</button>
+            <button className="btn ghost" onClick={()=>acts.declineReq(o.qi)}><I n="x" s={16}/></button>
+          </div></div>)}</>:null}
+      {fulfil&&fulfil.length?<><div className="sec">Approved supplies — fulfil</div>
+        {fulfil.map(o=><div className="task" key={'f'+o.qi}>
+          <span className="pill today">📦 Approved — procure</span>
+          <div className="tt">{o.q.t}</div>
+          <div className="meta"><span className="who">{o.q.av}</span> From {o.q.from}{o.q.note?' · “'+o.q.note+'”':''} · approved by their Sr. Manager</div>
+          <div className="cardbtns">
+            <button className="btn primary" onClick={()=>acts.fulfilReq(o.qi)}>Mark for procurement ✓</button>
             <button className="btn ghost" onClick={()=>acts.declineReq(o.qi)}><I n="x" s={16}/></button>
           </div></div>)}</>:null}
     </>:<WorkerPending ctx={ctx}/>}
@@ -1041,17 +1114,19 @@ function WorkerPending({ctx}){
   const myI=pendingIssues.filter(q=>q.from===r.name||q.from===r.self);
   if(!myR.length&&!myI.length)return null;
   return <><div className="sec">Your requests</div>
-    {myI.map((q,ix)=><div className="task" key={'wi'+ix}>
-      <span className="pill today">🔧 Sent to maintenance head</span>
+    {myI.map((q,ix)=>{const rec=issueRecipientM(q),hn=rec?rec.n.split(' ')[0]:'the configured recipient';
+      return <div className="task" key={'wi'+ix}>
+      <span className="pill today">🔧 Sent to {hn}</span>
       <div className="tt">{q.t}</div>
-      <div className="meta">The maintenance head will assign it to the right person</div>
+      <div className="meta">{hn} will assign it to the right person</div>
       {q.files&&q.files.length?<div className="attrow">{q.files.map((f,fx)=><FileChip key={fx} f={f}/>)}</div>:null}
-    </div>)}
-    {myR.map((q,ix)=><div className="task" key={'wr'+ix}>
-      <span className="pill today">⏳ Waiting approval</span>
+    </div>;})}
+    {myR.map((q,ix)=>{const rec=q.stage==='approved'&&q.target_staff_id?ALL_PEOPLE.find(p=>p.id===q.target_staff_id):null;
+      return <div className="task" key={'wr'+ix}>
+      <span className="pill today">{q.stage==='approved'?'📦 Approved — with '+(rec?rec.n.split(' ')[0]:'procurement'):'⏳ Waiting Sr. Manager approval'}</span>
       <div className="tt">📦 {q.t}</div>
-      <div className="meta">Sent to {bossesFor('worker',ctx.r.self).slice(-1)[0]?.label}{q.note?' · “'+q.note+'”':''}</div>
-    </div>)}
+      <div className="meta">{q.stage==='approved'?'Approved — '+(rec?rec.n.split(' ')[0]+' will procure':'being procured'):'Sent to your department’s Sr. Manager'}{q.note?' · “'+q.note+'”':''}</div>
+    </div>;})}
   </>;
 }
 
@@ -1478,7 +1553,7 @@ function Insights({ctx}){
     <div className="sec">Due dates · your span</div>
     <Cal ctx={ctx} allowFilter/>
     <div className="sec">Who needs attention <span className="free">FREE</span></div>
-    {(()=>{const at=attentionList();
+    {(()=>{const at=attentionList(ctx.scope);
       return at.length?at.map(x=><div className="attn" key={x.m.n}>
         <div className="ring" style={{background:x.od?'var(--red)':'var(--amber)'}}>{x.m.i}</div>
         <div><div className="nm" style={{cursor:'pointer'}} onClick={()=>ctx.setSheet({kind:'day',title:x.m.n+' — pending tasks',events:tasks.map((t,i)=>({t,i})).filter(o=>!o.t.done&&hasWhoM(o.t,x.m.n))})}>{x.m.n}</div><div className="rs">{x.reason}</div></div></div>)
@@ -1609,8 +1684,9 @@ function NotifSheet({ctx,acts,close}){
   // see approvalQueue()), surfaced here too. These aren't notification rows (no read/unread state,
   // nothing to mark read) and they resolve themselves once acted on, so a tap just sends the viewer
   // to Home where the real Approve/Reject/Assign buttons live, rather than duplicating them here.
-  const {completions:qC,exts:qX,reqs:qR,issues:qI}=ctx.approvalQueue;
-  const queueTotal=qC.length+qX.length+qR.length+qI.length;
+  const {completions:qC,exts:qX,reqs:qR,fulfil:qF,issues:qI}=ctx.approvalQueue;
+  const qFul=qF||[];
+  const queueTotal=qC.length+qX.length+qR.length+qFul.length+qI.length;
   const toHome=()=>{ctx.setPage('home');close();};
   const queueItem=(key,color,title,meta)=>
     <div key={key} className="task" style={{cursor:'pointer'}} onClick={toHome}>
@@ -1626,8 +1702,9 @@ function NotifSheet({ctx,acts,close}){
       {queueTotal?<div className="sec">Needs your approval</div>:null}
       {qC.map(o=>queueItem('qc'+o.i,'var(--green)',o.t.t,o.t.who+' marked this done — needs approval'))}
       {qX.map(o=>queueItem('qx'+o.i,'var(--blue)',o.t.t,o.t.who+' requests extension → '+(o.t.extReq.label||o.t.extReq.newDate)))}
-      {qI.map((q,qi)=>queueItem('qi'+qi,'var(--amber)','Maintenance issue: '+q.t,'Reported by '+q.from))}
-      {qR.map(o=>queueItem('qr'+o.qi,'var(--accent)','Supply request: '+o.q.t,'From '+o.q.from))}
+      {qI.map((q,qi)=>queueItem('qi'+qi,'var(--amber)','Repair/maintenance report: '+q.t,'Reported by '+q.from))}
+      {qR.map(o=>queueItem('qr'+o.qi,'var(--amber)','Supply request: '+o.q.t,'From '+o.q.from+' · approve'))}
+      {qFul.map(o=>queueItem('qf'+o.qi,'var(--accent)','Approved supply: '+o.q.t,'From '+o.q.from+' · fulfil'))}
       {ctx.notifs.length?<>
         {attn.length?<div className="sec">Needs attention</div>:null}
         {attn.map(notifItem)}
@@ -1646,7 +1723,7 @@ function Actions({ctx}){
       <span><b>New task</b><small>Type it or speak it</small></span></button>
     <button className="actbtn" onClick={()=>ctx.setSheet({kind:'issue'})}>
       <span className="actic" style={{background:'var(--amber-soft)',color:'var(--amber)'}}><I n="tool"/></span>
-      <span><b>Report a maintenance issue</b><small>Broken? Leaking? Snap a photo &amp; send</small></span></button>
+      <span><b>Report for repair/maintenance</b><small>Building or IT — snap a photo &amp; send</small></span></button>
     <button className="actbtn" onClick={()=>ctx.setSheet({kind:'request'})}>
       <span className="actic" style={{background:'var(--green-soft)',color:'var(--green)'}}><I n="box"/></span>
       <span><b>Request supplies</b><small>Chalk, markers, lab material…</small></span></button>
@@ -1664,11 +1741,21 @@ function TaskSheet({ctx,close}){
   const [cur,setCur]=useState(null);
   const [type,setType]=useState('work');const typeByUser=useRef(false);
   const [assign,setAssign]=useState(ctx.role==='worker'?'self':'others');
+  const [deptTab,setDeptTab]=useState('within'); // Directors only: 'within' | 'other' (self is handled by assign==='self')
   const [pick,setPick]=useState(null);
   const [q,setQ]=useState('');const [dept,setDept]=useState('all');
   const [instruct,setInstruct]=useState('');
   const [showOpts,setShowOpts]=useState(false);
   const canMulti=['admin','mgmt','srm'].includes(ctx.role);
+  /* Director-only ASSIGNMENT scope (separate from oversight/ctx.scope, which stays subtree-only).
+     Directors can assign to anyone whose DB role is NOT Administrator/Management — split into two
+     picker tabs: within = their own subtree (who they oversee); other = everyone else assignable
+     (org minus Admin/Mgmt) minus their subtree minus self. Self is the third tab. DB roles come from
+     ALL_PEOPLE (true role), not MEMBERS.role which JOB_TITLE can relabel. */
+  const isDir=ctx.role==='dir';
+  const dirWithinSet=isDir?new Set(descendantsM(ctx.r.self).map(p=>p.s)):null;
+  const dirOtherSet=isDir?new Set(ALL_PEOPLE.filter(p=>p.role!=='Administrator'&&p.role!=='Management'
+    &&p.s!==ctx.r.self&&!dirWithinSet.has(p.s)).map(p=>p.s)):null;
 
   function understood(p){
     const gt=typeByUser.current?type:guessType(p.raw);
@@ -1686,6 +1773,15 @@ function TaskSheet({ctx,close}){
     else guessedBucket=guessBucket(p.raw);
     const bucket=allowedDepts.includes(guessedBucket)?guessedBucket:(allowedDepts[0]||guessedBucket);
     if(!whos.length){const s=suggestAssignee(gt,bucket);whos=[s.n];whoSugg=true;whoWhy=s.reason;}
+    /* suggestAssignee/named-in-sentence draw from the whole MEMBERS pool, which for a Director can
+       include people outside their assignable scope (e.g. Management) or outside the active tab.
+       Constrain the default to the current tab's allowed set so a Director is never pre-pointed at
+       someone they can't assign to; Self mode ignores whos entirely. */
+    if(isDir&&assign!=='self'){
+      const allow=deptTab==='other'?dirOtherSet:dirWithinSet;
+      whos=whos.filter(n=>allow.has(n));
+      if(!whos.length){const first=MEMBERS.find(m=>allow.has(m.n));whos=first?[first.n]:[];whoSugg=!!first;whoWhy=first?'suggested — in your assignable scope':'';}
+    }
     let when=p.when,whenSugg=false,whenWhy='';
     let dateIso;
     if(p.dateIso){dateIso=p.dateIso;whenWhy=p.dateWhy||'you named a date in your sentence';}
@@ -1732,9 +1828,10 @@ function TaskSheet({ctx,close}){
     const tail=(cur.recur?' · '+recurLabel(cur.recur,cur.recurOn).toLowerCase():'')+(instruct?' · as per '+instruct:'');
     ctx.say(self?'Added to your list'+tail:'Assigned '+(list.length>1?'jointly to ':'to ')+list.join(' + ')+tail+' · notified in TeamFlow');
   }
-  const depts=['all',...new Set(MEMBERS.map(m=>m.dept))];
+  const dirPool=isDir?MEMBERS.filter(m=>(deptTab==='other'?dirOtherSet:dirWithinSet).has(m.n)):MEMBERS;
+  const depts=['all',...new Set(dirPool.map(m=>m.dept))];
   const load=workload();
-  const emp=MEMBERS.filter(m=>(dept==='all'||m.dept===dept)&&(!q||m.n.toLowerCase().includes(q.toLowerCase())||m.dept.toLowerCase().includes(q.toLowerCase())||m.role.toLowerCase().includes(q.toLowerCase())));
+  const emp=dirPool.filter(m=>(dept==='all'||m.dept===dept)&&(!q||m.n.toLowerCase().includes(q.toLowerCase())||m.dept.toLowerCase().includes(q.toLowerCase())||m.role.toLowerCase().includes(q.toLowerCase())));
   const bosses=instructorsFor(ctx.r.self);
   return <>
     <h3>New task</h3>
@@ -1764,9 +1861,14 @@ function TaskSheet({ctx,close}){
           style={{width:'100%',border:'none',borderBottom:'1.5px solid var(--line)',fontFamily:'inherit',fontSize:'inherit',fontWeight:'inherit',color:'inherit',padding:'2px 0',outline:'none',background:'none'}}/>
       </div></div>
       <div className="field"><div className="k">Assign to</div><div className="v">
-        {ctx.role!=='worker'?<div className="modetabs" style={{marginBottom:9}}>
+        {ctx.role!=='worker'&&!isDir?<div className="modetabs" style={{marginBottom:9}}>
           <button className={'mtab'+(assign==='others'?' on':'')} onClick={()=>setAssign('others')}>👥 Others</button>
           <button className={'mtab'+(assign==='self'?' on':'')} onClick={()=>setAssign('self')}>🙋 Myself</button>
+        </div>:null}
+        {isDir?<div className="modetabs" style={{marginBottom:9}}>
+          <button className={'mtab'+(assign==='others'&&deptTab==='within'?' on':'')} onClick={()=>{setAssign('others');if(deptTab!=='within'){setDeptTab('within');setDept('all');setCur(c=>c?{...c,whos:[],whoWhy:''}:c);}}}>🏢 Within</button>
+          <button className={'mtab'+(assign==='self'?' on':'')} onClick={()=>setAssign('self')}>🙋 Self</button>
+          <button className={'mtab'+(assign==='others'&&deptTab==='other'?' on':'')} onClick={()=>{setAssign('others');if(deptTab!=='other'){setDeptTab('other');setDept('all');setCur(c=>c?{...c,whos:[],whoWhy:'',whoSugg:false}:c);}}}>🌐 Other dept</button>
         </div>:null}
         {assign==='self'?<span>You ({ctx.r.self})</span>:<>
           <span className="chipbtn" onClick={()=>setPick(pick==='who'?null:'who')}>{cur.whos.join(' + ')}</span>
@@ -1777,6 +1879,7 @@ function TaskSheet({ctx,close}){
                 {depts.map(d=><option key={d} value={d}>{d==='all'?'All departments':d}</option>)}</select>
               <input className="empsearch" style={{marginBottom:0}} placeholder="🔍 Name, dept or skill…" value={q} onChange={e=>setQ(e.target.value)}/>
             </div>
+            {isDir&&deptTab==='other'?<div className="reason" style={{marginBottom:6}}>🌐 Any department — everyone except Administrators &amp; Management</div>:null}
             {canMulti?<div className="reason" style={{marginBottom:6}}>Tap more than one to assign jointly</div>:null}
             <div className="empcol">
               {emp.length?emp.map(m=><button key={m.n} className={'pickchip'+(cur.whos.includes(m.n)?' cur':'')} onClick={()=>toggleWho(m.n)}>
@@ -1844,8 +1947,13 @@ function TaskSheet({ctx,close}){
 }
 
 function IssueSheet({ctx,close}){
+  const [cat,setCat]=useState(null); // routing_rules maintenance category id; null → first (Building)
   const [txt,setTxt]=useState('');
   const [files,setFiles]=useState([]);
+  const cats=maintCats();
+  const selCat=catById(cat)||cats[0]||null;
+  const issueRec=selCat&&selCat.staff_id?ALL_PEOPLE.find(p=>p.id===selCat.staff_id):null;
+  const headFirst=issueRec?issueRec.n.split(' ')[0]:(selCat?selCat.label:'the recipient');
   const pickF=async e=>{
     const picked=[...e.target.files];
     if(!picked.length)return;
@@ -1855,14 +1963,26 @@ function IssueSheet({ctx,close}){
   };
   const send=()=>{
     if(!txt.trim()){ctx.say('Describe the issue first');return;}
-    const nq={t:txt.trim().charAt(0).toUpperCase()+txt.trim().slice(1),from:ctx.r.name,av:ctx.r.av,files:files.length?files.slice():undefined};
+    const nq={t:txt.trim().charAt(0).toUpperCase()+txt.trim().slice(1),from:ctx.r.name,av:ctx.r.av,
+      routing_rule_id:selCat?selCat.id:null,target_staff_id:issueRec?issueRec.id:null,files:files.length?files.slice():undefined};
     pendingIssues.unshift(nq);
     close();ctx.R();
     saveRequestRow(nq,'issue').catch(console.error);
-    ctx.say('Sent to the maintenance head 🔧');};
+    ctx.say('Report sent to '+(issueRec?issueRec.n.split(' ')[0]+(selCat?' ('+selCat.label+')':''):'the recipient')+' 🔧');};
   return <>
-    <h3>Report a maintenance issue</h3>
-    <div className="sub">Say what's broken — it goes to the maintenance head, who assigns the right person.</div>
+    <h3>Report for repair/maintenance</h3>
+    <div className="sub">Pick what kind of issue it is — it goes straight to the configured recipient, who assigns the right person.</div>
+    <div style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'.9px',color:'var(--muted)',margin:'4px 2px 8px'}}>What kind of issue?</div>
+    <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap'}}>
+      {cats.map(c=>{const h=c.staff_id?ALL_PEOPLE.find(p=>p.id===c.staff_id):null,on=selCat&&selCat.id===c.id;
+        return <button key={c.id} type="button" onClick={()=>setCat(c.id)}
+          style={{flex:'1 1 44%',minWidth:130,textAlign:'left',border:'1.5px solid '+(on?'var(--accent)':'var(--line)'),
+            background:on?'var(--accent-soft)':'#fff',borderRadius:12,padding:'11px 12px',cursor:'pointer',color:'inherit'}}>
+          <div style={{fontSize:22,lineHeight:1}}>{c.icon}</div>
+          <div style={{fontWeight:800,fontSize:13.5,marginTop:6}}>{c.label}</div>
+          <div style={{fontSize:11,color:'var(--muted)',marginTop:5,lineHeight:1.4}}>Goes to {h?<b style={{color:'var(--accent-ink)'}}>{h.n} · {h.role}, {h.department}</b>:<b>the configured recipient</b>}{!h?<><br/>No recipient set — admins will handle it</>:null}</div>
+        </button>;})}
+    </div>
     <textarea className="typein" rows={3} autoFocus value={txt} onChange={e=>setTxt(e.target.value)}
       placeholder="e.g. The ceiling fan in Class 7B is making a loud noise"/>
     <div className="attachrow">
@@ -1874,7 +1994,7 @@ function IssueSheet({ctx,close}){
       setFiles(files.filter((_,i)=>i!==ix));
       removeAttachment(f.path).catch(console.error);
     }}/>)}</div>:null}
-    <button className="send" onClick={send}>Send to maintenance head ✓</button>
+    <button className="send" onClick={send}>Send to {headFirst} ✓</button>
   </>;
 }
 /* Small self-contained donut renderer, same math as the console app's donutSVG (which doesn't

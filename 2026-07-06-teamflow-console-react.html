@@ -502,6 +502,7 @@ const TIER_LABEL={'Administrator':'Admin','Management':'Management','Director':'
 let STAFF=[];
 let tasks=[];
 let ORG_NAME='';
+let ROUTING_RULES=[]; // routing_rules rows (admin-configured recipients) — read via shared.js helpers
 let requests=[];
 let notifs=[];
 let lastCronRun=null; // most recent cron_runs row — "is check-due-tasks actually running?" (RLS: admin/mgmt only, empty for everyone else)
@@ -544,13 +545,15 @@ function rowToTask(row,assignRows,logRows){
 let byId2Name=()=>"";
 function rowToRequest(row){
   return {id:row.id,kind:row.kind,t:row.title,from:row.from_short,date:row.created_at.slice(0,10),
+    routing_rule_id:row.routing_rule_id||null,target_staff_id:row.target_staff_id||null,stage:row.stage||null,
     note:row.note||"",files:row.files&&row.files.length?row.files:undefined};
 }
+const rowToRule=r=>({id:r.id,kind:r.kind,label:r.label,icon:r.icon||'',staff_id:r.target_staff_id||null,sort_order:r.sort_order||0,created_at:r.created_at});
 async function loadAll(){
   /* cron_runs/admin_activity_log are both RLS-gated to admin/mgmt (see their migrations) — for
      everyone else these just come back empty, same as any other out-of-scope query in this app. */
   const clSince=iso(new Date(Date.now()-90*864e5)); // last 90 days of completion/absence history
-  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},notifRows,{data:cronRows},{data:activityRows},{data:orgRow},{data:clItemRows},{data:clDoneRows},{data:clAbsRows}]=await Promise.all([
+  const [{data:staffRows},{data:taskRows},{data:assignRows},{data:logRows},{data:reqRows},notifRows,{data:cronRows},{data:activityRows},{data:orgRow},{data:ruleRows},{data:clItemRows},{data:clDoneRows},{data:clAbsRows}]=await Promise.all([
     sb.from('staff').select('*'),
     sb.from('tasks').select('*'),
     sb.from('task_assignees').select('*'),
@@ -560,11 +563,13 @@ async function loadAll(){
     sb.from('cron_runs').select('*').order('ran_at',{ascending:false}).limit(1),
     sb.from('admin_activity_log').select('*').order('created_at',{ascending:false}).limit(30),
     sb.from('org_settings').select('name').eq('id',true).maybeSingle(),
+    sb.from('routing_rules').select('*'),
     sb.from('checklist_items').select('*').eq('archived',false),
     sb.from('checklist_completions').select('*').gte('occ_date',clSince),
     sb.from('checklist_absences').select('*').gte('absent_date',clSince)
   ]);
   if(orgRow&&orgRow.name)ORG_NAME=orgRow.name;
+  ROUTING_RULES.length=0;ROUTING_RULES.push(...(ruleRows||[]).map(rowToRule));
   STAFF.length=0;STAFF.push(...rowsToStaff(staffRows||[]));
   const byId=Object.fromEntries(STAFF.map(p=>[p.id,p]));
   byId2Name=id=>byId[id]?byId[id].n:"";
@@ -625,10 +630,21 @@ async function logTask(t,authorName,text){
 async function saveRequest(r){
   const from=byShort(r.from);
   const {data}=await sb.from('requests').insert({kind:r.kind,title:r.t,
-    from_staff_id:from?from.id:null,note:r.note||'',files:r.files||[]}).select().single();
+    from_staff_id:from?from.id:null,routing_rule_id:r.routing_rule_id||null,
+    target_staff_id:r.target_staff_id||null,stage:r.stage||null,note:r.note||'',files:r.files||[]}).select().single();
   r.id=data.id;
 }
+/* persist a routing/stage change on an existing request (supply approval, or re-resolve) — patches
+   only the routing columns, leaving title/note/files untouched. */
+async function updateRequestRow(r){if(r.id)await sb.from('requests').update({stage:r.stage||null,target_staff_id:r.target_staff_id||null}).eq('id',r.id);}
 async function deleteRequestRow(r){if(r.id)await sb.from('requests').delete().eq('id',r.id);}
+/* routing_rules writes — Administrator-only, enforced by RLS. Reassign a recipient, add/remove a
+   maintenance category, rename or reorder. */
+async function saveRuleRecipient(id,staffId){await sb.from('routing_rules').update({target_staff_id:staffId||null}).eq('id',id);}
+async function saveRuleLabel(id,label){await sb.from('routing_rules').update({label}).eq('id',id);}
+async function addMaintRule(label,icon){const {data}=await sb.from('routing_rules').insert({kind:'maintenance',label,icon:icon||'🔧',sort_order:maintCats().length}).select().single();return data;}
+async function saveRuleOrder(id,order){await sb.from('routing_rules').update({sort_order:order}).eq('id',id);}
+async function deleteRule(id){await sb.from('routing_rules').delete().eq('id',id);}
 /* deletes a staff row AND its linked auth account together via the delete-staff-account edge
    function — a plain client-side staff delete leaves the auth login orphaned, which can later
    collide with a new hire's auto-generated {username}@teamflow.demo address */
@@ -776,10 +792,17 @@ function suggestFixer(text){const t=(text||'').toLowerCase();
    orgDepts()'s own "Sr. Manager rows = department heads" convention below; falls back to whoever
    issues currently get suggested to (suggestFixer's lightest-workload-in-Maintenance pool) if
    Maintenance has no Sr. Manager yet, so this never silently resolves to nobody. */
-function maintHead(){
-  return STAFF.find(p=>p.role==='Manager'&&p.dept==='Maintenance')
-    ||STAFF.filter(p=>p.dept==='Maintenance').sort((a,b)=>workloadMap()[a.s]-workloadMap()[b.s])[0]||null;
+/* the Manager who heads department `dept` (role='Manager' AND that department). Generalised from the
+   old maintHead() so repair/maintenance reports can route by category to the right head. Only the
+   Maintenance branch keeps the lightest-workload fallback the original had (so the maintenance head
+   is never silently nobody, and legacy issues always land somewhere); other departments simply
+   return null when they have no Manager head yet — callers then fall back to admin/mgmt visibility. */
+function deptHead(dept){
+  return STAFF.find(p=>p.role==='Manager'&&p.dept===dept)
+    ||(dept==='Maintenance'?STAFF.filter(p=>p.dept==='Maintenance').sort((a,b)=>workloadMap()[a.s]-workloadMap()[b.s])[0]:null)
+    ||null;
 }
+function maintHead(){return deptHead('Maintenance');}
 function deliveryStats(list){
   return [
     {l:'Completed on time',v:list.filter(t=>t.status==='done'&&(!t.doneOn||t.doneOn<=t.date)).length,c:'#1a7a48'},
@@ -957,6 +980,7 @@ function App(){
       .on('postgres_changes',{event:'*',schema:'public',table:'task_assignees'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'task_log'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'requests'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'routing_rules'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'notices'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'task_notifications'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'task_activity_notifications'},refetch)
@@ -1022,15 +1046,42 @@ function App(){
   const INSTRUCT_RANK={Administrator:0,Director:1,Management:2};
   const instructors=STAFF.filter(p=>p.role in INSTRUCT_RANK&&p.n!==viewer.n)
     .sort((a,b)=>INSTRUCT_RANK[a.role]-INSTRUCT_RANK[b.role]||a.n.localeCompare(b.n));
-  const canApprove=from=>{const p=byShort(from);return role==='admin'||role==='mgmt'||!!(p&&p.boss===viewer.n);};
-  const canAssignIssue=role==='admin'||role==='mgmt'||!!(maintHead()&&viewer.n===maintHead().n);
+  /* Completion/extension approval follows whoever ISSUED the task (its instructedBy), plus
+     admin/mgmt can always override. Legacy tasks with no instructedBy fall back to the old
+     local-manager rule so nothing already in flight breaks. `t` is optional: purchase-request
+     approvals (no task) keep the manager rule via the fallback branch. */
+  const canApprove=(from,t)=>{const p=byShort(from);
+    if(role==='admin'||role==='mgmt')return true;
+    if(t&&t.instructedBy)return viewer.n===t.instructedBy;
+    return !!(p&&p.boss===viewer.n);};
+  /* Recipient-based issue routing (admin-configured, replaces the old dept-head heuristic): the
+     configured recipient of a report sees & assigns EVERY report routed to them, whoever filed it —
+     even a Director above them (fixes the reported bug where a report filed from above never reached
+     the head). issueRecipientId (shared.js) live-resolves the recipient from the report's category,
+     so re-configuring re-routes; legacy reports with no category/recipient default to the first
+     ('Building') maintenance recipient. */
+  const viewerIsRecipient=r=>{const rid=issueRecipientId(r);return !!(rid&&rid===viewer.id);};
+  const canAssignIssue=r=>role==='admin'||role==='mgmt'||viewerIsRecipient(r);
+  /* Supply requests are two-stage. supplyApproverId = the Sr. Manager of the REQUESTER's department
+     (role='Manager' AND same dept); if the requester IS that Sr. Manager (or the dept has none),
+     escalate to the requester's boss so it never dead-ends. viewerSeesReq decides whose queue a
+     request/issue belongs in: admin/mgmt see all; a supply request sits with its approver until
+     approved, then with the configured supply recipient (target_staff_id) to fulfil. */
+  const supplyApproverId=r=>{const req=byShort(r.from);if(!req)return null;
+    const mgr=STAFF.find(p=>p.role==='Manager'&&p.dept===req.dept);
+    if(mgr&&mgr.s!==req.s)return mgr.id;
+    const boss=req.boss?byName(req.boss):null;return boss?boss.id:null;};
+  const viewerSeesReq=r=>{
+    if(role==='admin'||role==='mgmt')return true;
+    if(r.kind==='issue')return viewerIsRecipient(r);
+    return r.stage==='approved'?r.target_staff_id===viewer.id:supplyApproverId(r)===viewer.id;};
 
   const mine=tasks.filter(t=>inScope(t,shorts));
   const open=mine.filter(t=>t.status!=='done').length;
   const over=mine.filter(isOverdue).length;
   const today=mine.filter(isToday).length;
   const done=mine.filter(t=>t.status==='done').length;
-  const qReqs=requests.map((r,i)=>({r,i})).filter(o=>shorts.includes(o.r.from));
+  const qReqs=requests.map((r,i)=>({r,i})).filter(o=>viewerSeesReq(o.r));
   const qExts=tasks.map((t,i)=>({t,i})).filter(o=>o.t.extReq&&inScope(o.t,shorts));
   const qCompletions=tasks.map((t,i)=>({t,i})).filter(o=>o.t.completionPending&&inScope(o.t,shorts));
   const reqN=qReqs.filter(o=>o.r.kind==='request').length;
@@ -1051,20 +1102,33 @@ function App(){
 
   /* actions */
   const remindPerson=s=>{const p=byShort(s);say('Reminder sent to '+(p?p.n.split(' ')[0]:s));};
+  /* Stage 1 of the supply two-stage: the requester's Sr. Manager approves. This no longer creates a
+     procurement task or deletes the request — it moves the request to stage='approved' and stamps the
+     configured supply recipient (routing_rules kind='supply') onto it, so the request now surfaces on
+     THAT person's dashboard to fulfil (stage 2 = fulfilReq). */
   const approveReq=i=>{if(previewing){say("You're previewing — switch back to approve for real");return;}
     const r=requests[i];if(!r||r.kind!=='request')return;
-    if(!canApprove(r.from)){say('Only the department boss can approve this');return;}
-    const s=suggestWho('purchase',scope);const d=new Date(TODAY);d.setDate(d.getDate()+4);
-    const nt={t:r.t,who:s?s.s:r.from,type:'purchase',bucket:'accounts',prio:'med',date:iso(d),status:'open',
-      note:'From '+(byShort(r.from)||{}).n+(r.note?' — “'+r.note+'”':''),origin:'request'};
+    if(!(role==='admin'||role==='mgmt'||supplyApproverId(r)===viewer.id)){say('Only the requester’s Sr. Manager can approve this');return;}
+    const rid=supplyRecipientId();const rec=rid?byId(rid):null;
+    r.stage='approved';r.target_staff_id=rid||null;R();
+    updateRequestRow(r).catch(console.error);
+    say('Request approved · routed to '+(rec?rec.n:'the supply recipient')+' to fulfil');};
+  /* Stage 2: the configured supply recipient fulfils — turns it into a procurement task on their own
+     list and clears the request. */
+  const fulfilReq=i=>{if(previewing){say("You're previewing — switch back to fulfil for real");return;}
+    const r=requests[i];if(!r||r.kind!=='request')return;
+    const rec=r.target_staff_id?byId(r.target_staff_id):null;
+    const d=new Date(TODAY);d.setDate(d.getDate()+4);
+    const nt={t:r.t,who:rec?rec.s:r.from,type:'purchase',bucket:'accounts',prio:'med',date:iso(d),status:'open',
+      note:'Approved supply request from '+(byShort(r.from)||{}).n+(r.note?' — “'+r.note+'”':''),origin:'request'};
     tasks.unshift(nt);
     requests.splice(i,1);R();
     saveTask(nt).catch(console.error);deleteRequestRow(r).catch(console.error);
-    say('Request approved · '+(s?byShort(s.s).n:'')+' (procurement, Accounts department) will procure');};
+    say('Marked for procurement · added to '+(rec?rec.n.split(' ')[0]+'’s':'your')+' task list');};
   const declineReq=i=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
     const r=requests[i];if(!r)return;requests.splice(i,1);R();
     deleteRequestRow(r).catch(console.error);
-    say((r.kind==='issue'?'Issue':'Request')+' declined — '+(byShort(r.from)||{n:r.from}).n.split(' ')[0]+' will be notified');};
+    say((r.kind==='issue'?'Report':'Request')+' declined — '+(byShort(r.from)||{n:r.from}).n.split(' ')[0]+' will be notified');};
   const assignIssue=(i,who)=>{if(previewing){say("You're previewing — switch back to assign for real");return;}
     const r=requests[i];if(!r||!who)return;
     const d=new Date(TODAY);d.setDate(d.getDate()+1);
@@ -1073,24 +1137,24 @@ function App(){
     tasks.unshift(nt);
     requests.splice(i,1);R();
     saveTask(nt).catch(console.error);deleteRequestRow(r).catch(console.error);
-    say('Issue assigned to '+byShort(who).n+' · notified in TeamFlow');};
+    say('Report assigned to '+byShort(who).n+' · notified in TeamFlow');};
   const approveExt=i=>{if(previewing){say("You're previewing — switch back to approve for real");return;}
     const t=tasks[i];if(!t||!t.extReq)return;
-    if(!canApprove(t.who)){say('Only the department boss can approve this');return;}
+    if(!canApprove(t.who,t)){say('Only the person who assigned this can approve it');return;}
     t.date=t.extReq.newDate;delete t.extReq;R();
     saveTask(t).catch(console.error);
     notifyEvent(t.id,viewer.id,'approved the extension — new due '+fmtDate(t.date),concernedFor(t,viewer.s));
     say('Extension approved — new due date '+fmtDate(t.date)+' · assignee notified');};
   const rejectExt=i=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
     const t=tasks[i];if(!t||!t.extReq)return;
-    if(!canApprove(t.who)){say('Only the department boss can decide this');return;}
+    if(!canApprove(t.who,t)){say('Only the person who assigned this can decide it');return;}
     delete t.extReq;R();
     saveTask(t).catch(console.error);
     notifyEvent(t.id,viewer.id,'rejected the extension request',concernedFor(t,viewer.s));
     say('Extension rejected — original due date stands');};
   const approveCompletion=i=>{if(previewing){say("You're previewing — switch back to approve for real");return;}
     const t=tasks[i];if(!t||!t.completionPending)return;
-    if(!canApprove(t.who)){say('Only the department boss can approve this');return;}
+    if(!canApprove(t.who,t)){say('Only the person who assigned this can approve it');return;}
     delete t.completionPending;
     const nd=completeTask(t);
     persistComplete(t,nd);R();
@@ -1098,7 +1162,7 @@ function App(){
     say(nd?'Completion approved · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(nd):'Completion approved — task closed');};
   const rejectCompletion=i=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
     const t=tasks[i];if(!t||!t.completionPending)return;
-    if(!canApprove(t.who)){say('Only the department boss can decide this');return;}
+    if(!canApprove(t.who,t)){say('Only the person who assigned this can decide it');return;}
     delete t.completionPending;t.doneBy=[];R();
     saveTask(t).catch(console.error);
     notifyEvent(t.id,viewer.id,'rejected completion — sent back for rework',concernedFor(t,viewer.s));
@@ -1144,8 +1208,8 @@ function App(){
     setTimeout(()=>{pr.style.display='none';document.title=ot;},300);
   }
 
-  const ctx={role,view,setView,say,R,scope,shorts,viewer,treeRoot,mine,canApprove,canAssignIssue,bossChain,instructors,previewing,syncTick,
-    remindPerson,approveReq,declineReq,assignIssue,approveExt,rejectExt,approveCompletion,rejectCompletion,
+  const ctx={role,view,setView,say,R,scope,shorts,viewer,treeRoot,mine,canApprove,canAssignIssue,viewerIsRecipient,supplyApproverId,bossChain,instructors,previewing,syncTick,
+    remindPerson,approveReq,fulfilReq,declineReq,assignIssue,approveExt,rejectExt,approveCompletion,rejectCompletion,
     setDrawerIdx,setModal,setDailyReport,setResetTarget,setPersonTasks,exportCSV,printReport,qReqs,qExts,qCompletions,attentionList,
     notifs,openNotif,markAllNotifsSeen,lastCronRun,activityLog};
 
@@ -1171,6 +1235,10 @@ function App(){
       {[['dashboard','grid','Dashboard','1'],['tasks','checkc','Tasks','2'],['checklists','checkc','Checklists','3'],['calendar','cal','Calendar','4'],['people','users','People & roles','5'],['reports','chart','Reports','6']].map(([v,ic,l,k])=>
         <button key={v} className={'navitem'+(view===v?' on':'')} onClick={()=>setView(v)}>
           <I n={ic}/><span className="lb">{l}</span><span className="kbd">{k}</span></button>)}
+      {/* Settings is admin-only (org-management surface). Keyed off the real signed-in role, not the
+          Preview-As role, so previewing as a non-admin still keeps the item available to switch back. */}
+      {myRoleKey==='admin'?<button className={'navitem'+(view==='settings'?' on':'')} onClick={()=>setView('settings')}>
+        <span style={{fontSize:16,width:18,textAlign:'center'}}>⚙️</span><span className="lb">Settings</span><span className="kbd">·</span></button>:null}
       <div className="side-foot">
         {myRoleKey==='admin'?<>
           <div className="side-lab">Preview as</div>
@@ -1214,6 +1282,7 @@ function App(){
       {view==='calendar'&&<CalendarView ctx={ctx}/>}
       {view==='people'&&<PeopleView ctx={ctx}/>}
       {view==='reports'&&<ReportsView ctx={ctx}/>}
+      {view==='settings'&&<SettingsView ctx={ctx}/>}
     </div>
     {drawerIdx>=0&&<><div className="scrim" onClick={()=>setDrawerIdx(-1)}/><Drawer ctx={ctx} idx={drawerIdx}/></>}
     {modal&&<QuickCapture ctx={ctx} close={()=>setModal(false)}/>}
@@ -1473,42 +1542,50 @@ function Dashboard({ctx,open,over,today,done}){
 }
 
 function QueuePanel({ctx}){
-  const head=maintHead();
   const [sel,setSel]=useState({});
   const total=ctx.qReqs.length+ctx.qExts.length+ctx.qCompletions.length;
   return <div className="panel" id="dashReq">
     <div className="h-row"><h3><I n="tool" c="var(--amber)"/>Incoming reports & requests</h3><span className="tag amber">{total?total+' waiting':'clear'}</span></div>
     {total?<>
-      {ctx.qCompletions.map(o=>{const t=o.t,p=byShort(t.who),can=ctx.canApprove(t.who);
+      {ctx.qCompletions.map(o=>{const t=o.t,p=byShort(t.who),can=ctx.canApprove(t.who,t),
+        approver=t.instructedBy?t.instructedBy.split(' ')[0]+' (assigned by)':(p&&p.boss?p.boss.split(' ')[0]+' (dept boss)':'—');
         return <div className="attn" key={'c'+o.i}>
           <div className="ring" style={{background:'var(--green)'}}><I n="check" c="#fff"/></div>
           <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={()=>ctx.setDrawerIdx(o.i)} title="Open task to review before deciding">
             <div className="nm">{t.t} <span className="tag green">Completion</span></div>
-            <div className="rs">{p?p.n:t.who} marked this done{t.instructedBy?' · assigned by '+t.instructedBy:''} · approver: {p&&p.boss?p.boss.split(' ')[0]+' (dept boss)':'—'}</div></div>
+            <div className="rs">{p?p.n:t.who} marked this done{t.instructedBy?' · assigned by '+t.instructedBy:''} · approver: {approver}</div></div>
           <div className="act">{can?<><button className="linkbtn" onClick={()=>ctx.approveCompletion(o.i)}>Approve</button>
             <button className="linkbtn mut" onClick={()=>ctx.rejectCompletion(o.i)}>Reject</button></>
-            :<span className="rs" style={{whiteSpace:'nowrap'}}>Waiting for {p&&p.boss?p.boss.split(' ')[0]:'manager'}</span>}</div>
+            :<span className="rs" style={{whiteSpace:'nowrap'}}>Waiting for {t.instructedBy?t.instructedBy.split(' ')[0]:(p&&p.boss?p.boss.split(' ')[0]:'manager')}</span>}</div>
         </div>;})}
-      {ctx.qExts.map(o=>{const t=o.t,p=byShort(t.who),can=ctx.canApprove(t.who);
+      {ctx.qExts.map(o=>{const t=o.t,p=byShort(t.who),can=ctx.canApprove(t.who,t);
         return <div className="attn" key={'e'+o.i}>
           <div className="ring" style={{background:'var(--blue)'}}><I n="clock" c="#fff"/></div>
           <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={()=>ctx.setDrawerIdx(o.i)} title="Open task to review before deciding">
             <div className="nm">{t.t} <span className="tag blue">Extension</span></div>
-            <div className="rs">{p?p.n:t.who} asks {fmtDate(t.date)} → <b>{fmtDate(t.extReq.newDate)}</b>{t.extReq.reason?' · “'+t.extReq.reason+'”':''} · approver: {p&&p.boss?p.boss.split(' ')[0]+' (dept boss)':'—'}</div></div>
+            <div className="rs">{p?p.n:t.who} asks {fmtDate(t.date)} → <b>{fmtDate(t.extReq.newDate)}</b>{t.extReq.reason?' · “'+t.extReq.reason+'”':''} · approver: {t.instructedBy?t.instructedBy.split(' ')[0]+' (assigned by)':(p&&p.boss?p.boss.split(' ')[0]+' (dept boss)':'—')}</div></div>
           <div className="act">{can?<><button className="linkbtn" onClick={()=>ctx.approveExt(o.i)}>Approve</button>
             <button className="linkbtn mut" onClick={()=>ctx.rejectExt(o.i)}>Reject</button></>
-            :<span className="rs" style={{whiteSpace:'nowrap'}}>Waiting for {p&&p.boss?p.boss.split(' ')[0]:'manager'}</span>}</div>
+            :<span className="rs" style={{whiteSpace:'nowrap'}}>Waiting for {t.instructedBy?t.instructedBy.split(' ')[0]:(p&&p.boss?p.boss.split(' ')[0]:'manager')}</span>}</div>
         </div>;})}
       {ctx.qReqs.map(o=>{const r=o.r,p=byShort(r.from);
         if(r.kind==='issue'){
-          const can=ctx.canAssignIssue,sug=suggestFixer(r.t);
-          const pool=STAFF.filter(x=>x.dept==='Maintenance');
+          // Recipient-based routing: the configured recipient of this report (its category's current
+          // recipient, live-resolved) receives it and picks a fixer. The fixer pool is the recipient's
+          // own department (they staff the repair); fall back to Maintenance if unresolved.
+          const rec=byId(issueRecipientId(r));
+          const poolDept=rec?rec.dept:'Maintenance';
+          const can=ctx.canAssignIssue(r);
+          const pool=STAFF.filter(x=>x.dept===poolDept);
+          const rawSug=poolDept==='Maintenance'?suggestFixer(r.t):null;
+          const sug=(rawSug&&pool.some(x=>x.s===rawSug.s))?rawSug
+            :(pool.length?{s:pool.slice().sort((a,b)=>workloadMap()[a.s]-workloadMap()[b.s])[0].s,why:'lightest workload'}:null);
           const cur=sel[o.i]||(sug?sug.s:pool[0]&&pool[0].s);
           return <div className="attn" key={'r'+o.i}>
             <div className="ring" style={{background:'var(--amber)'}}><I n="tool" c="#fff"/></div>
             <div style={{flex:1,minWidth:0}}>
-              <div className="nm">{r.t} <span className="tag amber">Issue</span></div>
-              <div className="rs">From {p?p.n:r.from} · {fmtDate(r.date)}{r.note?' · “'+r.note+'”':''} · direct to {head?head.n.split(' ')[0]:'—'} (maintenance head)</div>
+              <div className="nm">{r.t} <span className="tag amber">Report</span></div>
+              <div className="rs">From {p?p.n:r.from} · {fmtDate(r.date)}{r.note?' · “'+r.note+'”':''} · routed to {rec?rec.n.split(' ')[0]:'—'}{rec?' ('+rec.dept+')':''}</div>
               {r.files&&r.files.length?<div className="filelist">{r.files.map((x,ix)=><FileChip key={ix} x={x}/>)}</div>:null}
               {can?<>
                 <div className="rs" style={{marginTop:6,color:'var(--accent-ink)'}}>✦ Suggested: <b>{sug?byShort(sug.s).n:'—'}</b>{sug?' — '+sug.why:''}</div>
@@ -1518,20 +1595,116 @@ function QueuePanel({ctx}){
                   </select>
                   <button className="linkbtn" onClick={()=>ctx.assignIssue(o.i,cur)}>Assign →</button>
                 </div></>
-                :<div className="rs" style={{marginTop:4}}>Waiting for {head?head.n.split(' ')[0]:'head'} to assign</div>}
+                :<div className="rs" style={{marginTop:4}}>Waiting for {rec?rec.n.split(' ')[0]:'the recipient'} to assign</div>}
             </div>
           </div>;
         }
+        // Supply request — two-stage. Stage 1 (pending): the requester's Sr. Manager approves/declines.
+        // Stage 2 (approved): the configured supply recipient fulfils.
+        const approver=byId(ctx.supplyApproverId(r));
+        if(r.stage==='approved'){
+          const rec=r.target_staff_id?byId(r.target_staff_id):null;
+          const canFulfil=ctx.role==='admin'||ctx.role==='mgmt'||ctx.viewer.id===r.target_staff_id;
+          return <div className="attn" key={'r'+o.i}>
+            <div className="ring" style={{background:'var(--accent)'}}><I n="box" c="#fff"/></div>
+            <div style={{flex:1,minWidth:0}}>
+              <div className="nm">{r.t} <span className="tag teal">Approved supply</span></div>
+              <div className="rs">From {p?p.n:r.from} · {fmtDate(r.date)}{r.note?' · “'+r.note+'”':''} · to fulfil: {rec?rec.n.split(' ')[0]:'—'}</div></div>
+            <div className="act">{canFulfil?<><button className="linkbtn" onClick={()=>ctx.fulfilReq(o.i)}>Mark for procurement</button>
+              <button className="linkbtn mut" onClick={()=>ctx.declineReq(o.i)}>Decline</button></>
+              :<span className="rs" style={{whiteSpace:'nowrap'}}>Waiting for {rec?rec.n.split(' ')[0]:'recipient'}</span>}</div>
+          </div>;
+        }
+        const canApproveReq=ctx.role==='admin'||ctx.role==='mgmt'||(approver&&ctx.viewer.id===approver.id);
         return <div className="attn" key={'r'+o.i}>
-          <div className="ring" style={{background:'var(--accent)'}}><I n="box" c="#fff"/></div>
+          <div className="ring" style={{background:'var(--amber)'}}><I n="box" c="#fff"/></div>
           <div style={{flex:1,minWidth:0}}>
-            <div className="nm">{r.t} <span className="tag teal">Request</span></div>
-            <div className="rs">From {p?p.n:r.from} · {fmtDate(r.date)}{r.note?' · “'+r.note+'”':''} · approver: {p&&p.boss?p.boss.split(' ')[0]+' (dept boss)':'—'}</div></div>
-          <div className="act">{ctx.canApprove(r.from)?<><button className="linkbtn" onClick={()=>ctx.approveReq(o.i)}>Approve</button>
+            <div className="nm">{r.t} <span className="tag teal">Supply · awaiting approval</span></div>
+            <div className="rs">From {p?p.n:r.from} · {fmtDate(r.date)}{r.note?' · “'+r.note+'”':''} · approver: {approver?approver.n.split(' ')[0]+' (Sr. Manager)':'—'}</div></div>
+          <div className="act">{canApproveReq?<><button className="linkbtn" onClick={()=>ctx.approveReq(o.i)}>Approve</button>
             <button className="linkbtn mut" onClick={()=>ctx.declineReq(o.i)}>Decline</button></>
-            :<span className="rs" style={{whiteSpace:'nowrap'}}>Waiting for {p&&p.boss?p.boss.split(' ')[0]:'manager'}</span>}</div>
+            :<span className="rs" style={{whiteSpace:'nowrap'}}>Waiting for {approver?approver.n.split(' ')[0]:'Sr. Manager'}</span>}</div>
         </div>;})}
-    </>:<Empty t="Queue is clear" s="Supply requests wait here for approval; maintenance issues go straight to the maintenance head; extension and completion requests go to the dept boss."/>}
+    </>:<Empty t="Queue is clear" s="Supply requests wait here for the requester's Sr. Manager to approve, then route to the configured recipient; maintenance reports go straight to their configured recipient; extensions and completions go to whoever assigned the task."/>}
+  </div>;
+}
+
+/* ============ Admin Settings — report & request routing ============ */
+/* Admin-only. Lets the Administrator map each maintenance category and the single supply recipient to
+   ANY staff member. Edits mutate the ROUTING_RULES global optimistically (so the UI reflects the change
+   immediately) and persist to routing_rules; RLS enforces Administrator-only writes server-side. */
+function StaffSelect({value,onChange}){
+  const people=STAFF.slice().sort((a,b)=>a.n.localeCompare(b.n));
+  return <select className="fsel" style={{minWidth:210,fontWeight:700}} value={value||''} onChange={e=>onChange(e.target.value||null)}>
+    <option value="">— no recipient —</option>
+    {people.map(p=><option key={p.id} value={p.id}>{p.n} · {p.role}, {p.dept}</option>)}
+  </select>;
+}
+function RouteRow({rule,ctx,onRecipient,onRename,onRemove,onMove,canMove}){
+  const [editing,setEditing]=useState(false);const [draft,setDraft]=useState(rule.label);
+  return <div style={{display:'flex',alignItems:'center',gap:11,padding:12,border:'1px solid var(--line)',borderRadius:11,marginBottom:10,background:'#fff'}}>
+    <div style={{width:36,height:36,borderRadius:10,background:'#f6f5f0',border:'1px solid var(--line)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flex:'0 0 auto'}}>{rule.icon||'🔧'}</div>
+    <div style={{minWidth:0,flex:'0 1 auto'}}>
+      {editing?<input className="fsel" style={{fontWeight:700,padding:'5px 8px'}} value={draft} autoFocus
+        onChange={e=>setDraft(e.target.value)}
+        onKeyDown={e=>{if(e.key==='Enter'){onRename(draft.trim()||rule.label);setEditing(false);}if(e.key==='Escape'){setDraft(rule.label);setEditing(false);}}}
+        onBlur={()=>{onRename(draft.trim()||rule.label);setEditing(false);}}/>
+        :<div style={{fontWeight:700,fontSize:13.5}}>{rule.label} <span role="button" title="Rename" onClick={()=>{setDraft(rule.label);setEditing(true);}} style={{cursor:'pointer',color:'var(--muted)',fontSize:12}}>✎</span></div>}
+      <div style={{fontSize:11,color:'var(--muted)',marginTop:1}}>Reports of this type route here</div>
+    </div>
+    <span style={{color:'var(--muted)',fontWeight:800,margin:'0 2px'}}>→</span>
+    <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>
+      <StaffSelect value={rule.staff_id} onChange={id=>onRecipient(id)}/>
+      {canMove?<span style={{display:'flex',flexDirection:'column',lineHeight:.8}}>
+        <button className="linkbtn" style={{padding:0,fontSize:11}} title="Move up" onClick={()=>onMove(-1)}>▲</button>
+        <button className="linkbtn" style={{padding:0,fontSize:11}} title="Move down" onClick={()=>onMove(1)}>▼</button>
+      </span>:null}
+      <button className="linkbtn mut" title="Remove" onClick={onRemove} style={{fontSize:15}}>✕</button>
+    </div>
+  </div>;
+}
+function SettingsView({ctx}){
+  const [,setTick]=useState(0);const R=()=>{setTick(t=>t+1);ctx.R();};
+  const [newLabel,setNewLabel]=useState('');const [newIcon,setNewIcon]=useState('');
+  const cats=maintCats();const supply=supplyRule();
+  const setRecipient=(rule,staffId)=>{rule.staff_id=staffId;R();saveRuleRecipient(rule.id,staffId).catch(console.error);};
+  const rename=(rule,label)=>{if(label===rule.label)return;rule.label=label;R();saveRuleLabel(rule.id,label).catch(console.error);};
+  const remove=rule=>{const i=ROUTING_RULES.indexOf(rule);if(i>=0)ROUTING_RULES.splice(i,1);R();deleteRule(rule.id).catch(console.error);};
+  const addType=()=>{const label=newLabel.trim()||'New maintenance type';
+    const local={id:'local-'+Date.now(),kind:'maintenance',label,icon:(newIcon.trim()||'🔧'),staff_id:null,sort_order:cats.length};
+    ROUTING_RULES.push(local);setNewLabel('');setNewIcon('');R();
+    addMaintRule(label,local.icon).then(d=>{if(d){local.id=d.id;R();}}).catch(console.error);};
+  const move=(rule,dir)=>{const arr=maintCats();const i=arr.indexOf(rule);const j=i+dir;if(j<0||j>=arr.length)return;
+    const other=arr[j];const a=rule.sort_order,b=other.sort_order;rule.sort_order=b;other.sort_order=a;R();
+    saveRuleOrder(rule.id,rule.sort_order).catch(console.error);saveRuleOrder(other.id,other.sort_order).catch(console.error);};
+  return <div className="view">
+    <div className="h-row" style={{marginBottom:4}}><h2 style={{margin:0}}>⚙️ Settings</h2></div>
+    <div style={{color:'var(--muted)',fontSize:13,margin:'0 0 18px',maxWidth:760}}>Organisation-wide configuration. Only Administrators can change these.</div>
+    <div className="panel" style={{maxWidth:760}} id="routingSettings">
+      <div className="h-row"><h3><I n="tool" c="var(--accent-ink)"/>Report &amp; request routing</h3><span className="tag amber">Admin only</span></div>
+      <div style={{color:'var(--muted)',fontSize:12.5,margin:'2px 0 16px'}}>Map each kind of report / request to whoever should receive it. Any staff member can be a recipient. Changes apply to new reports &amp; requests immediately (and re-route existing ones by category).</div>
+
+      <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--ink2,#43494f)',margin:'8px 0 10px'}}>🔧 Maintenance reports — by type</div>
+      {cats.length?cats.map((c,ix)=><RouteRow key={c.id} rule={c} ctx={ctx}
+        onRecipient={id=>setRecipient(c,id)} onRename={l=>rename(c,l)} onRemove={()=>remove(c)}
+        onMove={dir=>move(c,dir)} canMove={cats.length>1}/>):<div style={{color:'var(--muted)',fontSize:12.5,marginBottom:10}}>No maintenance types yet — add one below.</div>}
+      <div style={{display:'flex',alignItems:'center',gap:9,padding:'11px 12px',border:'1.5px dashed var(--line)',borderRadius:11,background:'#fcfdfc',marginTop:2}}>
+        <input className="fsel" style={{width:52,textAlign:'center',padding:'6px 4px'}} placeholder="🔧" value={newIcon} onChange={e=>setNewIcon(e.target.value)}/>
+        <input className="fsel" style={{flex:1}} placeholder="Add a maintenance type… (e.g. Transport, Housekeeping)" value={newLabel}
+          onChange={e=>setNewLabel(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addType();}}/>
+        <button className="btn primary" style={{padding:'7px 14px'}} onClick={addType}>＋ Add</button>
+      </div>
+
+      <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--ink2,#43494f)',margin:'22px 0 10px',paddingTop:16,borderTop:'1px solid var(--line)'}}>📦 Supply requests — after Sr. Manager approval</div>
+      {supply?<div style={{display:'flex',alignItems:'center',gap:11,padding:12,border:'1px solid var(--line)',borderRadius:11,background:'#fff'}}>
+        <div style={{width:36,height:36,borderRadius:10,background:'#f6f5f0',border:'1px solid var(--line)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flex:'0 0 auto'}}>📦</div>
+        <div><div style={{fontWeight:700,fontSize:13.5}}>Approved supply requests</div>
+          <div style={{fontSize:11,color:'var(--muted)',marginTop:1}}>Land here once the requester’s Sr. Manager approves</div></div>
+        <span style={{color:'var(--muted)',fontWeight:800,margin:'0 2px'}}>→</span>
+        <div style={{marginLeft:'auto'}}><StaffSelect value={supply.staff_id} onChange={id=>setRecipient(supply,id)}/></div>
+      </div>:<div style={{color:'var(--muted)',fontSize:12.5}}>No supply recipient configured.</div>}
+      <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>Every “recipient” is a staff picker — reassign anyone, add maintenance types, any time. Maintenance reports go straight to their recipient; supply requests are approved by the requester’s Sr. Manager first, then land on the recipient above to fulfil.</div>
+    </div>
   </div>;
 }
 
@@ -2004,7 +2177,7 @@ function Drawer({ctx,idx}){
                 ctx.R();}}>{dn?'✓ Done':'Pending'}</button>
           </div>;})}
       </>:null}
-      {t.status==='done'&&ctx.canApprove(t.who)?<>
+      {t.status==='done'&&ctx.canApprove(t.who,t)?<>
         <div className="dr-sec" style={{color:'var(--red)'}}>Not up to the mark? Reopen</div>
         <div className="kv"><div className="k">New due</div><div className="v" style={{flex:1}}>
           <input type="date" className="fsel" style={{width:'100%'}} value={reDate} onChange={e=>setReDate(e.target.value)}/></div></div>
@@ -2297,7 +2470,13 @@ function OrgNode({person,onNodeClick,canM,chainSiblings}){
   </li>;
 }
 
-function OrgChart({onNodeClick,canM}){
+function OrgChart({onNodeClick,canM,rootPerson}){
+  /* A Director now loads org-wide non-leadership staff into STAFF (RLS widened so they can ASSIGN
+     across departments), but their oversight — including this org chart — must stay their own
+     subtree. When rootPerson is given (Directors), render just that subtree via the generic
+     boss-walk OrgNode instead of the whole admin -> mgmt -> every-department tree. admin/mgmt keep
+     the full chart. */
+  if(rootPerson)return <ul className="orgtree"><OrgNode person={rootPerson} onNodeClick={onNodeClick} canM={canM}/></ul>;
   const admin=STAFF.find(p=>p.role==='Administrator');
   if(!admin)return <Empty t="No Admin account yet" s=""/>;
   const mgmt=mgmtMembers();
@@ -2978,7 +3157,7 @@ function PeopleView({ctx}){
         <button onClick={()=>setZoom(z=>Math.min(1.5,+(z+0.1).toFixed(2)))} title="Zoom in">+</button>
         <button className="zreset" onClick={()=>setZoom(1)}>Reset</button>
       </div>
-      <div className="chart-scroll"><div style={{zoom}}><OrgChart onNodeClick={onNodeClick} canM={canM}/></div></div>
+      <div className="chart-scroll"><div style={{zoom}}><OrgChart onNodeClick={onNodeClick} canM={canM} rootPerson={ctx.role==='dir'?(STAFF.find(p=>p.n===ctx.treeRoot)||ctx.viewer):null}/></div></div>
     </div>
     {step?<OrgActionModal ctx={ctx} step={step} setStep={s=>setStep(s)} oaCtx={oaCtx} setOaCtx={setOaCtx} close={close}/>:null}
     {showLog?<ActivityLogModal close={()=>setShowLog(false)}/>:null}
@@ -3627,8 +3806,10 @@ const QC_SAMPLES=[
 ];
 function QuickCapture({ctx,close}){
   const [kind,setKind]=useState('task');
+  const [cat,setCat]=useState(null); // repair/maintenance report category id (routing_rules kind='maintenance'); null → first
   const [txt,setTxt]=useState('');
   const [mode,setMode]=useState('others');
+  const [deptTab,setDeptTab]=useState('within'); // Directors only: 'within' | 'other' (self is handled by mode==='self')
   const [whos,setWhos]=useState([]);const [whoSugg,setWhoSugg]=useState(true);const [whoWhy,setWhoWhy]=useState('');
   const [when,setWhen]=useState(null);const [whenSugg,setWhenSugg]=useState(true);const [whenWhy,setWhenWhy]=useState('');
   const [dueTime,setDueTime]=useState('');
@@ -3643,8 +3824,24 @@ function QuickCapture({ctx,close}){
   const [files,setFiles]=useState([]);
   const [rec,setRec]=useState(false);
   const canMulti=ctx.role!=='jrm'&&ctx.role!=='lead';
+  /* Director-only ASSIGNMENT scope (separate from oversight/scope, which stays subtree-only).
+     A Director can assign to anyone whose DB role is NOT Administrator/Management — peers and
+     below across every department, never up the chain. Split into two picker tabs:
+       within = the Director's own subtree (who they oversee), excluding self
+       other  = everyone else assignable (org minus Admin/Mgmt) minus their own subtree minus self
+     Self is the third tab (mode==='self'). Non-Directors keep the old 2-way toggle + ctx.scope. */
+  const isDir=ctx.role==='dir';
+  const dirWithin=isDir?descendants(ctx.viewer.n):[];
+  const withinShorts=new Set(dirWithin.map(p=>p.s));
+  const dirOther=isDir?STAFF.filter(p=>p.role!=='Administrator'&&p.role!=='Management'
+    &&p.s!==ctx.viewer.s&&!withinShorts.has(p.s)):[];
   const parsed=kind==='task'&&txt.trim().length>=6;
-  const head=maintHead();
+  // repair/maintenance report routing: the chosen category (an admin-configured routing_rule) resolves
+  // to a specific recipient staff member. null cat → the first (default 'Building') category.
+  const cats=maintCats();
+  const selCat=catById(cat)||cats[0]||null;
+  const issueRec=selCat&&selCat.staff_id?byId(selCat.staff_id):null;
+  const headFirst=issueRec?issueRec.n.split(' ')[0]:(selCat?selCat.label:'the recipient');
 
   function parse(text){
     setTxt(text);
@@ -3703,11 +3900,15 @@ function QuickCapture({ctx,close}){
     if(kind!=='task'){
       if(!clean){ctx.say(kind==='issue'?'Describe the issue first':'Say what you need first');return;}
       const nr={kind:kind==='issue'?'issue':'request',t:clean.charAt(0).toUpperCase()+clean.slice(1),
-        from:ctx.viewer.s,date:iso(TODAY),note:note.trim(),files:kind==='issue'&&files.length?files.slice():undefined};
+        from:ctx.viewer.s,date:iso(TODAY),
+        routing_rule_id:kind==='issue'&&selCat?selCat.id:undefined,
+        target_staff_id:kind==='issue'&&issueRec?issueRec.id:undefined,
+        stage:kind==='request'?'pending':undefined,
+        note:note.trim(),files:kind==='issue'&&files.length?files.slice():undefined};
       requests.unshift(nr);
       close();ctx.R();
       saveRequest(nr).catch(console.error);
-      ctx.say(kind==='issue'?'Issue sent to '+(head?head.n.split(' ')[0]+' (maintenance head)':'the maintenance head'):'Request sent to your department boss for approval');
+      ctx.say(kind==='issue'?'Report sent to '+(issueRec?issueRec.n.split(' ')[0]+' ('+selCat.label+')':'the recipient'):'Request sent to your Sr. Manager for approval');
       return;
     }
     if(!clean||clean.length<3){ctx.say('Type or speak the task first');return;}
@@ -3728,16 +3929,17 @@ function QuickCapture({ctx,close}){
     ctx.say((mode==='self'?'Added to your list':'Assigned '+(list.length>1?'jointly to ':'to ')+names+' · notified in TeamFlow')+(recur?' · '+recurLabel(recur,recurOn):'')+(boss?' · as per '+boss:''));
   }
   const dts=[0,1,7].map(n=>{const d=new Date(TODAY);d.setDate(d.getDate()+n);return d;});
-  const whoList=ctx.scope.filter(x=>!whoQ||x.n.toLowerCase().includes(whoQ.toLowerCase())||x.dept.toLowerCase().includes(whoQ.toLowerCase()));
+  const pickerBase=isDir?(deptTab==='other'?dirOther:dirWithin):ctx.scope;
+  const whoList=pickerBase.filter(x=>!whoQ||x.n.toLowerCase().includes(whoQ.toLowerCase())||x.dept.toLowerCase().includes(whoQ.toLowerCase()));
   const hints={task:<span>Type or speak in plain words — <b>AI fills in who, when and what type</b>. Tap any value to change it.</span>,
-    issue:<span>Goes straight to <b>{head?head.n.split(' ')[0]+' (maintenance head)':'the maintenance head'}</b> — assigns the right person, no approval needed.</span>,
-    request:<span>Goes to <b>your department boss</b> for one-tap approval, then to procurement (Accounts department).</span>};
+    issue:<span>Goes straight to <b>{issueRec?issueRec.n.split(' ')[0]+(selCat?' ('+selCat.label+')':''):'the configured recipient'}</b> — they assign the right person, no approval needed.</span>,
+    request:<span>Goes to <b>your department’s Sr. Manager</b> for one-tap approval, then to the configured supply recipient to fulfil.</span>};
   const phs={task:'Try: "Ask Hari to fix the lab projector by Friday"',issue:"What's broken? e.g. Projector in Lab 2 not working",request:'What do you need? e.g. 2 boxes of chalk for Class 5'};
   return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
     <div className="modal">
       <div className="qc-head"><h3>New</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
       <div className="selfseg" style={{marginTop:12}}>
-        {[['task','Task'],['issue','Report issue'],['request','Request supplies']].map(([k,l])=>
+        {[['task','Task'],['issue','Report for repair/maintenance'],['request','Request supplies']].map(([k,l])=>
           <button key={k} className={kind===k?'on':''} onClick={()=>setKind(k)}>{l}</button>)}
       </div>
       <div className="qc-input-row">
@@ -3746,6 +3948,19 @@ function QuickCapture({ctx,close}){
       </div>
       <div style={{padding:'4px 22px 0',fontSize:11,color:'var(--muted)'}}>🎤 Demo: speaking fills in a sample sentence to try the flow — edit the text above if it's wrong.</div>
       <div className="qc-hint">{hints[kind]}</div>
+      {kind==='issue'?<div style={{padding:'0 22px'}}>
+        <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--ink2,#43494f)',margin:'2px 0 8px'}}>What kind of issue?</div>
+        <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+          {cats.map(c=>{const h=c.staff_id?byId(c.staff_id):null,on=selCat&&selCat.id===c.id;
+            return <button key={c.id} type="button" onClick={()=>setCat(c.id)}
+              style={{flex:'1 1 45%',minWidth:150,textAlign:'left',border:'1.5px solid '+(on?'var(--accent)':'var(--line)'),
+                background:on?'var(--accent-soft)':'#fff',borderRadius:11,padding:'11px 12px',cursor:'pointer',color:'inherit'}}>
+              <div style={{fontSize:20,lineHeight:1}}>{c.icon}</div>
+              <div style={{fontWeight:800,fontSize:13,marginTop:6}}>{c.label}</div>
+              <div style={{fontSize:11,color:'var(--muted)',marginTop:5,lineHeight:1.4}}>Goes to {h?<b style={{color:'var(--accent-ink)'}}>{h.n} · {h.role}, {h.dept}</b>:<b>the configured recipient</b>}{!h?<><br/>No recipient set — admins will handle it</>:null}</div>
+            </button>;})}
+        </div>
+      </div>:null}
       {kind==='issue'?<div className="qc-attach">
         {[['camera','Camera',{accept:'image/*',capture:'environment'}],['image','Photos',{accept:'image/*',multiple:true}],['clip','Files',{multiple:true}]].map(([ic,l,at])=>
           <label key={l} className="btn soft"><I n={ic}/>{l}<input type="file" style={{display:'none'}} onChange={filePicked} {...at}/></label>)}
@@ -3758,9 +3973,14 @@ function QuickCapture({ctx,close}){
         <label>{kind==='issue'?'Extra details (optional)':'Why / for which class? (optional)'}</label>
         <textarea rows={2} value={note} onChange={e=>setNote(e.target.value)} placeholder="Any details…"/>
       </div>:null}
-      {kind==='task'?<div className="selfseg">
+      {kind==='task'&&!isDir?<div className="selfseg">
         <button className={mode==='others'?'on':''} onClick={()=>setMode('others')}>For someone else</button>
         <button className={mode==='self'?'on':''} onClick={()=>setMode('self')}>For myself</button>
+      </div>:null}
+      {kind==='task'&&isDir?<div className="selfseg">
+        <button className={mode==='others'&&deptTab==='within'?'on':''} onClick={()=>{setMode('others');if(deptTab!=='within'){setDeptTab('within');setWhos([]);setWhoWhy('');}}}>🏢 Within department</button>
+        <button className={mode==='self'?'on':''} onClick={()=>setMode('self')}>🙋 Self</button>
+        <button className={mode==='others'&&deptTab==='other'?'on':''} onClick={()=>{setMode('others');if(deptTab!=='other'){setDeptTab('other');setWhos([]);setWhoSugg(false);setWhoWhy('');}}}>🌐 Other department</button>
       </div>:null}
       {parsed?<div className="qc-parsed">
         <div className="aihead"><I n="spark" s={14}/> AI understood</div>
@@ -3771,6 +3991,7 @@ function QuickCapture({ctx,close}){
           {whoWhy&&mode!=='self'?<div className="whysm"><b>{whoSugg?'✦ Suggested':'✓'}</b> — {whoWhy}</div>:null}
           {pick==='who'&&mode!=='self'?<div className="pickrow">
             <input className="fsel" style={{width:'100%'}} placeholder="Search name or department…" value={whoQ} onChange={e=>setWhoQ(e.target.value)}/>
+            {isDir&&deptTab==='other'?<div className="whysm" style={{width:'100%'}}>🌐 <b>Any department</b> — everyone except Administrators &amp; Management</div>:null}
             {canMulti?<div className="whysm">Tap more than one person to assign jointly</div>:null}
             {whoList.length?whoList.map(x=><button key={x.s} className={'pk'+(whos.includes(x.s)?' cur':'')} onClick={()=>toggleWho(x.s)}>{whos.includes(x.s)?'✓ ':''}{x.n} · {x.dept}</button>)
               :<div className="whysm">No one matches “{whoQ}”</div>}
@@ -3846,7 +4067,7 @@ function QuickCapture({ctx,close}){
         <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
         <button className="btn primary" style={{flex:2,justifyContent:'center'}} onClick={go}>
           <I n={kind==='task'?'check':kind==='issue'?'tool':'box'}/>
-          {kind==='task'?'Assign task':kind==='issue'?'Send to maintenance head':'Send request'}
+          {kind==='task'?'Assign task':kind==='issue'?'Send to '+headFirst:'Send request'}
         </button>
       </div>
     </div>
