@@ -642,6 +642,7 @@ async function deleteRequestRow(r){if(r.id)await sb.from('requests').delete().eq
    maintenance category, rename or reorder. */
 async function saveRuleRecipient(id,staffId){await sb.from('routing_rules').update({target_staff_id:staffId||null}).eq('id',id);}
 async function saveRuleLabel(id,label){await sb.from('routing_rules').update({label}).eq('id',id);}
+async function saveRuleIcon(id,icon){await sb.from('routing_rules').update({icon}).eq('id',id);}
 async function addMaintRule(label,icon){const {data}=await sb.from('routing_rules').insert({kind:'maintenance',label,icon:icon||'🔧',sort_order:maintCats().length}).select().single();return data;}
 async function saveRuleOrder(id,order){await sb.from('routing_rules').update({sort_order:order}).eq('id',id);}
 async function deleteRule(id){await sb.from('routing_rules').delete().eq('id',id);}
@@ -1640,10 +1641,25 @@ function StaffSelect({value,onChange}){
     {people.map(p=><option key={p.id} value={p.id}>{p.n} · {p.role}, {p.dept}</option>)}
   </select>;
 }
-function RouteRow({rule,ctx,onRecipient,onRename,onRemove,onMove,canMove}){
+/* Curated emoji set for maintenance/facilities categories — no external picker lib (keeps the app
+   self-contained). Click the icon swatch to open a small grid; picking one sets the row's icon. */
+const EMOJI_CHOICES=['🔧','🛠️','🏢','💻','🖥️','🖨️','📽️','💡','🔌','⚡','❄️','🔥','🚿','🚽','🚰','💧','🚪','🪟','🪑','🧹','🧯','🚚','🚌','🛗','🪜','🔑','🧰','🪛','🌡️','📦','🍽️','☕','🌳','🪴','📚','🏫','🔒','📞','📷','🎨'];
+function EmojiPicker({value,onPick}){
+  const [open,setOpen]=useState(false);
+  return <div style={{position:'relative',flex:'0 0 auto'}}>
+    <button type="button" title="Choose an icon" onClick={()=>setOpen(o=>!o)}
+      style={{width:36,height:36,borderRadius:10,background:'#f6f5f0',border:'1px solid var(--line)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,cursor:'pointer',padding:0}}>{value||'🔧'}</button>
+    {open?<><div onClick={()=>setOpen(false)} style={{position:'fixed',inset:0,zIndex:40}}/>
+      <div style={{position:'absolute',top:42,left:0,zIndex:41,background:'#fff',border:'1px solid var(--line)',borderRadius:10,boxShadow:'0 6px 24px rgba(0,0,0,.14)',padding:8,width:264,display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:2}}>
+        {EMOJI_CHOICES.map(e=><button key={e} type="button" onClick={()=>{onPick(e);setOpen(false);}}
+          style={{border:'none',background:value===e?'var(--accent-soft)':'none',borderRadius:7,fontSize:18,padding:'5px 0',cursor:'pointer',lineHeight:1}}>{e}</button>)}
+      </div></>:null}
+  </div>;
+}
+function RouteRow({rule,ctx,onRecipient,onRename,onRemove,onMove,onIcon,canMove}){
   const [editing,setEditing]=useState(false);const [draft,setDraft]=useState(rule.label);
   return <div style={{display:'flex',alignItems:'center',gap:11,padding:12,border:'1px solid var(--line)',borderRadius:11,marginBottom:10,background:'#fff'}}>
-    <div style={{width:36,height:36,borderRadius:10,background:'#f6f5f0',border:'1px solid var(--line)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flex:'0 0 auto'}}>{rule.icon||'🔧'}</div>
+    <EmojiPicker value={rule.icon} onPick={onIcon}/>
     <div style={{minWidth:0,flex:'0 1 auto'}}>
       {editing?<input className="fsel" style={{fontWeight:700,padding:'5px 8px'}} value={draft} autoFocus
         onChange={e=>setDraft(e.target.value)}
@@ -1669,6 +1685,7 @@ function SettingsView({ctx}){
   const cats=maintCats();const supply=supplyRule();
   const setRecipient=(rule,staffId)=>{rule.staff_id=staffId;R();saveRuleRecipient(rule.id,staffId).catch(console.error);};
   const rename=(rule,label)=>{if(label===rule.label)return;rule.label=label;R();saveRuleLabel(rule.id,label).catch(console.error);};
+  const setIcon=(rule,icon)=>{rule.icon=icon;R();if(!String(rule.id).startsWith('local-'))saveRuleIcon(rule.id,icon).catch(console.error);};
   const remove=rule=>{const i=ROUTING_RULES.indexOf(rule);if(i>=0)ROUTING_RULES.splice(i,1);R();deleteRule(rule.id).catch(console.error);};
   const addType=()=>{const label=newLabel.trim()||'New maintenance type';
     const local={id:'local-'+Date.now(),kind:'maintenance',label,icon:(newIcon.trim()||'🔧'),staff_id:null,sort_order:cats.length};
@@ -1687,9 +1704,9 @@ function SettingsView({ctx}){
       <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--ink2,#43494f)',margin:'8px 0 10px'}}>🔧 Maintenance reports — by type</div>
       {cats.length?cats.map((c,ix)=><RouteRow key={c.id} rule={c} ctx={ctx}
         onRecipient={id=>setRecipient(c,id)} onRename={l=>rename(c,l)} onRemove={()=>remove(c)}
-        onMove={dir=>move(c,dir)} canMove={cats.length>1}/>):<div style={{color:'var(--muted)',fontSize:12.5,marginBottom:10}}>No maintenance types yet — add one below.</div>}
+        onIcon={ic=>setIcon(c,ic)} onMove={dir=>move(c,dir)} canMove={cats.length>1}/>):<div style={{color:'var(--muted)',fontSize:12.5,marginBottom:10}}>No maintenance types yet — add one below.</div>}
       <div style={{display:'flex',alignItems:'center',gap:9,padding:'11px 12px',border:'1.5px dashed var(--line)',borderRadius:11,background:'#fcfdfc',marginTop:2}}>
-        <input className="fsel" style={{width:52,textAlign:'center',padding:'6px 4px'}} placeholder="🔧" value={newIcon} onChange={e=>setNewIcon(e.target.value)}/>
+        <EmojiPicker value={newIcon} onPick={setNewIcon}/>
         <input className="fsel" style={{flex:1}} placeholder="Add a maintenance type… (e.g. Transport, Housekeeping)" value={newLabel}
           onChange={e=>setNewLabel(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addType();}}/>
         <button className="btn primary" style={{padding:'7px 14px'}} onClick={addType}>＋ Add</button>
