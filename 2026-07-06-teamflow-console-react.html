@@ -1782,7 +1782,7 @@ function ChecklistsView({ctx}){
 
   if(tab==='mine'||!team.length){
     const boss=viewer.boss?byName(viewer.boss):null;const le=clItemsFor(viewer.id)[0];const leById=le&&le.last_edited_by?byId2Name(le.last_edited_by):null;const n=clItemsFor(viewer.id).length;const nDue=clItemsFor(viewer.id).filter(i=>clDueOn(i,today)).length;
-    return <div>
+    return <div className="view">
       <div className="ktabs">{tabBtns()}</div>
       <div className="panel">
         <div className="khead"><div className="kwho"><span className="kav" style={{background:avColor(viewer.n)}}>{viewer.av}</span><div><div className="kh-t">Your checklist</div><div className="ksetby">{boss?<>Set by <b>{boss.n}</b> ({boss.role})</>:'Self-managed'}{leById?' · last edited by '+leById:''}</div></div></div><span className="kspacer"/><span className="ktoday">Today · {fmtDate(today)}</span></div>
@@ -1794,7 +1794,7 @@ function ChecklistsView({ctx}){
       </div>
     </div>;
   }
-  if(tab==='compliance')return <div><div className="ktabs">{tabBtns()}</div><KCompliance ctx={ctx} team={team}/></div>;
+  if(tab==='compliance')return <div className="view"><div className="ktabs">{tabBtns()}</div><KCompliance ctx={ctx} team={team}/></div>;
   // My team
   if(!sel||!team.some(p=>p.id===sel))var selId=(team[0]||{}).id; else selId=sel;
   const depts=['all',...Array.from(new Set(team.map(p=>p.dept))).sort()];
@@ -1802,7 +1802,7 @@ function ChecklistsView({ctx}){
   if(people.length&&!people.some(p=>p.id===selId))selId=people[0].id;
   const showFilter=team.length>8;
   const r=STAFF.find(p=>p.id===selId);
-  return <div>
+  return <div className="view">
     <div className="ktabs">{tabBtns()}</div>
     <div className="knote"><span>💡</span><div>Pick anyone below you to view and <b>edit</b> the recurring checklist you’ve assigned them. Add, rename, reorder or remove items any time. Use the date picker to check a past day, and tick <b>Absent</b> for a leave day. Ticks show <b>their</b> progress (read-only for you).</div></div>
     <div className="kteamwrap">
