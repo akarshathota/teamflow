@@ -1210,7 +1210,7 @@ function App(){
       </div>
       {view==='dashboard'&&<Dashboard ctx={ctx} open={open} over={over} today={today} done={done}/>}
       {view==='tasks'&&<TasksView ctx={ctx}/>}
-      {view==='checklists'&&<div style={{maxWidth:1100}}><ChecklistsView ctx={ctx}/></div>}
+      {view==='checklists'&&<ChecklistsView ctx={ctx}/>}
       {view==='calendar'&&<CalendarView ctx={ctx}/>}
       {view==='people'&&<PeopleView ctx={ctx}/>}
       {view==='reports'&&<ReportsView ctx={ctx}/>}
@@ -1694,7 +1694,9 @@ async function clSnapshotPdf(staffId,mode,anchorISO){
 }
 
 function KItemRows({staffId,date,mode,ctx}){
-  const items=clItemsFor(staffId),done=clDoneSet(staffId,date);
+  // edit mode shows the whole recurring list; tick/roview show only what's due on `date`
+  const all=clItemsFor(staffId),done=clDoneSet(staffId,date);
+  const items=mode==='edit'?all:all.filter(i=>clDueOn(i,date));
   return <>{CL_FREQORDER.map(f=>{const grp=items.filter(i=>i.freq===f);if(!grp.length)return null;
     const d=grp.filter(i=>done.has(i.id)).length;
     return <div className="ksec" key={f}><div className="ksec-h">{CL_FREQMETA[f].label}<span className="ksec-c">{d}/{grp.length}</span><span className="ksec-hint">· {CL_FREQMETA[f].hint}</span></div>
@@ -1723,7 +1725,7 @@ function KAddRow({staffId,ctx}){
     <button className="btn primary" onClick={add}>＋ Add</button></div>
     <div className="kaddhint">Weekly asks for a weekday, Monthly a date, Yearly a day &amp; month — each item recurs on its own schedule.</div></div>;
 }
-function KProgress({staffId,date}){const items=clItemsFor(staffId),done=clDoneSet(staffId,date),n=items.length,d=items.filter(i=>done.has(i.id)).length,p=n?Math.round(d/n*100):0;
+function KProgress({staffId,date}){const items=clItemsFor(staffId).filter(i=>clDueOn(i,date)),done=clDoneSet(staffId,date),n=items.length,d=items.filter(i=>done.has(i.id)).length,p=n?Math.round(d/n*100):0;
   return <><div className="kprogtxt">{d} of {n} done <span style={{color:'var(--muted)',fontWeight:500}}>· {p}%</span></div><div className="kprogbar"><span style={{width:p+'%'}}/></div></>;}
 
 /* ---- compliance analytics (pure client-side over loaded clItems/clDone/clAbs) ---- */
@@ -1779,15 +1781,16 @@ function ChecklistsView({ctx}){
   const feeds=(name,own)=><div className="kfeeds"><span>📋</span><div>Completion feeds {own?'your':name+'’s'} <b>daily report</b> — it shows whether the day’s (and any due weekly / monthly / yearly) checklist items were done.</div></div>;
 
   if(tab==='mine'||!team.length){
-    const boss=viewer.boss?byName(viewer.boss):null;const le=clItemsFor(viewer.id)[0];const leById=le&&le.last_edited_by?byId2Name(le.last_edited_by):null;const n=clItemsFor(viewer.id).length;
+    const boss=viewer.boss?byName(viewer.boss):null;const le=clItemsFor(viewer.id)[0];const leById=le&&le.last_edited_by?byId2Name(le.last_edited_by):null;const n=clItemsFor(viewer.id).length;const nDue=clItemsFor(viewer.id).filter(i=>clDueOn(i,today)).length;
     return <div>
       <div className="ktabs">{tabBtns()}</div>
       <div className="panel">
         <div className="khead"><div className="kwho"><span className="kav" style={{background:avColor(viewer.n)}}>{viewer.av}</span><div><div className="kh-t">Your checklist</div><div className="ksetby">{boss?<>Set by <b>{boss.n}</b> ({boss.role})</>:'Self-managed'}{leById?' · last edited by '+leById:''}</div></div></div><span className="kspacer"/><span className="ktoday">Today · {fmtDate(today)}</span></div>
         <div className="kreset"><span className="r">↻</span> Fresh every day — <b>Daily</b> resets each morning, <b>Weekly</b> on its weekday, <b>Monthly</b> on its date, <b>Yearly</b> on its day. You tick these off; a manager above you sets the list.</div>
         {feeds(viewer.n,true)}
-        <KProgress staffId={viewer.id} date={today}/>
-        {n?<KItemRows staffId={viewer.id} date={today} mode="tick" ctx={ctx}/>:<div className="kempty"><div className="big">🗒️</div><h3>No checklist yet</h3><div>{boss?boss.n+' hasn’t set one for you yet.':'No one manages your checklist.'}</div></div>}
+        {n===0?<div className="kempty"><div className="big">🗒️</div><h3>No checklist yet</h3><div>{boss?boss.n+' hasn’t set one for you yet.':'No one manages your checklist.'}</div></div>
+         :nDue===0?<div className="kempty"><div className="big">✅</div><h3>Nothing due today</h3><div>Your weekly / monthly / yearly items appear on their scheduled day.</div></div>
+         :<><KProgress staffId={viewer.id} date={today}/><KItemRows staffId={viewer.id} date={today} mode="tick" ctx={ctx}/></>}
       </div>
     </div>;
   }
@@ -1806,7 +1809,7 @@ function ChecklistsView({ctx}){
       <div>
         <div className="side-lab" style={{margin:'0 2px 8px'}}>People below you{showFilter?' · '+people.length+' of '+team.length:''}</div>
         {showFilter&&<div className="kfilter"><input placeholder="🔍  Search by name…" value={fName} onChange={e=>setFName(e.target.value)}/><select value={fDept} onChange={e=>{setFDept(e.target.value);}}>{depts.map(d=><option key={d} value={d}>{d==='all'?'All departments':d}</option>)}</select></div>}
-        {people.length?people.map(p=>{const n=clItemsFor(p.id).length,d=clDoneSet(p.id,today).size;
+        {people.length?people.map(p=>{const done=clDoneSet(p.id,today),due=clItemsFor(p.id).filter(i=>clDueOn(i,today)),n=due.length,d=due.filter(i=>done.has(i.id)).length;
           return <button key={p.id} className={'kmem'+(selId===p.id?' on':'')} onClick={()=>{setSel(p.id);setEditing(false);setVDate(today);}}>
             <span className="kav" style={{background:avColor(p.n)}}>{p.av}</span><div><div className="kmem-n">{p.n}</div><div className="kmem-r">{p.role} · {p.dept}</div></div>
             <div className="kmem-p"><b>{d}/{n}</b><div className="lab">done</div></div></button>;})
@@ -1822,9 +1825,10 @@ function ChecklistsView({ctx}){
 }
 function KTeamDetail({ctx,r,editing,setEditing,vDate,setVDate,today,feeds}){
   const items=clItemsFor(r.id),n=items.length;const le=items[0];const leBy=le&&le.last_edited_by?byId2Name(le.last_edited_by):null;const leAt=le&&le.last_edited_at?dmyTs(le.last_edited_at):null;
-  const absent=clAbsOn(r.id,vDate),isPast=vDate!==today;
+  const freqLbl=CL_FREQORDER.filter(f=>items.some(i=>i.freq===f)).map(f=>CL_FREQMETA[f].label).join(' / ');
+  const absent=clAbsOn(r.id,vDate),isPast=vDate!==today,dueVN=items.filter(i=>clDueOn(i,vDate)).length;
   return <div className={'panel'+(editing?' kediting':'')}>
-    <div className="khead"><div className="kwho"><span className="kav" style={{background:avColor(r.n)}}>{r.av}</span><div><div className="kh-t">{r.n}’s checklist</div><div className="ksetby">{n} item{n!==1?'s':''} across Daily / Weekly / Monthly / Yearly{leBy?<> · last edited by <b>{leBy}</b>{leAt?' on '+leAt:''}</>:''}</div></div></div><span className="kspacer"/>
+    <div className="khead"><div className="kwho"><span className="kav" style={{background:avColor(r.n)}}>{r.av}</span><div><div className="kh-t">{r.n}’s checklist</div><div className="ksetby">{n} item{n!==1?'s':''}{freqLbl?' across '+freqLbl:''}{leBy?<> · last edited by <b>{leBy}</b>{leAt?' on '+leAt:''}</>:''}</div></div></div><span className="kspacer"/>
       {editing?<button className="btn primary" onClick={()=>setEditing(false)}>✓ Done editing</button>
         :<><span className="kdate"><button onClick={()=>{const d=new Date(vDate+'T00:00:00');d.setDate(d.getDate()-1);setVDate(iso(d));}}>◀</button><input type="date" value={vDate} max={today} onChange={e=>{if(e.target.value&&e.target.value<=today)setVDate(e.target.value);}}/><button disabled={vDate>=today} onClick={()=>{const d=new Date(vDate+'T00:00:00');d.setDate(d.getDate()+1);const ni=iso(d);if(ni<=today)setVDate(ni);}}>▶</button></span>
         <select className="btn ksnap" style={{marginLeft:8}} value="" onChange={e=>{const v=e.target.value;if(v){clSnapshotPdf(r.id,v,vDate);e.target.value='';}}}><option value="">📄 Snapshot</option><option value="week">Weekly PDF</option><option value="month">Monthly PDF</option></select>
@@ -1841,6 +1845,7 @@ function KTeamDetail({ctx,r,editing,setEditing,vDate,setVDate,today,feeds}){
        :<>
         <div className="kabsent-row"><label className="kabschk"><input type="checkbox" checked={absent} onChange={e=>clMarkAbsent(r.id,vDate,e.target.checked,ctx.viewer.id,ctx.R)}/> 🌴 Absent</label><span className="muted" style={{fontSize:11.5}}>Tick if {r.n} was on leave on {fmtDate(vDate)} — the checklist is then excused.</span></div>
         {absent?<div className="kabsent-b"><span style={{fontSize:19}}>🌴</span><div><b>{r.n} was absent on {fmtDate(vDate)}</b><div className="muted" style={{marginTop:3}}>Checklist not expected this day.</div></div></div>
+         :dueVN===0?<div className="kdatectx" style={{marginTop:2}}>Nothing was scheduled for {fmtDate(vDate)}.</div>
          :<><KProgress staffId={r.id} date={vDate}/><KItemRows staffId={r.id} date={vDate} mode="roview" ctx={ctx}/></>}
        </>}
     </>}

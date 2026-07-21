@@ -1133,7 +1133,9 @@ async function clSnapshotPdf(staffId,mode,anchorISO){
 
 // grouped item rows for mobile (mode: 'tick' | 'roview' | 'edit')
 function clMobGroups({staffId,date,mode,ctx}){
-  const items=clItemsFor(staffId),done=clDoneSet(staffId,date);
+  // edit mode shows the whole recurring list; tick/roview show only what's due on `date`
+  const all=clItemsFor(staffId),done=clDoneSet(staffId,date);
+  const items=mode==='edit'?all:all.filter(i=>clDueOn(i,date));
   return CL_FREQORDER.map(f=>{const grp=items.filter(i=>i.freq===f);if(!grp.length)return null;
     const dn=grp.filter(i=>done.has(i.id)).length;
     return <div key={f}>
@@ -1186,7 +1188,7 @@ function ClTeamListMobile({ctx,people,pick}){
   return <div>
     <div className="sec">My team · {people.length}</div>
     {people.length>6&&<input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 Search name or department…" style={{width:'100%',fontFamily:'inherit',fontSize:14,padding:'10px 12px',border:'1px solid #e7e5dc',borderRadius:10,outline:'none',marginBottom:10}}/>}
-    {shown.map(p=>{const n=clItemsFor(p.id).length,d=clDoneSet(p.id,today).size;
+    {shown.map(p=>{const done=clDoneSet(p.id,today),due=clItemsFor(p.id).filter(i=>clDueOn(i,today)),n=due.length,d=due.filter(i=>done.has(i.id)).length;
       return <div key={p.id} className="task" onClick={()=>pick(p)} style={{display:'flex',alignItems:'center',gap:11,cursor:'pointer',padding:12}}>
         <span style={{width:34,height:34,borderRadius:'50%',background:"#0e7a6f",color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:13,flex:'0 0 auto'}}>{p.i||p.n[0]}</span>
         <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14}}>{p.n}</div><div style={{fontSize:11.5,color:'#71797f'}}>{p.role} · {p.department}</div></div>
@@ -1205,7 +1207,8 @@ function ClTeamDetailMobile({ctx,person,back}){
   const leBy=le&&le.last_edited_by?(ALL_PEOPLE.find(p=>p.id===le.last_edited_by)||{}).n:null;
   const absent=clAbsOn(person.id,vDate),isPast=vDate!==today;
   const add=()=>{if(!body.trim())return;const a=freq==='weekly'?{dow}:freq==='monthly'?{dom}:freq==='yearly'?{y_day:yd,y_mon:ym}:{};clAdd(person.id,body.trim(),freq,a,ctx.R);setBody('');};
-  const d=absent?0:items.filter(i=>clDoneSet(person.id,vDate).has(i.id)).length;
+  const dueOnV=items.filter(i=>clDueOn(i,vDate)),dueN=dueOnV.length;
+  const d=absent?0:dueOnV.filter(i=>clDoneSet(person.id,vDate).has(i.id)).length;
   return <div>
     <div style={{display:'flex',alignItems:'center',gap:10,margin:'2px 0 12px'}}>
       <button onClick={back} style={{border:'1px solid #e7e5dc',background:'#fff',borderRadius:8,padding:'6px 11px',fontSize:13,fontWeight:600}}>‹ Team</button>
@@ -1241,7 +1244,8 @@ function ClTeamDetailMobile({ctx,person,back}){
         <label style={{display:'inline-flex',alignItems:'center',gap:8,fontSize:13,fontWeight:700,color:'#9a6a10',background:'#f6efdb',border:'1px solid #e6d7ad',borderRadius:9,padding:'8px 12px',marginBottom:12}}><input type="checkbox" checked={absent} onChange={e=>clMarkAbsent(person.id,vDate,e.target.checked,meP.id,ctx.R)} style={{width:17,height:17,accentColor:'#9a6a10'}}/> 🌴 Absent</label>
         {n===0?<div style={{textAlign:'center',color:'#71797f',padding:'24px 10px'}}>Empty checklist — tap “Edit list” to add {person.n}’s duties.</div>
          :absent?<div style={{background:'#f6efdb',border:'1px solid #e6d7ad',borderRadius:10,padding:14,color:'#9a6a10',fontSize:13.5}}>🌴 <b>{person.n} was absent on {fmtD(vDate)}</b> — checklist not expected this day.</div>
-         :<><div style={{fontSize:12,color:'#71797f',marginBottom:6}}>{d} of {n} done</div>{clMobGroups({staffId:person.id,date:vDate,mode:'roview',ctx})}</>}
+         :dueN===0?<div style={{textAlign:'center',color:'#71797f',padding:'20px 10px'}}>Nothing was scheduled for {fmtD(vDate)}.</div>
+         :<><div style={{fontSize:12,color:'#71797f',marginBottom:6}}>{d} of {dueN} done</div>{clMobGroups({staffId:person.id,date:vDate,mode:'roview',ctx})}</>}
       </>}
     </div>
   </div>;
