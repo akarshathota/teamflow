@@ -535,6 +535,7 @@ let STAFF=[];
 let tasks=[];
 let ORG_NAME='';
 let SUPPLY_ENABLED=true; // org_settings.supply_requests_enabled — master toggle for the supply-request feature (read via shared.js supplyEnabled())
+let NAV_ICONS={};        // org_settings.nav_icons jsonb — Administrator-chosen emoji overrides for sidebar items (key→emoji); empty = use the default line icon
 let ROUTING_RULES=[]; // routing_rules rows (admin-configured recipients) — read via shared.js helpers
 let requests=[];
 let notifs=[];
@@ -597,7 +598,7 @@ async function loadAll(){
     loadNotifs(),
     sb.from('cron_runs').select('*').order('ran_at',{ascending:false}).limit(1),
     sb.from('admin_activity_log').select('*').order('created_at',{ascending:false}).limit(30),
-    sb.from('org_settings').select('name,supply_requests_enabled').eq('id',true).maybeSingle(),
+    sb.from('org_settings').select('name,supply_requests_enabled,nav_icons').eq('id',true).maybeSingle(),
     sb.from('routing_rules').select('*'),
     sb.from('checklist_items').select('*').eq('archived',false),
     sb.from('checklist_completions').select('*').gte('occ_date',clSince),
@@ -605,6 +606,7 @@ async function loadAll(){
   ]);
   if(orgRow&&orgRow.name)ORG_NAME=orgRow.name;
   if(orgRow&&typeof orgRow.supply_requests_enabled==='boolean')SUPPLY_ENABLED=orgRow.supply_requests_enabled;
+  NAV_ICONS=(orgRow&&orgRow.nav_icons&&typeof orgRow.nav_icons==='object')?orgRow.nav_icons:{};
   ROUTING_RULES.length=0;ROUTING_RULES.push(...(ruleRows||[]).map(rowToRule));
   STAFF.length=0;STAFF.push(...rowsToStaff(staffRows||[]));
   const byId=Object.fromEntries(STAFF.map(p=>[p.id,p]));
@@ -691,6 +693,8 @@ async function addMaintRule(label,icon){const {data}=await sb.from('routing_rule
 async function addApproverRule(dept,staffId){const {data}=await sb.from('routing_rules').insert({kind:'supply_approver',label:dept,target_staff_id:staffId||null,sort_order:0}).select().single();return data;}
 /* master supply-feature toggle — flips org_settings.supply_requests_enabled (Administrator-only RLS). */
 async function saveSupplyEnabled(on){await sb.from('org_settings').update({supply_requests_enabled:on}).eq('id',true);}
+/* sidebar-icon overrides — Administrator-only (org_settings RLS). Writes the whole nav_icons map. */
+async function saveNavIcons(obj){await sb.from('org_settings').update({nav_icons:obj}).eq('id',true);}
 async function saveRuleOrder(id,order){await sb.from('routing_rules').update({sort_order:order}).eq('id',id);}
 async function deleteRule(id){await sb.from('routing_rules').delete().eq('id',id);}
 /* deletes a staff row AND its linked auth account together via the delete-staff-account edge
@@ -888,6 +892,7 @@ const PATHS={
   dl:<path d="M12 4v11M7.5 11.5L12 16l4.5-4.5M4.5 19.5h15"/>,
   print:<g><path d="M7 8V4h10v4M7 17H4.5V10h15V17H17"/><rect x="7" y="14.5" width="10" height="6" rx="1"/></g>,
   inbox:<path d="M4 13.5V18a2 2 0 002 2h12a2 2 0 002-2v-4.5M4 13.5L7 5.5h10l3 8M4 13.5h4.8l1 2h4.4l1-2H20"/>,
+  gear:<g><circle cx="12" cy="12" r="3.3"/><path d="M12 2.6v3.2M12 18.2v3.2M21.4 12h-3.2M5.8 12H2.6M18.6 5.4l-2.3 2.3M7.7 16.3l-2.3 2.3M18.6 18.6l-2.3-2.3M7.7 7.7L5.4 5.4"/></g>,
   note:<g><path d="M6 3.5h9L20 8.5v12H6z"/><path d="M14.5 3.5v5.5H20M9 13h6M9 16.5h6"/></g>,
   camera:<g><path d="M4 8.5a2 2 0 012-2h2l1.5-2h5L16 6.5h2a2 2 0 012 2V18a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><circle cx="12" cy="13" r="3.4"/></g>,
   image:<g><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M4.5 17l4.5-4.5 3 3 3.5-3.5 4.5 4.5"/></g>,
@@ -1296,11 +1301,11 @@ function App(){
           Gated on the effective (Preview-As) role so it is visible ONLY to Management & Admin, and
           hidden the moment you preview as a Manager/Team member. The view below is guarded to match. */}
       {(role==='mgmt'||role==='admin')?<button className={'navitem'+(view==='tracker'?' on':'')} onClick={()=>setView('tracker')}>
-        <span style={{fontSize:16,width:18,textAlign:'center'}}>🗂️</span><span className="lb">Reports &amp; requests</span><span className="kbd">7</span></button>:null}
+        {NAV_ICONS.tracker?<span style={{fontSize:16,width:18,textAlign:'center'}}>{NAV_ICONS.tracker}</span>:<I n="inbox"/>}<span className="lb">Reports &amp; requests</span><span className="kbd">7</span></button>:null}
       {/* Settings is admin-only (org-management surface). Keyed off the real signed-in role, not the
           Preview-As role, so previewing as a non-admin still keeps the item available to switch back. */}
       {myRoleKey==='admin'?<button className={'navitem'+(view==='settings'?' on':'')} onClick={()=>setView('settings')}>
-        <span style={{fontSize:16,width:18,textAlign:'center'}}>⚙️</span><span className="lb">Settings</span><span className="kbd">·</span></button>:null}
+        {NAV_ICONS.settings?<span style={{fontSize:16,width:18,textAlign:'center'}}>{NAV_ICONS.settings}</span>:<I n="gear"/>}<span className="lb">Settings</span><span className="kbd">·</span></button>:null}
       <div className="side-foot">
         {myRoleKey==='admin'?<>
           <div className="side-lab">Preview as</div>
@@ -1748,6 +1753,7 @@ function SettingsView({ctx}){
   const setRecipient=(rule,staffId)=>{rule.staff_id=staffId;R();saveRuleRecipient(rule.id,staffId).catch(console.error);};
   const rename=(rule,label)=>{if(label===rule.label)return;rule.label=label;R();saveRuleLabel(rule.id,label).catch(console.error);};
   const setIcon=(rule,icon)=>{rule.icon=icon;R();if(!String(rule.id).startsWith('local-'))saveRuleIcon(rule.id,icon).catch(console.error);};
+  const setNavIcon=(key,emoji)=>{const nx={...NAV_ICONS};if(emoji)nx[key]=emoji;else delete nx[key];NAV_ICONS=nx;R();saveNavIcons(nx).catch(console.error);};
   const remove=rule=>{const i=ROUTING_RULES.indexOf(rule);if(i>=0)ROUTING_RULES.splice(i,1);R();deleteRule(rule.id).catch(console.error);};
   const addType=()=>{const label=newLabel.trim()||'New maintenance type';
     const local={id:'local-'+Date.now(),kind:'maintenance',label,icon:(newIcon.trim()||'🔧'),staff_id:null,sort_order:cats.length};
@@ -1770,7 +1776,7 @@ function SettingsView({ctx}){
     ROUTING_RULES.push(local);R();
     addApproverRule(dept,staffId).then(d=>{if(d){local.id=d.id;R();}}).catch(console.error);};
   return <div className="view">
-    <div className="h-row" style={{marginBottom:4}}><h2 style={{margin:0}}>⚙️ Settings</h2></div>
+    <div className="h-row" style={{marginBottom:4}}><h2 style={{margin:0,display:'flex',alignItems:'center',gap:8}}>{NAV_ICONS.settings?<span style={{fontSize:20}}>{NAV_ICONS.settings}</span>:<I n="gear" s={20}/>} Settings</h2></div>
     <div style={{color:'var(--muted)',fontSize:13,margin:'0 0 18px',maxWidth:760}}>Organisation-wide configuration. Only Administrators can change these.</div>
     <div className="panel" style={{maxWidth:760}} id="routingSettings">
       <div className="h-row"><h3><I n="tool" c="var(--accent-ink)"/>Report &amp; request routing</h3><span className="tag amber">Admin only</span></div>
@@ -1823,6 +1829,20 @@ function SettingsView({ctx}){
         </div>:<div style={{color:'var(--muted)',fontSize:12.5}}>No supply recipient configured.</div>}
       </div>
       <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>Every picker accepts any staff member. A supply request goes to its department’s approver first (Step 1), then lands on the procurement recipient (Step 2) to fulfil. Departments with no approver set fall back to that department’s Sr. Manager.</div>
+    </div>
+
+    <div className="panel" style={{maxWidth:760}}>
+      <div className="h-row"><h3><I n="grid" c="var(--accent-ink)"/>Sidebar icons</h3><span className="tag amber">Admin only</span></div>
+      <div style={{color:'var(--muted)',fontSize:12.5,margin:'2px 0 16px'}}>Pick an emoji for these menu items, or leave the default line icon. Only the Administrator can change these; the choice applies for everyone.</div>
+      {[['tracker','Reports & requests','inbox'],['settings','Settings','gear']].map(([key,label,def])=>
+        <div key={key} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 2px',borderBottom:'1px solid var(--line)'}}>
+          <span style={{width:30,height:30,display:'flex',alignItems:'center',justifyContent:'center',flex:'0 0 auto'}}>
+            {NAV_ICONS[key]?<span style={{fontSize:18}}>{NAV_ICONS[key]}</span>:<I n={def}/>}</span>
+          <div style={{flex:1,fontWeight:700,fontSize:13.5}}>{label}<div style={{fontWeight:500,fontSize:11,color:'var(--muted)'}}>{NAV_ICONS[key]?'Custom emoji':'Default icon'}</div></div>
+          <EmojiPicker value={NAV_ICONS[key]||''} onPick={e=>setNavIcon(key,e)}/>
+          {NAV_ICONS[key]?<button className="linkbtn" style={{fontSize:12}} onClick={()=>setNavIcon(key,null)}>Reset to default</button>:null}
+        </div>)}
+      <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>Tip: pick an emoji to make an item stand out, or reset to keep the clean line icon that matches the rest of the menu.</div>
     </div>
   </div>;
 }
