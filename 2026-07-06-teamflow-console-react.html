@@ -123,6 +123,15 @@
   .trk-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
   .trk-empty{padding:34px 16px;text-align:center;color:var(--muted);font-size:13px}
   .trk-foot{font-size:11.5px;color:var(--muted);padding:12px 16px;line-height:1.5;border-top:1px solid var(--line)}
+  /* Settings sub-sidebar */
+  .set-wrap{display:grid;grid-template-columns:206px 1fr;gap:20px;align-items:start;max-width:990px}
+  .set-subnav{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px;position:sticky;top:74px}
+  .set-subitem{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border-radius:9px;font-size:13.5px;font-weight:600;color:var(--ink2);cursor:pointer;background:none;border:none;font-family:inherit}
+  .set-subitem+.set-subitem{margin-top:2px}
+  .set-subitem:hover{background:#f3f2ec}
+  .set-subitem.on{background:var(--accent-soft);color:var(--accent-ink);font-weight:800}
+  .set-subitem .ic{width:18px;text-align:center;flex:0 0 auto}
+  @media(max-width:820px){.set-wrap{grid-template-columns:1fr}.set-subnav{position:static}}
 
   .view{padding:20px 26px 46px}
   /* panels */
@@ -1296,7 +1305,7 @@ function App(){
       </div>}
       {[['dashboard','grid','Dashboard','1'],['tasks','checkc','Tasks','2'],['checklists','checkc','Checklists','3'],['calendar','cal','Calendar','4'],['people','users','People & roles','5'],['reports','chart','Reports','6']].map(([v,ic,l,k])=>
         <button key={v} className={'navitem'+(view===v?' on':'')} onClick={()=>setView(v)}>
-          <I n={ic}/><span className="lb">{l}</span><span className="kbd">{k}</span></button>)}
+          {NAV_ICONS[v]?<span style={{fontSize:16,width:18,textAlign:'center'}}>{NAV_ICONS[v]}</span>:<I n={ic}/>}<span className="lb">{l}</span><span className="kbd">{k}</span></button>)}
       {/* Reports & requests tracker — org-wide oversight of every maintenance report + supply request.
           Gated on the effective (Preview-As) role so it is visible ONLY to Management & Admin, and
           hidden the moment you preview as a Manager/Team member. The view below is guarded to match. */}
@@ -1746,8 +1755,12 @@ function RouteRow({rule,ctx,onRecipient,onRename,onRemove,onMove,onIcon,canMove}
     </div>
   </div>;
 }
+/* Sidebar nav items (key → default line-icon name → label). Single source of truth for the sidebar
+   rendering (emoji override per key) and the Settings "Sidebar icons" picker. */
+const NAV_ITEMS=[['dashboard','grid','Dashboard'],['tasks','checkc','Tasks'],['checklists','checkc','Checklists'],['calendar','cal','Calendar'],['people','users','People & roles'],['reports','chart','Reports'],['tracker','inbox','Reports & requests'],['settings','gear','Settings']];
 function SettingsView({ctx}){
   const [,setTick]=useState(0);const R=()=>{setTick(t=>t+1);ctx.R();};
+  const [sec,setSec]=useState('maint');   // sub-nav section: maint | supply | icons
   const [newLabel,setNewLabel]=useState('');const [newIcon,setNewIcon]=useState('');
   const cats=maintCats();const supply=supplyRule();
   const setRecipient=(rule,staffId)=>{rule.staff_id=staffId;R();saveRuleRecipient(rule.id,staffId).catch(console.error);};
@@ -1775,74 +1788,80 @@ function SettingsView({ctx}){
     const local={id:'local-'+Date.now(),kind:'supply_approver',label:dept,icon:'',staff_id:staffId,sort_order:0};
     ROUTING_RULES.push(local);R();
     addApproverRule(dept,staffId).then(d=>{if(d){local.id=d.id;R();}}).catch(console.error);};
+  const SECS=[['maint','🔧','Maintenance routing'],['supply','📦','Supply requests'],['icons','🎨','Sidebar icons']];
   return <div className="view">
     <div className="h-row" style={{marginBottom:4}}><h2 style={{margin:0,display:'flex',alignItems:'center',gap:8}}>{NAV_ICONS.settings?<span style={{fontSize:20}}>{NAV_ICONS.settings}</span>:<I n="gear" s={20}/>} Settings</h2></div>
     <div style={{color:'var(--muted)',fontSize:13,margin:'0 0 18px',maxWidth:760}}>Organisation-wide configuration. Only Administrators can change these.</div>
-    <div className="panel" style={{maxWidth:760}} id="routingSettings">
-      <div className="h-row"><h3><I n="tool" c="var(--accent-ink)"/>Report &amp; request routing</h3><span className="tag amber">Admin only</span></div>
-      <div style={{color:'var(--muted)',fontSize:12.5,margin:'2px 0 16px'}}>Map each kind of report / request to whoever should receive it. Any staff member can be a recipient. Changes apply to new reports &amp; requests immediately (and re-route existing ones by category).</div>
-
-      <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--ink2,#43494f)',margin:'8px 0 10px'}}>🔧 Maintenance reports — by type</div>
-      {cats.length?cats.map((c,ix)=><RouteRow key={c.id} rule={c} ctx={ctx}
-        onRecipient={id=>setRecipient(c,id)} onRename={l=>rename(c,l)} onRemove={()=>remove(c)}
-        onIcon={ic=>setIcon(c,ic)} onMove={dir=>move(c,dir)} canMove={cats.length>1}/>):<div style={{color:'var(--muted)',fontSize:12.5,marginBottom:10}}>No maintenance types yet — add one below.</div>}
-      <div style={{display:'flex',alignItems:'center',gap:9,padding:'11px 12px',border:'1.5px dashed var(--line)',borderRadius:11,background:'#fcfdfc',marginTop:2}}>
-        <EmojiPicker value={newIcon} onPick={setNewIcon}/>
-        <input className="fsel" style={{flex:1}} placeholder="Add a maintenance type… (e.g. Transport, Housekeeping)" value={newLabel}
-          onChange={e=>setNewLabel(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addType();}}/>
-        <button className="btn primary" style={{padding:'7px 14px'}} onClick={addType}>＋ Add</button>
+    <div className="set-wrap">
+      <div className="set-subnav">
+        {SECS.map(([k,ic,l])=><button key={k} className={'set-subitem'+(sec===k?' on':'')} onClick={()=>setSec(k)}><span className="ic">{ic}</span>{l}</button>)}
       </div>
+      <div>
 
-      <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--ink2,#43494f)',margin:'22px 0 10px',paddingTop:16,borderTop:'1px solid var(--line)'}}>📦 Supply requests</div>
+      {sec==='maint'&&<div className="panel" style={{maxWidth:760,marginBottom:0}}>
+        <div className="h-row"><h3><I n="tool" c="var(--accent-ink)"/>Maintenance routing</h3><span className="tag amber">Admin only</span></div>
+        <div style={{color:'var(--muted)',fontSize:12.5,margin:'2px 0 16px'}}>Map each maintenance type to whoever should receive those reports. Any staff member can be a recipient; changes re-route existing reports of that type immediately.</div>
+        {cats.length?cats.map((c,ix)=><RouteRow key={c.id} rule={c} ctx={ctx}
+          onRecipient={id=>setRecipient(c,id)} onRename={l=>rename(c,l)} onRemove={()=>remove(c)}
+          onIcon={ic=>setIcon(c,ic)} onMove={dir=>move(c,dir)} canMove={cats.length>1}/>):<div style={{color:'var(--muted)',fontSize:12.5,marginBottom:10}}>No maintenance types yet — add one below.</div>}
+        <div style={{display:'flex',alignItems:'center',gap:9,padding:'11px 12px',border:'1.5px dashed var(--line)',borderRadius:11,background:'#fcfdfc',marginTop:2}}>
+          <EmojiPicker value={newIcon} onPick={setNewIcon}/>
+          <input className="fsel" style={{flex:1}} placeholder="Add a maintenance type… (e.g. Transport, Housekeeping)" value={newLabel}
+            onChange={e=>setNewLabel(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addType();}}/>
+          <button className="btn primary" style={{padding:'7px 14px'}} onClick={addType}>＋ Add</button>
+        </div>
+      </div>}
 
-      {/* Master ON/OFF for the whole supply-request feature. When off, the "Request supplies" tab is
-          hidden everywhere (console + mobile) and the config below is greyed out. */}
-      <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',border:'1px solid '+(supplyOn?'var(--accent-border,#bcdcd6)':'var(--line)'),background:supplyOn?'var(--accent-soft,#e2f1ee)':'#faf9f5',borderRadius:11,marginBottom:16}}>
-        <div style={{flex:1}}>
-          <div style={{fontWeight:800,fontSize:13.5,color:supplyOn?'var(--accent-ink)':'var(--ink2,#43494f)'}}>Supply requests enabled</div>
-          <div style={{fontSize:11.5,color:'var(--ink2,#43494f)',marginTop:2}}>When off, the “Request supplies” tab is hidden everywhere — nobody can file one.</div></div>
-        <button type="button" role="switch" aria-checked={supplyOn} onClick={toggleSupply} title="Toggle supply requests"
-          style={{width:46,height:26,borderRadius:99,background:supplyOn?'var(--accent)':'#c7c5bb',position:'relative',flex:'0 0 auto',border:'none',cursor:'pointer',padding:0,transition:'background .15s'}}>
-          <div style={{width:20,height:20,borderRadius:'50%',background:'#fff',position:'absolute',top:3,left:supplyOn?23:3,boxShadow:'0 1px 2px rgba(0,0,0,.2)',transition:'left .15s'}}></div></button>
-        <span style={{fontSize:11,fontWeight:800,color:supplyOn?'var(--accent-ink)':'var(--muted)',minWidth:24}}>{supplyOn?'ON':'OFF'}</span>
-      </div>
-
-      <div style={{opacity:supplyOn?1:.5,pointerEvents:supplyOn?'auto':'none'}}>
-        <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--ink2,#43494f)',margin:'4px 0 10px'}}>Step 1 · Approval — by department</div>
-        {depts.length?depts.map(dept=>{const rule=approverRuleFor(dept);return (
-          <div key={dept} style={{display:'flex',alignItems:'center',gap:11,padding:12,border:'1px solid var(--line)',borderRadius:11,marginBottom:10,background:'#fff'}}>
-            <div style={{width:36,height:36,borderRadius:10,background:'#f6f5f0',border:'1px solid var(--line)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flex:'0 0 auto'}}>🏢</div>
-            <div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:13.5}}>{dept}</div>
-              <div style={{fontSize:11,color:'var(--muted)',marginTop:1}}>Requests from this dept approved by</div></div>
+      {sec==='supply'&&<div className="panel" style={{maxWidth:760,marginBottom:0}}>
+        <div className="h-row"><h3><I n="box" c="var(--accent-ink)"/>Supply requests</h3><span className="tag amber">Admin only</span></div>
+        <div style={{color:'var(--muted)',fontSize:12.5,margin:'2px 0 16px'}}>Turn the whole feature on or off, and configure the two-stage approval → procurement routing.</div>
+        <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',border:'1px solid '+(supplyOn?'var(--accent-border,#bcdcd6)':'var(--line)'),background:supplyOn?'var(--accent-soft,#e2f1ee)':'#faf9f5',borderRadius:11,marginBottom:16}}>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:800,fontSize:13.5,color:supplyOn?'var(--accent-ink)':'var(--ink2,#43494f)'}}>Supply requests enabled</div>
+            <div style={{fontSize:11.5,color:'var(--ink2,#43494f)',marginTop:2}}>When off, the “Request supplies” tab is hidden everywhere — nobody can file one.</div></div>
+          <button type="button" role="switch" aria-checked={supplyOn} onClick={toggleSupply} title="Toggle supply requests"
+            style={{width:46,height:26,borderRadius:99,background:supplyOn?'var(--accent)':'#c7c5bb',position:'relative',flex:'0 0 auto',border:'none',cursor:'pointer',padding:0,transition:'background .15s'}}>
+            <div style={{width:20,height:20,borderRadius:'50%',background:'#fff',position:'absolute',top:3,left:supplyOn?23:3,boxShadow:'0 1px 2px rgba(0,0,0,.2)',transition:'left .15s'}}></div></button>
+          <span style={{fontSize:11,fontWeight:800,color:supplyOn?'var(--accent-ink)':'var(--muted)',minWidth:24}}>{supplyOn?'ON':'OFF'}</span>
+        </div>
+        <div style={{opacity:supplyOn?1:.5,pointerEvents:supplyOn?'auto':'none'}}>
+          <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--ink2,#43494f)',margin:'4px 0 10px'}}>Step 1 · Approval — by department</div>
+          {depts.length?depts.map(dept=>{const rule=approverRuleFor(dept);return (
+            <div key={dept} style={{display:'flex',alignItems:'center',gap:11,padding:12,border:'1px solid var(--line)',borderRadius:11,marginBottom:10,background:'#fff'}}>
+              <div style={{width:36,height:36,borderRadius:10,background:'#f6f5f0',border:'1px solid var(--line)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flex:'0 0 auto'}}>🏢</div>
+              <div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:13.5}}>{dept}</div>
+                <div style={{fontSize:11,color:'var(--muted)',marginTop:1}}>Requests from this dept approved by</div></div>
+              <span style={{color:'var(--muted)',fontWeight:800,margin:'0 2px'}}>→</span>
+              <div style={{marginLeft:'auto'}}><StaffSelect value={rule?rule.staff_id:null} onChange={id=>setApprover(dept,id)}/></div>
+            </div>);}):<div style={{color:'var(--muted)',fontSize:12.5,marginBottom:10}}>No departments found.</div>}
+          <div style={{fontSize:11.5,color:'var(--muted)',margin:'2px 0 4px',lineHeight:1.5}}>One row per department. Unset departments fall back to that department’s Sr. Manager (today’s behaviour), so nothing breaks.</div>
+          <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--ink2,#43494f)',margin:'18px 0 10px'}}>Step 2 · Procurement</div>
+          {supply?<div style={{display:'flex',alignItems:'center',gap:11,padding:12,border:'1px solid var(--line)',borderRadius:11,background:'#fff'}}>
+            <div style={{width:36,height:36,borderRadius:10,background:'#f6f5f0',border:'1px solid var(--line)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flex:'0 0 auto'}}>📦</div>
+            <div><div style={{fontWeight:700,fontSize:13.5}}>Approved supply requests</div>
+              <div style={{fontSize:11,color:'var(--muted)',marginTop:1}}>Land here once approved, to procure</div></div>
             <span style={{color:'var(--muted)',fontWeight:800,margin:'0 2px'}}>→</span>
-            <div style={{marginLeft:'auto'}}><StaffSelect value={rule?rule.staff_id:null} onChange={id=>setApprover(dept,id)}/></div>
-          </div>);}):<div style={{color:'var(--muted)',fontSize:12.5,marginBottom:10}}>No departments found.</div>}
-        <div style={{fontSize:11.5,color:'var(--muted)',margin:'2px 0 4px',lineHeight:1.5}}>One row per department. Unset departments fall back to that department’s Sr. Manager (today’s behaviour), so nothing breaks.</div>
+            <div style={{marginLeft:'auto'}}><StaffSelect value={supply.staff_id} onChange={id=>setRecipient(supply,id)}/></div>
+          </div>:<div style={{color:'var(--muted)',fontSize:12.5}}>No supply recipient configured.</div>}
+        </div>
+        <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>A supply request goes to its department’s approver first (Step 1), then lands on the procurement recipient (Step 2) to fulfil.</div>
+      </div>}
 
-        <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--ink2,#43494f)',margin:'18px 0 10px'}}>Step 2 · Procurement</div>
-        {supply?<div style={{display:'flex',alignItems:'center',gap:11,padding:12,border:'1px solid var(--line)',borderRadius:11,background:'#fff'}}>
-          <div style={{width:36,height:36,borderRadius:10,background:'#f6f5f0',border:'1px solid var(--line)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flex:'0 0 auto'}}>📦</div>
-          <div><div style={{fontWeight:700,fontSize:13.5}}>Approved supply requests</div>
-            <div style={{fontSize:11,color:'var(--muted)',marginTop:1}}>Land here once approved, to procure</div></div>
-          <span style={{color:'var(--muted)',fontWeight:800,margin:'0 2px'}}>→</span>
-          <div style={{marginLeft:'auto'}}><StaffSelect value={supply.staff_id} onChange={id=>setRecipient(supply,id)}/></div>
-        </div>:<div style={{color:'var(--muted)',fontSize:12.5}}>No supply recipient configured.</div>}
+      {sec==='icons'&&<div className="panel" style={{maxWidth:760,marginBottom:0}}>
+        <div className="h-row"><h3><I n="grid" c="var(--accent-ink)"/>Sidebar icons</h3><span className="tag amber">Admin only</span></div>
+        <div style={{color:'var(--muted)',fontSize:12.5,margin:'2px 0 12px'}}>Pick an emoji for any menu item, or keep the default line icon. Only the Administrator can change these; the choice applies for everyone.</div>
+        {NAV_ITEMS.map(([key,def,label])=>
+          <div key={key} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 2px',borderBottom:'1px solid var(--line)'}}>
+            <span style={{width:30,height:30,display:'flex',alignItems:'center',justifyContent:'center',flex:'0 0 auto'}}>
+              {NAV_ICONS[key]?<span style={{fontSize:18}}>{NAV_ICONS[key]}</span>:<I n={def}/>}</span>
+            <div style={{flex:1,fontWeight:700,fontSize:13.5}}>{label}<div style={{fontWeight:500,fontSize:11,color:'var(--muted)'}}>{NAV_ICONS[key]?'Custom emoji':'Default icon'}</div></div>
+            <EmojiPicker value={NAV_ICONS[key]||''} onPick={e=>setNavIcon(key,e)}/>
+            {NAV_ICONS[key]?<button className="linkbtn" style={{fontSize:12}} onClick={()=>setNavIcon(key,null)}>Reset to default</button>:null}
+          </div>)}
+        <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>Every menu item can be personalised (or left as the clean default). “Reset to default” brings back the line icon.</div>
+      </div>}
+
       </div>
-      <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>Every picker accepts any staff member. A supply request goes to its department’s approver first (Step 1), then lands on the procurement recipient (Step 2) to fulfil. Departments with no approver set fall back to that department’s Sr. Manager.</div>
-    </div>
-
-    <div className="panel" style={{maxWidth:760}}>
-      <div className="h-row"><h3><I n="grid" c="var(--accent-ink)"/>Sidebar icons</h3><span className="tag amber">Admin only</span></div>
-      <div style={{color:'var(--muted)',fontSize:12.5,margin:'2px 0 16px'}}>Pick an emoji for these menu items, or leave the default line icon. Only the Administrator can change these; the choice applies for everyone.</div>
-      {[['tracker','Reports & requests','inbox'],['settings','Settings','gear']].map(([key,label,def])=>
-        <div key={key} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 2px',borderBottom:'1px solid var(--line)'}}>
-          <span style={{width:30,height:30,display:'flex',alignItems:'center',justifyContent:'center',flex:'0 0 auto'}}>
-            {NAV_ICONS[key]?<span style={{fontSize:18}}>{NAV_ICONS[key]}</span>:<I n={def}/>}</span>
-          <div style={{flex:1,fontWeight:700,fontSize:13.5}}>{label}<div style={{fontWeight:500,fontSize:11,color:'var(--muted)'}}>{NAV_ICONS[key]?'Custom emoji':'Default icon'}</div></div>
-          <EmojiPicker value={NAV_ICONS[key]||''} onPick={e=>setNavIcon(key,e)}/>
-          {NAV_ICONS[key]?<button className="linkbtn" style={{fontSize:12}} onClick={()=>setNavIcon(key,null)}>Reset to default</button>:null}
-        </div>)}
-      <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>Tip: pick an emoji to make an item stand out, or reset to keep the clean line icon that matches the rest of the menu.</div>
     </div>
   </div>;
 }
