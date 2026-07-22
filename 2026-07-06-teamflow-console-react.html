@@ -1792,7 +1792,7 @@ function TaskListModal({ctx,title,rows,close}){
             onClick={()=>printRows(rows,title,ctx.viewer.n)}><I n="print" s={14}/>Print / PDF</button>:null}
           <button className="iconbtn" onClick={close}><I n="x"/></button>
         </div></div>
-      <div className="scrollbox" style={{maxHeight:'62vh'}}>
+      <div className="scrollbox" style={{maxHeight:'62vh',padding:'6px 20px 18px'}}>
         {rows.length?rows.map(o=><div key={o.i} onClickCapture={e=>{e.stopPropagation();close();ctx.setDrawerIdx(o.i);}}>
           <TaskRow t={o.t} i={o.i} ctx={ctx}/></div>):<Empty t="No tasks" s="Nothing behind this number right now."/>}
       </div>
