@@ -31,6 +31,21 @@ const catById=id=>maintCats().find(c=>c.id===id)||null;
 const defaultMaintCat=()=>maintCats()[0]||null;              // legacy fallback = first (Building)
 const supplyRule=()=>routingRules().find(r=>r.kind==='supply')||null;
 const supplyRecipientId=()=>{const r=supplyRule();return r?r.staff_id:null;};
+/* Per-department supply APPROVER (v103). routing_rules rows kind='supply_approver', label=<department
+   name>, target_staff_id=<the approver — any staff member>. The Admin sets, per department, WHO
+   approves that department's supply requests, replacing the fixed dept Sr. Manager. Resolved at
+   request-creation time and STORED on requests.approver_staff_id; the dept Sr. Manager stays the
+   client-side fallback when a department has no rule / no target, so nothing breaks. Each app folds
+   these into its own supplyApproverId(...) resolver (stored id first, then configured dept rule, then
+   the dept-Sr-Manager fallback). */
+const supplyApproverRules=()=>routingRules().filter(r=>r.kind==='supply_approver');
+const supplyApproverRuleForDept=dept=>supplyApproverRules().find(r=>r.label===dept)||null;
+const supplyApproverIdForDept=dept=>{const r=supplyApproverRuleForDept(dept);return r?r.staff_id:null;};
+/* Master ON/OFF for the whole supply-request feature (org_settings.supply_requests_enabled, default
+   true). Loaded into each app's SUPPLY_ENABLED global (same pattern as ORG_NAME) by loadAll + realtime.
+   When off, the "Request supplies" tab is hidden everywhere. Defaults to enabled before load / if the
+   column is somehow absent. */
+const supplyEnabled=()=>(typeof SUPPLY_ENABLED==='undefined')?true:SUPPLY_ENABLED!==false;
 function issueRecipientId(r){                                  // live-resolved recipient staff id, or null
   const c=r&&r.routing_rule_id?catById(r.routing_rule_id):null;
   if(c)return c.staff_id||null;

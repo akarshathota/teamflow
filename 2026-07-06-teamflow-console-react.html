@@ -92,6 +92,38 @@
   .chip-s.green{background:var(--green-soft);color:var(--green)}
   .chip-s.teal{background:#d5ebe7;color:var(--accent-ink)}
 
+  /* Reports & requests tracker */
+  .trk-panel{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh-sm);overflow:hidden}
+  .trk-head{display:flex;align-items:center;gap:12px;padding:14px 16px 12px;flex-wrap:wrap}
+  .trk-head h3{margin:0;font-size:15px;display:flex;align-items:center;gap:8px}
+  .trk-badge{font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--blue);background:var(--blue-soft);border:1px solid #cdddee;border-radius:999px;padding:2px 9px}
+  .trk-tabs{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+  .trk-tab{font-size:12.5px;font-weight:700;color:var(--muted);padding:6px 11px;border-radius:8px;border:1px solid transparent;background:none;cursor:pointer;font-family:inherit}
+  .trk-tab:hover{background:#f3f2ec;color:var(--ink)}
+  .trk-tab.on{background:var(--accent-soft);color:var(--accent-ink);border-color:var(--accent-border)}
+  .trk-tw{overflow-x:auto}
+  .trk-t{width:100%;border-collapse:collapse;font-size:13px}
+  .trk-t thead th{text-align:left;font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);padding:8px 14px;border-bottom:1.5px solid var(--line);white-space:nowrap}
+  .trk-t tbody td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+  .trk-t tbody tr:last-child td{border-bottom:none}
+  .trk-item{font-weight:700}
+  .trk-sub{font-size:11px;color:var(--muted);margin-top:2px}
+  .trk-type{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 9px;white-space:nowrap}
+  .trk-type.m{color:var(--amber);background:var(--amber-soft);border:1px solid #e6d7ad}
+  .trk-type.s{color:var(--blue);background:var(--blue-soft);border:1px solid #cdddee}
+  .trk-who{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+  .trk-av{width:24px;height:24px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex:0 0 auto}
+  .trk-none{color:var(--muted);font-style:italic}
+  .trk-st{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 9px;white-space:nowrap}
+  .trk-st.rep{color:var(--ink2);background:#f1efe8;border:1px solid var(--line)}
+  .trk-st.wait{color:var(--amber);background:var(--amber-soft);border:1px solid #e6d7ad}
+  .trk-st.prog{color:var(--blue);background:var(--blue-soft);border:1px solid #cdddee}
+  .trk-st.late{color:var(--red);background:var(--red-soft);border:1px solid #f2c9d2}
+  .trk-st.done{color:var(--green);background:var(--green-soft);border:1px solid #bfe2cd}
+  .trk-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+  .trk-empty{padding:34px 16px;text-align:center;color:var(--muted);font-size:13px}
+  .trk-foot{font-size:11.5px;color:var(--muted);padding:12px 16px;line-height:1.5;border-top:1px solid var(--line)}
+
   .view{padding:20px 26px 46px}
   /* panels */
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:14px;margin-bottom:18px}
@@ -502,6 +534,7 @@ const TIER_LABEL={'Administrator':'Admin','Management':'Management','Director':'
 let STAFF=[];
 let tasks=[];
 let ORG_NAME='';
+let SUPPLY_ENABLED=true; // org_settings.supply_requests_enabled — master toggle for the supply-request feature (read via shared.js supplyEnabled())
 let ROUTING_RULES=[]; // routing_rules rows (admin-configured recipients) — read via shared.js helpers
 let requests=[];
 let notifs=[];
@@ -546,6 +579,8 @@ let byId2Name=()=>"";
 function rowToRequest(row){
   return {id:row.id,kind:row.kind,t:row.title,from:row.from_short,date:row.created_at.slice(0,10),
     routing_rule_id:row.routing_rule_id||null,target_staff_id:row.target_staff_id||null,stage:row.stage||null,
+    approver_staff_id:row.approver_staff_id||null,
+    declined_at:row.declined_at||null,declined_by:row.declined_by||null,
     note:row.note||"",files:row.files&&row.files.length?row.files:undefined};
 }
 const rowToRule=r=>({id:r.id,kind:r.kind,label:r.label,icon:r.icon||'',staff_id:r.target_staff_id||null,sort_order:r.sort_order||0,created_at:r.created_at});
@@ -562,13 +597,14 @@ async function loadAll(){
     loadNotifs(),
     sb.from('cron_runs').select('*').order('ran_at',{ascending:false}).limit(1),
     sb.from('admin_activity_log').select('*').order('created_at',{ascending:false}).limit(30),
-    sb.from('org_settings').select('name').eq('id',true).maybeSingle(),
+    sb.from('org_settings').select('name,supply_requests_enabled').eq('id',true).maybeSingle(),
     sb.from('routing_rules').select('*'),
     sb.from('checklist_items').select('*').eq('archived',false),
     sb.from('checklist_completions').select('*').gte('occ_date',clSince),
     sb.from('checklist_absences').select('*').gte('absent_date',clSince)
   ]);
   if(orgRow&&orgRow.name)ORG_NAME=orgRow.name;
+  if(orgRow&&typeof orgRow.supply_requests_enabled==='boolean')SUPPLY_ENABLED=orgRow.supply_requests_enabled;
   ROUTING_RULES.length=0;ROUTING_RULES.push(...(ruleRows||[]).map(rowToRule));
   STAFF.length=0;STAFF.push(...rowsToStaff(staffRows||[]));
   const byId=Object.fromEntries(STAFF.map(p=>[p.id,p]));
@@ -631,19 +667,30 @@ async function saveRequest(r){
   const from=byShort(r.from);
   const {data}=await sb.from('requests').insert({kind:r.kind,title:r.t,
     from_staff_id:from?from.id:null,routing_rule_id:r.routing_rule_id||null,
-    target_staff_id:r.target_staff_id||null,stage:r.stage||null,note:r.note||'',files:r.files||[]}).select().single();
+    target_staff_id:r.target_staff_id||null,approver_staff_id:r.approver_staff_id||null,
+    stage:r.stage||null,note:r.note||'',files:r.files||[]}).select().single();
   r.id=data.id;
 }
 /* persist a routing/stage change on an existing request (supply approval, or re-resolve) — patches
    only the routing columns, leaving title/note/files untouched. */
 async function updateRequestRow(r){if(r.id)await sb.from('requests').update({stage:r.stage||null,target_staff_id:r.target_staff_id||null}).eq('id',r.id);}
 async function deleteRequestRow(r){if(r.id)await sb.from('requests').delete().eq('id',r.id);}
+/* decline now KEEPS the request row (for the Reports & requests tracker) — stamps declined_at/by
+   instead of hard-deleting. viewerSeesReq excludes declined rows so they never re-appear as an
+   actionable queue item. */
+async function declineRequestRow(r){if(r.id)await sb.from('requests').update({declined_at:r.declined_at,declined_by:r.declined_by}).eq('id',r.id);}
 /* routing_rules writes — Administrator-only, enforced by RLS. Reassign a recipient, add/remove a
    maintenance category, rename or reorder. */
 async function saveRuleRecipient(id,staffId){await sb.from('routing_rules').update({target_staff_id:staffId||null}).eq('id',id);}
 async function saveRuleLabel(id,label){await sb.from('routing_rules').update({label}).eq('id',id);}
 async function saveRuleIcon(id,icon){await sb.from('routing_rules').update({icon}).eq('id',id);}
 async function addMaintRule(label,icon){const {data}=await sb.from('routing_rules').insert({kind:'maintenance',label,icon:icon||'🔧',sort_order:maintCats().length}).select().single();return data;}
+/* per-department supply approver rule (routing_rules kind='supply_approver', label=<dept name>) —
+   created lazily the first time an Admin picks an approver for a department. Same table/RLS as every
+   other routing rule (Administrator-only write). */
+async function addApproverRule(dept,staffId){const {data}=await sb.from('routing_rules').insert({kind:'supply_approver',label:dept,target_staff_id:staffId||null,sort_order:0}).select().single();return data;}
+/* master supply-feature toggle — flips org_settings.supply_requests_enabled (Administrator-only RLS). */
+async function saveSupplyEnabled(on){await sb.from('org_settings').update({supply_requests_enabled:on}).eq('id',true);}
 async function saveRuleOrder(id,order){await sb.from('routing_rules').update({sort_order:order}).eq('id',id);}
 async function deleteRule(id){await sb.from('routing_rules').delete().eq('id',id);}
 /* deletes a staff row AND its linked auth account together via the delete-staff-account edge
@@ -982,6 +1029,7 @@ function App(){
       .on('postgres_changes',{event:'*',schema:'public',table:'task_log'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'requests'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'routing_rules'},refetch)
+      .on('postgres_changes',{event:'*',schema:'public',table:'org_settings'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'notices'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'task_notifications'},refetch)
       .on('postgres_changes',{event:'*',schema:'public',table:'task_activity_notifications'},refetch)
@@ -1063,16 +1111,23 @@ function App(){
      ('Building') maintenance recipient. */
   const viewerIsRecipient=r=>{const rid=issueRecipientId(r);return !!(rid&&rid===viewer.id);};
   const canAssignIssue=r=>role==='admin'||role==='mgmt'||viewerIsRecipient(r);
-  /* Supply requests are two-stage. supplyApproverId = the Sr. Manager of the REQUESTER's department
-     (role='Manager' AND same dept); if the requester IS that Sr. Manager (or the dept has none),
-     escalate to the requester's boss so it never dead-ends. viewerSeesReq decides whose queue a
-     request/issue belongs in: admin/mgmt see all; a supply request sits with its approver until
-     approved, then with the configured supply recipient (target_staff_id) to fulfil. */
-  const supplyApproverId=r=>{const req=byShort(r.from);if(!req)return null;
+  /* Supply requests are two-stage. supplyApproverId resolves the stage-1 approver, in priority order:
+     (1) the approver STORED on the request at creation (approver_staff_id) — the configured approver
+     for the requester's department, snapshotted so it's stable; (2) the currently-configured
+     supply_approver rule for the requester's department (covers legacy requests with no stored id);
+     (3) FALLBACK to the dept Sr. Manager (role='Manager' AND same dept), escalating to the requester's
+     boss if the requester IS that Sr. Manager / the dept has none, so it never dead-ends. viewerSeesReq
+     decides whose queue a request/issue belongs in: admin/mgmt see all; a supply request sits with its
+     approver until approved, then with the configured supply recipient (target_staff_id) to fulfil. */
+  const supplyApproverId=r=>{
+    if(r.approver_staff_id)return r.approver_staff_id;
+    const req=byShort(r.from);if(!req)return null;
+    const cfg=supplyApproverIdForDept(req.dept);if(cfg)return cfg;
     const mgr=STAFF.find(p=>p.role==='Manager'&&p.dept===req.dept);
     if(mgr&&mgr.s!==req.s)return mgr.id;
     const boss=req.boss?byName(req.boss):null;return boss?boss.id:null;};
   const viewerSeesReq=r=>{
+    if(r.declined_at)return false; // declined items live only in the Reports & requests tracker, never the action queue
     if(role==='admin'||role==='mgmt')return true;
     if(r.kind==='issue')return viewerIsRecipient(r);
     return r.stage==='approved'?r.target_staff_id===viewer.id:supplyApproverId(r)===viewer.id;};
@@ -1127,8 +1182,9 @@ function App(){
     saveTask(nt).catch(console.error);deleteRequestRow(r).catch(console.error);
     say('Marked for procurement · added to '+(rec?rec.n.split(' ')[0]+'’s':'your')+' task list');};
   const declineReq=i=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
-    const r=requests[i];if(!r)return;requests.splice(i,1);R();
-    deleteRequestRow(r).catch(console.error);
+    const r=requests[i];if(!r)return;
+    r.declined_at=new Date().toISOString();r.declined_by=viewer.id;R();
+    declineRequestRow(r).catch(console.error);
     say((r.kind==='issue'?'Report':'Request')+' declined — '+(byShort(r.from)||{n:r.from}).n.split(' ')[0]+' will be notified');};
   const assignIssue=(i,who)=>{if(previewing){say("You're previewing — switch back to assign for real");return;}
     const r=requests[i];if(!r||!who)return;
@@ -1236,6 +1292,11 @@ function App(){
       {[['dashboard','grid','Dashboard','1'],['tasks','checkc','Tasks','2'],['checklists','checkc','Checklists','3'],['calendar','cal','Calendar','4'],['people','users','People & roles','5'],['reports','chart','Reports','6']].map(([v,ic,l,k])=>
         <button key={v} className={'navitem'+(view===v?' on':'')} onClick={()=>setView(v)}>
           <I n={ic}/><span className="lb">{l}</span><span className="kbd">{k}</span></button>)}
+      {/* Reports & requests tracker — org-wide oversight of every maintenance report + supply request.
+          Gated on the effective (Preview-As) role so it is visible ONLY to Management & Admin, and
+          hidden the moment you preview as a Manager/Team member. The view below is guarded to match. */}
+      {(role==='mgmt'||role==='admin')?<button className={'navitem'+(view==='tracker'?' on':'')} onClick={()=>setView('tracker')}>
+        <span style={{fontSize:16,width:18,textAlign:'center'}}>🗂️</span><span className="lb">Reports &amp; requests</span><span className="kbd">7</span></button>:null}
       {/* Settings is admin-only (org-management surface). Keyed off the real signed-in role, not the
           Preview-As role, so previewing as a non-admin still keeps the item available to switch back. */}
       {myRoleKey==='admin'?<button className={'navitem'+(view==='settings'?' on':'')} onClick={()=>setView('settings')}>
@@ -1283,6 +1344,7 @@ function App(){
       {view==='calendar'&&<CalendarView ctx={ctx}/>}
       {view==='people'&&<PeopleView ctx={ctx}/>}
       {view==='reports'&&<ReportsView ctx={ctx}/>}
+      {view==='tracker'&&(role==='mgmt'||role==='admin')&&<TrackerView ctx={ctx}/>}
       {view==='settings'&&<SettingsView ctx={ctx}/>}
     </div>
     {drawerIdx>=0&&<><div className="scrim" onClick={()=>setDrawerIdx(-1)}/><Drawer ctx={ctx} idx={drawerIdx}/></>}
@@ -1305,7 +1367,7 @@ function Topbar({ctx,searchRef}){
   // never disagree.
   const queueN=ctx.qReqs.length+ctx.qExts.length+ctx.qCompletions.length;
   const badgeN=unread.length+queueN;
-  const TITLES={dashboard:"Dashboard",tasks:"Tasks",calendar:"Team calendar",people:"People & roles",reports:"Reports"};
+  const TITLES={dashboard:"Dashboard",tasks:"Tasks",calendar:"Team calendar",people:"People & roles",reports:"Reports",tracker:"Reports & requests"};
   const ql=q.trim().toLowerCase();
   const tHits=ql?tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)&&(o.t.t.toLowerCase().includes(ql)||assignees(o.t).some(a=>byShort(a)&&byShort(a).n.toLowerCase().includes(ql)))).slice(0,5):[];
   const pHits=ql?ctx.scope.filter(p=>p.n.toLowerCase().includes(ql)||p.dept.toLowerCase().includes(ql)).slice(0,4):[];
@@ -1621,10 +1683,10 @@ function QueuePanel({ctx}){
           <div className="ring" style={{background:'var(--amber)'}}><I n="box" c="#fff"/></div>
           <div style={{flex:1,minWidth:0}}>
             <div className="nm">{r.t} <span className="tag teal">Supply · awaiting approval</span></div>
-            <div className="rs">From {p?p.n:r.from} · {fmtDate(r.date)}{r.note?' · “'+r.note+'”':''} · approver: {approver?approver.n.split(' ')[0]+' (Sr. Manager)':'—'}</div></div>
+            <div className="rs">From {p?p.n:r.from} · {fmtDate(r.date)}{r.note?' · “'+r.note+'”':''} · approver: {approver?approver.n.split(' ')[0]+' · '+approver.role:'—'}</div></div>
           <div className="act">{canApproveReq?<><button className="linkbtn" onClick={()=>ctx.approveReq(o.i)}>Approve</button>
             <button className="linkbtn mut" onClick={()=>ctx.declineReq(o.i)}>Decline</button></>
-            :<span className="rs" style={{whiteSpace:'nowrap'}}>Waiting for {approver?approver.n.split(' ')[0]:'Sr. Manager'}</span>}</div>
+            :<span className="rs" style={{whiteSpace:'nowrap'}}>Waiting for {approver?approver.n.split(' ')[0]:'the approver'}</span>}</div>
         </div>;})}
     </>:<Empty t="Queue is clear" s="Supply requests wait here for the requester's Sr. Manager to approve, then route to the configured recipient; maintenance reports go straight to their configured recipient; extensions and completions go to whoever assigned the task."/>}
   </div>;
@@ -1694,6 +1756,19 @@ function SettingsView({ctx}){
   const move=(rule,dir)=>{const arr=maintCats();const i=arr.indexOf(rule);const j=i+dir;if(j<0||j>=arr.length)return;
     const other=arr[j];const a=rule.sort_order,b=other.sort_order;rule.sort_order=b;other.sort_order=a;R();
     saveRuleOrder(rule.id,rule.sort_order).catch(console.error);saveRuleOrder(other.id,other.sort_order).catch(console.error);};
+  /* Step 1 · per-department supply approver. One row per distinct staff.department; each persists a
+     routing_rules kind='supply_approver' row keyed by that department name (create/update/clear). */
+  const supplyOn=supplyEnabled();
+  const toggleSupply=()=>{const v=!supplyOn;SUPPLY_ENABLED=v;R();saveSupplyEnabled(v).catch(console.error);};
+  const depts=[...new Set(STAFF.map(p=>p.dept).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const approverRuleFor=dept=>ROUTING_RULES.find(r=>r.kind==='supply_approver'&&r.label===dept)||null;
+  const setApprover=(dept,staffId)=>{
+    const rule=approverRuleFor(dept);
+    if(rule){rule.staff_id=staffId;R();if(!String(rule.id).startsWith('local-'))saveRuleRecipient(rule.id,staffId).catch(console.error);return;}
+    if(!staffId)return; // nothing to persist — an unset dept just falls back to its Sr. Manager
+    const local={id:'local-'+Date.now(),kind:'supply_approver',label:dept,icon:'',staff_id:staffId,sort_order:0};
+    ROUTING_RULES.push(local);R();
+    addApproverRule(dept,staffId).then(d=>{if(d){local.id=d.id;R();}}).catch(console.error);};
   return <div className="view">
     <div className="h-row" style={{marginBottom:4}}><h2 style={{margin:0}}>⚙️ Settings</h2></div>
     <div style={{color:'var(--muted)',fontSize:13,margin:'0 0 18px',maxWidth:760}}>Organisation-wide configuration. Only Administrators can change these.</div>
@@ -1712,15 +1787,42 @@ function SettingsView({ctx}){
         <button className="btn primary" style={{padding:'7px 14px'}} onClick={addType}>＋ Add</button>
       </div>
 
-      <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--ink2,#43494f)',margin:'22px 0 10px',paddingTop:16,borderTop:'1px solid var(--line)'}}>📦 Supply requests — after Sr. Manager approval</div>
-      {supply?<div style={{display:'flex',alignItems:'center',gap:11,padding:12,border:'1px solid var(--line)',borderRadius:11,background:'#fff'}}>
-        <div style={{width:36,height:36,borderRadius:10,background:'#f6f5f0',border:'1px solid var(--line)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flex:'0 0 auto'}}>📦</div>
-        <div><div style={{fontWeight:700,fontSize:13.5}}>Approved supply requests</div>
-          <div style={{fontSize:11,color:'var(--muted)',marginTop:1}}>Land here once the requester’s Sr. Manager approves</div></div>
-        <span style={{color:'var(--muted)',fontWeight:800,margin:'0 2px'}}>→</span>
-        <div style={{marginLeft:'auto'}}><StaffSelect value={supply.staff_id} onChange={id=>setRecipient(supply,id)}/></div>
-      </div>:<div style={{color:'var(--muted)',fontSize:12.5}}>No supply recipient configured.</div>}
-      <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>Every “recipient” is a staff picker — reassign anyone, add maintenance types, any time. Maintenance reports go straight to their recipient; supply requests are approved by the requester’s Sr. Manager first, then land on the recipient above to fulfil.</div>
+      <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--ink2,#43494f)',margin:'22px 0 10px',paddingTop:16,borderTop:'1px solid var(--line)'}}>📦 Supply requests</div>
+
+      {/* Master ON/OFF for the whole supply-request feature. When off, the "Request supplies" tab is
+          hidden everywhere (console + mobile) and the config below is greyed out. */}
+      <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',border:'1px solid '+(supplyOn?'var(--accent-border,#bcdcd6)':'var(--line)'),background:supplyOn?'var(--accent-soft,#e2f1ee)':'#faf9f5',borderRadius:11,marginBottom:16}}>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:800,fontSize:13.5,color:supplyOn?'var(--accent-ink)':'var(--ink2,#43494f)'}}>Supply requests enabled</div>
+          <div style={{fontSize:11.5,color:'var(--ink2,#43494f)',marginTop:2}}>When off, the “Request supplies” tab is hidden everywhere — nobody can file one.</div></div>
+        <button type="button" role="switch" aria-checked={supplyOn} onClick={toggleSupply} title="Toggle supply requests"
+          style={{width:46,height:26,borderRadius:99,background:supplyOn?'var(--accent)':'#c7c5bb',position:'relative',flex:'0 0 auto',border:'none',cursor:'pointer',padding:0,transition:'background .15s'}}>
+          <div style={{width:20,height:20,borderRadius:'50%',background:'#fff',position:'absolute',top:3,left:supplyOn?23:3,boxShadow:'0 1px 2px rgba(0,0,0,.2)',transition:'left .15s'}}></div></button>
+        <span style={{fontSize:11,fontWeight:800,color:supplyOn?'var(--accent-ink)':'var(--muted)',minWidth:24}}>{supplyOn?'ON':'OFF'}</span>
+      </div>
+
+      <div style={{opacity:supplyOn?1:.5,pointerEvents:supplyOn?'auto':'none'}}>
+        <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--ink2,#43494f)',margin:'4px 0 10px'}}>Step 1 · Approval — by department</div>
+        {depts.length?depts.map(dept=>{const rule=approverRuleFor(dept);return (
+          <div key={dept} style={{display:'flex',alignItems:'center',gap:11,padding:12,border:'1px solid var(--line)',borderRadius:11,marginBottom:10,background:'#fff'}}>
+            <div style={{width:36,height:36,borderRadius:10,background:'#f6f5f0',border:'1px solid var(--line)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flex:'0 0 auto'}}>🏢</div>
+            <div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:13.5}}>{dept}</div>
+              <div style={{fontSize:11,color:'var(--muted)',marginTop:1}}>Requests from this dept approved by</div></div>
+            <span style={{color:'var(--muted)',fontWeight:800,margin:'0 2px'}}>→</span>
+            <div style={{marginLeft:'auto'}}><StaffSelect value={rule?rule.staff_id:null} onChange={id=>setApprover(dept,id)}/></div>
+          </div>);}):<div style={{color:'var(--muted)',fontSize:12.5,marginBottom:10}}>No departments found.</div>}
+        <div style={{fontSize:11.5,color:'var(--muted)',margin:'2px 0 4px',lineHeight:1.5}}>One row per department. Unset departments fall back to that department’s Sr. Manager (today’s behaviour), so nothing breaks.</div>
+
+        <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--ink2,#43494f)',margin:'18px 0 10px'}}>Step 2 · Procurement</div>
+        {supply?<div style={{display:'flex',alignItems:'center',gap:11,padding:12,border:'1px solid var(--line)',borderRadius:11,background:'#fff'}}>
+          <div style={{width:36,height:36,borderRadius:10,background:'#f6f5f0',border:'1px solid var(--line)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flex:'0 0 auto'}}>📦</div>
+          <div><div style={{fontWeight:700,fontSize:13.5}}>Approved supply requests</div>
+            <div style={{fontSize:11,color:'var(--muted)',marginTop:1}}>Land here once approved, to procure</div></div>
+          <span style={{color:'var(--muted)',fontWeight:800,margin:'0 2px'}}>→</span>
+          <div style={{marginLeft:'auto'}}><StaffSelect value={supply.staff_id} onChange={id=>setRecipient(supply,id)}/></div>
+        </div>:<div style={{color:'var(--muted)',fontSize:12.5}}>No supply recipient configured.</div>}
+      </div>
+      <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>Every picker accepts any staff member. A supply request goes to its department’s approver first (Step 1), then lands on the procurement recipient (Step 2) to fulfil. Departments with no approver set fall back to that department’s Sr. Manager.</div>
     </div>
   </div>;
 }
@@ -1743,6 +1845,21 @@ function printRows(rows,label,viewerName){
   b+='</table>';
   const pr=document.getElementById('print-report');pr.innerHTML=b;pr.style.display='block';
   const ot=document.title;document.title=iso(new Date())+'-teamflow-'+label.toLowerCase().replace(/\s+/g,'-');
+  window.print();
+  setTimeout(()=>{pr.style.display='none';document.title=ot;},300);
+}
+/* Print/PDF for the Reports & requests tracker — reuses the same #print-report machinery, over the
+   currently-filtered rows (respects the type tab + month filter). */
+function printTracker(rows,tab,mon){
+  const scope=tab==='maint'?'Maintenance reports':tab==='supply'?'Supply requests':tab==='open'?'Open items':'All reports & requests';
+  const monTxt=(mon&&mon!=='all')?' · '+MONTHS[+mon.split('-')[1]-1]+' '+mon.split('-')[0]:'';
+  let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — Reports &amp; requests</div>';
+  b+='<div style="color:#555;margin-bottom:18px">'+scope+monTxt+' · '+new Date().toDateString()+' · '+rows.length+' items</div>';
+  b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Item</th><th style="text-align:left;padding:6px">Type</th><th style="text-align:left;padding:6px">Reported by</th><th style="text-align:left;padding:6px">Assigned to</th><th style="text-align:left;padding:6px">Status</th></tr>';
+  rows.forEach(r=>{b+='<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+r.item+'</td><td style="padding:6px">'+r.typeLabel+'</td><td style="padding:6px">'+(r.reporter?r.reporter.n:(r.reporterFallback||'—'))+'</td><td style="padding:6px">'+(r.assignee?r.assignee.n:'—')+'</td><td style="padding:6px">'+r.status.text+'</td></tr>';});
+  b+='</table>';
+  const pr=document.getElementById('print-report');pr.innerHTML=b;pr.style.display='block';
+  const ot=document.title;document.title=iso(new Date())+'-teamflow-reports-requests';
   window.print();
   setTimeout(()=>{pr.style.display='none';document.title=ot;},300);
 }
@@ -3397,6 +3514,122 @@ async function printDailyReports(rows,label,viewerName){
   window.print();
   setTimeout(()=>{pr.style.display='none';document.title=ot;},300);
 }
+/* ===== Reports & requests tracker (Management & Admin only) =========================================
+   Read-only, frontend-only aggregation — stores NOTHING new. It gathers into one list:
+     • open + declined rows from `requests` (maintenance issues awaiting assignment; supply requests
+       awaiting approval or awaiting procurement; anything declined), and
+     • assigned rows from `tasks` whose origin is 'issue'/'request' (a report/request that became a
+       real task), showing the assignee and the task's live status.
+   Management & Admin already load every task + request org-wide via RLS, so this is pure client-side
+   shaping. The view is additionally guarded in App() (only rendered for role mgmt/admin). */
+function TrackerView({ctx}){
+  const [tab,setTab]=useState('all');   // all | maint | supply | open
+  const [mon,setMon]=useState('all');   // 'all' | 'YYYY-MM'
+  const reporterFromNote=note=>{        // pull "X" out of a task note built at assign/fulfil time
+    if(!note)return null;
+    let m=note.match(/Reported by (.+?)(?: — |$)/);if(m)return m[1].trim();
+    m=note.match(/request from (.+?)(?: — |$)/);if(m)return m[1].trim();
+    return null;};
+  const rows=[];
+  // --- un-actioned items still living in `requests` (open) + anything declined -----------------------
+  requests.forEach(r=>{
+    const isIssue=r.kind==='issue';
+    const cat=isIssue&&r.routing_rule_id?catById(r.routing_rule_id):null;
+    const rep=byShort(r.from);
+    let status,placeholder;
+    if(r.declined_at){
+      status={cls:'rep',dot:'#9a938a',text:'Declined by '+((byId2Name(r.declined_by)||'a manager').split(' ')[0])};
+      placeholder='—';
+    }else if(isIssue){
+      const recName=byId2Name(issueRecipientId(r));
+      status={cls:'rep',dot:'#9a938a',text:'Reported'+(recName?' · with '+recName.split(' ')[0]:'')};
+      placeholder='not yet assigned';
+    }else if(r.stage==='approved'){
+      status={cls:'wait',dot:'var(--amber)',text:'Approved · procuring'};
+      placeholder='awaiting procurement';
+    }else{
+      const apName=byId2Name(ctx.supplyApproverId(r));
+      status={cls:'wait',dot:'var(--amber)',text:'Awaiting approval'+(apName?' · '+apName.split(' ')[0]:'')};
+      placeholder='awaiting approval';
+    }
+    rows.push({
+      item:r.t,sub:'Reported '+fmtDate(r.date),date:r.date,
+      typeKind:isIssue?'m':'s',
+      typeIcon:isIssue?((cat&&cat.icon)||'🔧'):'📦',
+      typeLabel:isIssue?((cat&&cat.label)||'Maintenance'):'Supply',
+      reporter:rep?{n:rep.n,av:rep.av,c:avColor(rep.n)}:{n:r.from||'—',av:(r.from||'?')[0],c:'#888'},
+      assignee:null,placeholder,status,isOpen:!r.declined_at});
+  });
+  // --- items that became real tasks (assigned) ------------------------------------------------------
+  tasks.forEach(t=>{
+    if(t.origin!=='issue'&&t.origin!=='request')return;
+    const isIssue=t.origin==='issue';
+    const assignee=byShort(t.who);
+    const repName=reporterFromNote(t.note);
+    const rep=repName?byName(repName):null;
+    let status;
+    if(t.status==='done'){
+      status={cls:'done',dot:'var(--green)',text:'Done'+(t.doneOn?' · '+fmtDate(t.doneOn):'')};
+    }else if(isOverdue(t)){
+      const d=overdueDays(t);
+      status={cls:'late',dot:'var(--red)',text:'Assigned · '+d+' day'+(d!=1?'s':'')+' late'};
+    }else{
+      status={cls:'prog',dot:'var(--blue)',text:'Assigned · '+ST[t.status].l};
+    }
+    rows.push({
+      item:t.t,sub:isIssue?'Maintenance report':'Supply request',date:t.issued||t.date,
+      typeKind:isIssue?'m':'s',
+      typeIcon:isIssue?'🔧':'📦',
+      typeLabel:isIssue?'Maintenance':'Supply',
+      reporter:rep?{n:rep.n,av:rep.av,c:avColor(rep.n)}:(repName?{n:repName,av:repName[0].toUpperCase(),c:'#888'}:null),
+      reporterFallback:(!rep&&!repName)?(t.note||'—'):null,
+      assignee:assignee?{n:assignee.n,av:assignee.av,c:avColor(assignee.n)}:null,
+      placeholder:assignee?null:'not yet assigned',status,isOpen:t.status!=='done'});
+  });
+  const nMaint=rows.filter(r=>r.typeKind==='m').length;
+  const nSupply=rows.filter(r=>r.typeKind==='s').length;
+  const nOpen=rows.filter(r=>r.isOpen).length;
+  const months=[...new Set(rows.map(r=>r.date&&(''+r.date).slice(0,7)).filter(Boolean))].sort().reverse();
+  const monLbl=m=>{const p=m.split('-');return MONTHS[+p[1]-1]+' '+p[0];};
+  const shown=rows.filter(r=>(tab==='all'?true:tab==='maint'?r.typeKind==='m':tab==='supply'?r.typeKind==='s':r.isOpen)
+      &&(mon==='all'||(r.date&&(''+r.date).slice(0,7)===mon)))
+    .sort((a,b)=>(a.isOpen===b.isOpen)?0:(a.isOpen?-1:1));
+  const TABS=[['all','All'],['maint','🔧 Maintenance'],['supply','📦 Supplies'],['open','Open only']];
+  return <div className="view">
+    <div className="trk-panel">
+      <div className="trk-head">
+        <h3>🗂️ All reports &amp; requests</h3>
+        <span className="trk-badge">Management &amp; Admin</span>
+        <div className="trk-tabs">{TABS.map(([k,l])=>
+          <button key={k} className={'trk-tab'+(tab===k?' on':'')} onClick={()=>setTab(k)}>{l}</button>)}
+          <select className="fsel" style={{fontWeight:700,fontSize:12.5,padding:'6px 8px'}} value={mon} onChange={e=>setMon(e.target.value)}>
+            <option value="all">All months</option>
+            {months.map(m=><option key={m} value={m}>{monLbl(m)}</option>)}
+          </select>
+          {shown.length?<button className="btn soft" style={{padding:'6px 12px'}} onClick={()=>printTracker(shown,tab,mon)}><I n="print" s={14}/>Print / PDF</button>:null}
+        </div>
+      </div>
+      <div className="trk-tw">
+        <table className="trk-t">
+          <thead><tr><th>Item</th><th>Type</th><th>Reported by</th><th>Assigned to</th><th>Status</th></tr></thead>
+          <tbody>
+            {shown.map((r,i)=><tr key={i}>
+              <td><div className="trk-item">{r.item}</div><div className="trk-sub">{r.sub}</div></td>
+              <td><span className={'trk-type '+r.typeKind}>{r.typeIcon} {r.typeLabel}</span></td>
+              <td>{r.reporter?<span className="trk-who"><span className="trk-av" style={{background:r.reporter.c}}>{r.reporter.av}</span>{r.reporter.n.split(' ')[0]}</span>
+                :<span className="trk-none">{r.reporterFallback||'—'}</span>}</td>
+              <td>{r.assignee?<span className="trk-who"><span className="trk-av" style={{background:r.assignee.c}}>{r.assignee.av}</span>{r.assignee.n.split(' ')[0]}</span>
+                :<span className="trk-none">— {r.placeholder}</span>}</td>
+              <td><span className={'trk-st '+r.status.cls}><span className="trk-dot" style={{background:r.status.dot}}></span>{r.status.text}</span></td>
+            </tr>)}
+            {!shown.length?<tr><td colSpan="5"><div className="trk-empty">Nothing to show in this filter.</div></td></tr>:null}
+          </tbody>
+        </table>
+      </div>
+      <div className="trk-foot"><b>{rows.length}</b> total · <b>{nOpen}</b> open · {nMaint} maintenance · {nSupply} supply. Un-actioned items come from the live report/request queue; once assigned (or a supply request is approved &amp; sent to procure) the row shows the assignee and the task's live status. Declined items are kept here for the record. Management &amp; Admin see the whole org.</div>
+    </div>
+  </div>;
+}
 function ReportsView({ctx}){
   const [mode,setMode]=useState('tasks');
   const [fw,setFw]=useState('all');
@@ -3823,6 +4056,9 @@ const QC_SAMPLES=[
 ];
 function QuickCapture({ctx,close}){
   const [kind,setKind]=useState('task');
+  // if the supply feature gets switched off while this modal sits on the (now-hidden) Request tab,
+  // fall back to Task so the user isn't stranded on a tab that no longer renders.
+  useEffect(()=>{if(kind==='request'&&!supplyEnabled())setKind('task');},[kind]);
   const [cat,setCat]=useState(null); // repair/maintenance report category id (routing_rules kind='maintenance'); null → first
   const [txt,setTxt]=useState('');
   const [mode,setMode]=useState('others');
@@ -3916,16 +4152,21 @@ function QuickCapture({ctx,close}){
     const clean=txt.trim();
     if(kind!=='task'){
       if(!clean){ctx.say(kind==='issue'?'Describe the issue first':'Say what you need first');return;}
+      // Supply request: resolve the stage-1 approver NOW (configured supply_approver rule for the
+      // requester's department, else the dept Sr.-Manager fallback) and store it on the request, so
+      // the request routes to a stable approver even if config later changes.
+      const appId=kind==='request'?ctx.supplyApproverId({from:ctx.viewer.s}):null;
       const nr={kind:kind==='issue'?'issue':'request',t:clean.charAt(0).toUpperCase()+clean.slice(1),
         from:ctx.viewer.s,date:iso(TODAY),
         routing_rule_id:kind==='issue'&&selCat?selCat.id:undefined,
         target_staff_id:kind==='issue'&&issueRec?issueRec.id:undefined,
+        approver_staff_id:kind==='request'?(appId||undefined):undefined,
         stage:kind==='request'?'pending':undefined,
         note:note.trim(),files:kind==='issue'&&files.length?files.slice():undefined};
       requests.unshift(nr);
       close();ctx.R();
       saveRequest(nr).catch(console.error);
-      ctx.say(kind==='issue'?'Report sent to '+(issueRec?issueRec.n.split(' ')[0]+' ('+selCat.label+')':'the recipient'):'Request sent to your Sr. Manager for approval');
+      ctx.say(kind==='issue'?'Report sent to '+(issueRec?issueRec.n.split(' ')[0]+' ('+selCat.label+')':'the recipient'):'Request sent to '+((appId&&byId(appId))?byId(appId).n.split(' ')[0]:'your approver')+' for approval');
       return;
     }
     if(!clean||clean.length<3){ctx.say('Type or speak the task first');return;}
@@ -3950,13 +4191,16 @@ function QuickCapture({ctx,close}){
   const whoList=pickerBase.filter(x=>!whoQ||x.n.toLowerCase().includes(whoQ.toLowerCase())||x.dept.toLowerCase().includes(whoQ.toLowerCase()));
   const hints={task:<span>Type or speak in plain words — <b>AI fills in who, when and what type</b>. Tap any value to change it.</span>,
     issue:<span>Goes straight to <b>{issueRec?issueRec.n.split(' ')[0]+(selCat?' ('+selCat.label+')':''):'the configured recipient'}</b> — they assign the right person, no approval needed.</span>,
-    request:<span>Goes to <b>your department’s Sr. Manager</b> for one-tap approval, then to the configured supply recipient to fulfil.</span>};
+    request:<span>Goes to <b>your department’s configured approver</b> for one-tap approval, then to the configured supply recipient to fulfil.</span>};
   const phs={task:'Try: "Ask Hari to fix the lab projector by Friday"',issue:"What's broken? e.g. Projector in Lab 2 not working",request:'What do you need? e.g. 2 boxes of chalk for Class 5'};
   return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
     <div className="modal">
       <div className="qc-head"><h3>New</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
       <div className="selfseg" style={{marginTop:12}}>
-        {[['task','Task'],['issue','Report for repair/maintenance'],['request','Request supplies']].map(([k,l])=>
+        {/* the 'request' (Request supplies) tab is omitted for everyone — incl. admin — when the
+            master supply toggle (org_settings.supply_requests_enabled) is off. */}
+        {[['task','Task'],['issue','Report for repair/maintenance'],['request','Request supplies']]
+          .filter(([k])=>k!=='request'||supplyEnabled()).map(([k,l])=>
           <button key={k} className={kind===k?'on':''} onClick={()=>setKind(k)}>{l}</button>)}
       </div>
       <div className="qc-input-row">
