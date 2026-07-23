@@ -4081,23 +4081,34 @@ function DeptMismatchModal({ctx,close}){
                 <div className="nm">{o.t.t}</div>
                 <div className="rs">Tagged: <b>{taggedLabel}</b> · {o.as.map(p=>p.n+' ('+(p.dept||'—')+')').join(', ')}</div>
                 {mode==='dept'?
-                  <div style={{marginTop:6}}>
-                    <select className="fsel" style={{fontSize:12.5,padding:'3px 8px'}} defaultValue={suggested||o.t.bucket} autoFocus
-                      onChange={e=>fixBucket(o.t,e.target.value)} onBlur={()=>setEditing(null)}>
+                  /* only reached when there's no single suggested dept (e.g. assignees span >1 dept and
+                     the first has no bucket) — a placeholder-first picker so the first real pick always
+                     fires onChange (a pre-selected value would swallow the very choice being made). */
+                  <div style={{marginTop:6,display:'flex',gap:10,alignItems:'center'}}>
+                    <select className="fsel" style={{fontSize:12.5,padding:'3px 8px'}} defaultValue=""
+                      onChange={e=>{if(e.target.value)fixBucket(o.t,e.target.value);}}>
+                      <option value="">Choose a department…</option>
                       {realDeptKeys(ctx.scope).map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}
                     </select>
+                    <button className="linkbtn" onClick={()=>setEditing(null)}>Cancel</button>
                   </div>
                 :mode==='reassign'?
                   <div style={{marginTop:6}}>
-                    <select className="fsel" style={{fontSize:12.5,padding:'3px 8px'}} defaultValue="" autoFocus
-                      onChange={e=>fixAssignee(o.t,e.target.value)} onBlur={()=>setEditing(null)}>
-                      <option value="">Choose someone in {taggedLabel}…</option>
-                      {inOldDept.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}
-                    </select>
-                    {!inOldDept.length?<div style={{fontSize:11.5,color:'var(--muted)',marginTop:4}}>No one else in your scope is currently in {taggedLabel}.</div>:null}
+                    <div style={{display:'flex',gap:10,alignItems:'center'}}>
+                      <select className="fsel" style={{fontSize:12.5,padding:'3px 8px'}} defaultValue="" disabled={!inOldDept.length}
+                        onChange={e=>{if(e.target.value)fixAssignee(o.t,e.target.value);}}>
+                        <option value="">Choose someone in {taggedLabel}…</option>
+                        {inOldDept.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}
+                      </select>
+                      <button className="linkbtn" onClick={()=>setEditing(null)}>Cancel</button>
+                    </div>
+                    {!inOldDept.length?<div style={{fontSize:11.5,color:'var(--muted)',marginTop:4}}>No one else in your scope is currently in {taggedLabel} — use “Move task” instead.</div>:null}
                   </div>
                 :<div className="act" style={{marginTop:6,marginLeft:0,gap:14}}>
-                  <button className="linkbtn" onClick={()=>setEditing({key,mode:'dept'})}>
+                  {/* suggested dept known (the common case) → move in one click; the button already names
+                      the destination, so a second dropdown step was pure friction (and pre-selected the
+                      target, so picking it fired no change — the "Move doesn't work" bug). */}
+                  <button className="linkbtn" onClick={()=>suggested?fixBucket(o.t,suggested):setEditing({key,mode:'dept'})}>
                     → Move task to {suggested?BUCKETS[suggested]:'a different department'}</button>
                   <button className="linkbtn" onClick={()=>setEditing({key,mode:'reassign'})}>
                     → Reassign within {taggedLabel}</button>
