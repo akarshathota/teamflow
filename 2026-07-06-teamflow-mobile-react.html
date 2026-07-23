@@ -1932,6 +1932,12 @@ function TaskSheet({ctx,close}){
   const load=workload();
   const emp=dirPool.filter(m=>(dept==='all'||m.dept===dept)&&(!q||m.n.toLowerCase().includes(q.toLowerCase())||m.dept.toLowerCase().includes(q.toLowerCase())||m.role.toLowerCase().includes(q.toLowerCase())));
   const bosses=instructorsFor(ctx.r.self);
+  /* Preventive dept/assignee mismatch warning (mirrors console v132 + the v131 modal): flag when the
+     chosen department matches no assignee's real department. Skipped for self-tasks. mmSuggest = the
+     first assignee's own department, offered as a one-tap fix. */
+  const mmSelf=assign==='self';
+  const deptMismatch=cur&&!mmSelf&&cur.whos.length&&!cur.whos.some(n=>{const m=findMember(n);return m&&LABEL_TO_BUCKET[m.dept]===cur.bucket;});
+  const mmSuggest=deptMismatch?(()=>{const m=findMember(cur.whos[0]);return m?LABEL_TO_BUCKET[m.dept]:null;})():null;
   return <>
     <h3>New task</h3>
     <div className="sub">Type it or speak it — your choice.</div>
@@ -2036,6 +2042,10 @@ function TaskSheet({ctx,close}){
             </div></>:null}
         </>:null}
       </div></div>
+      {deptMismatch?<div className="reason" style={{color:'var(--red)',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',margin:'8px 2px 0'}}>
+        <span><b>⚠ Mismatch</b> — {cur.whos.length>1?'no assignee is':'the assignee isn’t'} in {BUCKETS[cur.bucket]||cur.bucket}.</span>
+        {mmSuggest&&mmSuggest!==cur.bucket?<button onClick={()=>setCur({...cur,bucket:mmSuggest,bucketSugg:true})} style={{background:'none',border:'none',color:'var(--accent-ink,#0a5c54)',fontWeight:700,fontSize:12.5,cursor:'pointer',padding:0,textDecoration:'underline'}}>→ Set to {BUCKETS[mmSuggest]}</button>:null}
+      </div>:null}
       <button className="optst" onClick={()=>setShowOpts(!showOpts)}><span>⚙️ Options</span>
         <span style={{fontWeight:600,color:'var(--muted)',fontSize:12.5}}>Department: {BUCKETS[cur.bucket]||cur.bucket}{cur.bucketSugg?' (auto)':''}</span></button>
       {showOpts?<div className="field"><div className="k">Department</div><div className="v">

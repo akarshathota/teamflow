@@ -4898,6 +4898,12 @@ function QuickCapture({ctx,close}){
   const pickerBase=isDir?(deptTab==='other'?dirOther:dirWithin):ctx.scope;
   const pickerDepts=[...new Set(pickerBase.map(p=>p.dept).filter(Boolean))].sort();
   const whoList=pickerBase.filter(x=>(!whoDept||x.dept===whoDept)&&(!whoQ||x.n.toLowerCase().includes(whoQ.toLowerCase())||x.dept.toLowerCase().includes(whoQ.toLowerCase())));
+  /* Preventive dept/assignee mismatch check (the v131 modal, but live while composing): warn when the
+     chosen department matches NO assignee's real department. Skipped for self-tasks (you can't misassign
+     to yourself). Common trigger: a joint task spanning departments, or a manual department override.
+     mmSuggest = the first assignee's own department, offered as a one-tap fix. */
+  const deptMismatch=kind==='task'&&mode!=='self'&&whos.length&&!whos.some(s=>{const p=byShort(s);return p&&LABEL_TO_BUCKET[p.dept]===bucket;});
+  const mmSuggest=deptMismatch?(()=>{const p=byShort(whos[0]);return p?LABEL_TO_BUCKET[p.dept]:null;})():null;
   const hints={task:<span>Type or speak in plain words — <b>AI fills in who, when and what type</b>. Tap any value to change it.</span>,
     issue:<span>Goes straight to <b>{issueRec?issueRec.n.split(' ')[0]+(selCat?' ('+selCat.label+')':''):'the configured recipient'}</b> — they assign the right person, no approval needed.</span>,
     request:<span>Goes to <b>your department’s configured approver</b> for one-tap approval, then to the configured supply recipient to fulfil.</span>};
@@ -4993,6 +4999,10 @@ function QuickCapture({ctx,close}){
         </div></div>
         <div className="fieldrow"><div className="k">Department</div><div className="v">
           <span className="editchip" onClick={()=>setPick(pick==='bucket'?null:'bucket')}>{BUCKETS[bucket]||bucket} <I n="chevd" s={13}/></span>
+          {deptMismatch?<div className="whysm" style={{color:'var(--red)',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginTop:4}}>
+            <span><b>⚠ Mismatch</b> — {whos.length>1?'no assignee is':'the assignee isn’t'} in {BUCKETS[bucket]||bucket}.</span>
+            {mmSuggest&&mmSuggest!==bucket?<button className="linkbtn" style={{fontSize:12}} onClick={()=>{setBucket(mmSuggest);setBucketSugg(true);}}>→ Set to {BUCKETS[mmSuggest]}</button>:null}
+          </div>:null}
           {pick==='bucket'?<div className="pickrow">{realDeptKeys(ctx.scope).map(k=><button key={k} className={'pk'+(k===bucket?' cur':'')}
             onClick={()=>{setBucket(k);setBucketSugg(false);setPick(null);}}>{BUCKETS[k]}</button>)}</div>:null}
         </div></div>
