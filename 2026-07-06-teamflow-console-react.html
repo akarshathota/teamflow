@@ -336,8 +336,10 @@
   .onode .ochip.none{border-color:var(--line);background:transparent;color:var(--muted);font-weight:600}
   .odeptgroup{display:inline-flex;align-items:center;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent);border-radius:6px;padding:3px 10px}
   .org-checklist{display:flex;flex-direction:column;gap:9px;margin:12px 20px;max-height:220px;overflow-y:auto}
-  .org-check-row{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink);cursor:pointer}
-  .org-check-row input{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
+  /* higher specificity than .mf label (which the edit-head-depts picker nests these rows inside) so
+     the department name renders as a normal dark row, not a tiny uppercase muted form-label */
+  .org-checklist .org-check-row{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:500;color:var(--ink);cursor:pointer;text-transform:none;letter-spacing:normal;text-align:left;margin:0}
+  .org-checklist .org-check-row input{width:16px;height:16px;flex:0 0 auto;cursor:pointer;accent-color:var(--accent)}
   .org-role-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 20px}
   .org-role-grid button{border:1.5px solid var(--line);background:var(--card);border-radius:9px;padding:14px 8px;font-family:inherit;
     font-size:13px;font-weight:700;color:var(--ink);cursor:pointer}
