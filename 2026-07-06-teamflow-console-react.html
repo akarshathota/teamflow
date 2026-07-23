@@ -4441,6 +4441,8 @@ function QuickCapture({ctx,close}){
   const [mode,setMode]=useState('others');
   const [deptTab,setDeptTab]=useState('within'); // Directors only: 'within' | 'other' (self is handled by mode==='self')
   const [whos,setWhos]=useState([]);const [whoSugg,setWhoSugg]=useState(true);const [whoWhy,setWhoWhy]=useState('');
+  const [joint,setJoint]=useState(false);   // opt-in: only when ticked can more than one person be added
+  const [whoDept,setWhoDept]=useState('');   // department filter inside the assignee picker
   const [when,setWhen]=useState(null);const [whenSugg,setWhenSugg]=useState(true);const [whenWhy,setWhenWhy]=useState('');
   const [dueTime,setDueTime]=useState('');
   const [type,setType]=useState('work');const [prio,setPrio]=useState('med');
@@ -4478,8 +4480,11 @@ function QuickCapture({ctx,close}){
     if(kind!=='task'||text.trim().length<6)return;
     const low=text.toLowerCase();
     const named=ctx.scope.filter(p=>new RegExp('\\b'+p.s.toLowerCase()+'\\b').test(low)).map(p=>p.s);
-    if(named.length){setWhos(named);setWhoSugg(false);setWhoWhy(named.length>1?'all named in your sentence — joint task':'named in your sentence');}
-    else{const s=suggestWho(guessType(low),ctx.scope);if(s&&(whoSugg||!whos.length)){setWhos([s.s]);setWhoSugg(true);setWhoWhy(s.why);}}
+    /* Name(s) in the sentence → auto-assign (multiple names → a genuine joint task, tick it on). No
+       name → DON'T auto-pick a "suggested" person; leave it empty so the assigner chooses via the
+       department filter + name picker (only clear a still-suggested slot, never the user's own pick). */
+    if(named.length){setWhos(named);setWhoSugg(false);setWhoWhy(named.length>1?'all named in your sentence — joint task':'named in your sentence');if(named.length>1)setJoint(true);}
+    else if(whoSugg){setWhos([]);setWhoWhy('');}
     const gt=guessType(low);setType(gt);
     /* the assignee's own real department is a stronger signal than keywords in freeform text —
        prefer it whenever exactly one person is named (a joint task could span departments, so
@@ -4509,13 +4514,18 @@ function QuickCapture({ctx,close}){
   }
   function toggleWho(v){
     let next;
-    if(!canMulti)next=[v];
+    // multi-select only when this is an opt-in joint task; otherwise a pick REPLACES the selection
+    if(!canMulti||!joint)next=[v];
     else{next=whos.slice();const ix=next.indexOf(v);
       if(ix>-1){if(next.length>1)next.splice(ix,1);}else next.push(v);}
     setWhos(next);setWhoSugg(false);
     setWhoWhy(next.length>1?'joint task — it appears in each person’s list':'you picked '+(byShort(next[0])||{n:''}).n.split(' ')[0]);
-    if(!canMulti)setPick(null);
+    // department auto-follows a single assignee's own department (the person drives the department)
+    if(next.length===1){const p=byShort(next[0]);if(p&&LABEL_TO_BUCKET[p.dept]){setBucket(LABEL_TO_BUCKET[p.dept]);setBucketSugg(true);}}
+    if(!joint)setPick(null);
   }
+  // ticking joint off collapses any multi-selection back to the first person (+ re-syncs department)
+  function setJointMode(on){setJoint(on);if(!on&&whos.length>1){const first=[whos[0]];setWhos(first);const p=byShort(first[0]);setWhoWhy(p?'you picked '+p.n.split(' ')[0]:'');if(p&&LABEL_TO_BUCKET[p.dept]){setBucket(LABEL_TO_BUCKET[p.dept]);setBucketSugg(true);}}}
   async function filePicked(e){
     const picked=[...e.target.files];
     if(!picked.length)return;
@@ -4565,7 +4575,8 @@ function QuickCapture({ctx,close}){
   }
   const dts=[0,1,7].map(n=>{const d=new Date(TODAY);d.setDate(d.getDate()+n);return d;});
   const pickerBase=isDir?(deptTab==='other'?dirOther:dirWithin):ctx.scope;
-  const whoList=pickerBase.filter(x=>!whoQ||x.n.toLowerCase().includes(whoQ.toLowerCase())||x.dept.toLowerCase().includes(whoQ.toLowerCase()));
+  const pickerDepts=[...new Set(pickerBase.map(p=>p.dept).filter(Boolean))].sort();
+  const whoList=pickerBase.filter(x=>(!whoDept||x.dept===whoDept)&&(!whoQ||x.n.toLowerCase().includes(whoQ.toLowerCase())||x.dept.toLowerCase().includes(whoQ.toLowerCase())));
   const hints={task:<span>Type or speak in plain words — <b>AI fills in who, when and what type</b>. Tap any value to change it.</span>,
     issue:<span>Goes straight to <b>{issueRec?issueRec.n.split(' ')[0]+(selCat?' ('+selCat.label+')':''):'the configured recipient'}</b> — they assign the right person, no approval needed.</span>,
     request:<span>Goes to <b>your department’s configured approver</b> for one-tap approval, then to the configured supply recipient to fulfil.</span>};
@@ -4625,14 +4636,21 @@ function QuickCapture({ctx,close}){
         <div className="fieldrow"><div className="k">Task</div><div className="v">{cleanTask(txt)}</div></div>
         <div className="fieldrow"><div className="k">Assign to</div><div className="v">
           <span className="editchip" onClick={()=>setPick(pick==='who'?null:'who')}>
-            {mode==='self'?'You — '+ctx.viewer.n:whos.map(a=>(byShort(a)||{n:a}).n).join(' + ')||'—'} <I n="chevd" s={13}/></span>
+            {mode==='self'?'You — '+ctx.viewer.n:(whos.length?whos.map(a=>(byShort(a)||{n:a}).n).join(' + '):'Choose a person')} <I n="chevd" s={13}/></span>
           {whoWhy&&mode!=='self'?<div className="whysm"><b>{whoSugg?'✦ Suggested':'✓'}</b> — {whoWhy}</div>:null}
           {pick==='who'&&mode!=='self'?<div className="pickrow">
-            <input className="fsel" style={{width:'100%'}} placeholder="Search name or department…" value={whoQ} onChange={e=>setWhoQ(e.target.value)}/>
+            {canMulti?<label className="whysm" style={{display:'flex',alignItems:'center',gap:8,width:'100%',cursor:'pointer',fontWeight:600}}>
+              <input type="checkbox" style={{width:15,height:15,accentColor:'var(--accent)'}} checked={joint} onChange={e=>setJointMode(e.target.checked)}/>
+              Assign as a <b>joint task</b> (more than one person)</label>:null}
+            <select className="fsel" style={{width:'100%'}} value={whoDept} onChange={e=>setWhoDept(e.target.value)} aria-label="Filter by department">
+              <option value="">All departments</option>
+              {pickerDepts.map(d=><option key={d} value={d}>{d}</option>)}
+            </select>
+            <input className="fsel" style={{width:'100%'}} placeholder="Search name…" value={whoQ} onChange={e=>setWhoQ(e.target.value)}/>
             {isDir&&deptTab==='other'?<div className="whysm" style={{width:'100%'}}>🌐 <b>Any department</b> — everyone except Administrators &amp; Management</div>:null}
-            {canMulti?<div className="whysm">Tap more than one person to assign jointly</div>:null}
+            {joint?<div className="whysm">Tap each person to include — the task appears in everyone’s list</div>:null}
             {whoList.length?whoList.map(x=><button key={x.s} className={'pk'+(whos.includes(x.s)?' cur':'')} onClick={()=>toggleWho(x.s)}>{whos.includes(x.s)?'✓ ':''}{x.n} · {x.dept}</button>)
-              :<div className="whysm">No one matches “{whoQ}”</div>}
+              :<div className="whysm">No one matches</div>}
           </div>:null}
         </div></div>
         <div className="fieldrow"><div className="k">Due</div><div className="v">
@@ -4650,7 +4668,7 @@ function QuickCapture({ctx,close}){
         <div className="fieldrow"><div className="k">Type</div><div className="v">
           <span className="editchip" onClick={()=>setPick(pick==='type'?null:'type')}>{TYPES[type]} <I n="chevd" s={13}/></span>
           {pick==='type'?<div className="pickrow">{Object.keys(TYPES).map(k=><button key={k} className={'pk'+(k===type?' cur':'')}
-            onClick={()=>{setType(k);if(whoSugg&&mode!=='self'){const s=suggestWho(k,ctx.scope);if(s){setWhos([s.s]);setWhoWhy(s.why);}}if(whenSugg){const s=suggestDue(k);setWhen(s.date);setWhenWhy(s.why);}setPick(null);}}>{TYPES[k]}</button>)}</div>:null}
+            onClick={()=>{setType(k);if(whenSugg){const s=suggestDue(k);setWhen(s.date);setWhenWhy(s.why);}setPick(null);}}>{TYPES[k]}</button>)}</div>:null}
         </div></div>
         <div className="fieldrow"><div className="k">Department</div><div className="v">
           <span className="editchip" onClick={()=>setPick(pick==='bucket'?null:'bucket')}>{BUCKETS[bucket]||bucket} <I n="chevd" s={13}/></span>
