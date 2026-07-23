@@ -92,6 +92,28 @@ const sb=window.supabase.createClient(
   "sb_publishable_bEqR06srB99BHHdvLQy14g_-pLZPWwJ"
 );
 
+/* ---- Custom role titles / aliases (v108) — DISPLAY-ONLY; never affects role/permissions/routing/
+   scope/approvals. A person's DB `role` is unchanged; a title is purely the label shown for them. ----
+   Canonical default display label per DB role — mirrors the console's TIER_LABEL so both apps resolve
+   the same default when a person has no custom title. (Mobile historically showed the raw DB role;
+   it now shows these friendlier labels too, so a titled person reads identically in both apps.) */
+const ROLE_DEFAULT_LABEL={Administrator:'Admin',Management:'Management',Director:'Director',Manager:'Sr. Manager','Team Lead':'Team Lead','Team Member':'Jr Manager',Teacher:'Staff'};
+/* org_settings.role_titles jsonb = { "<DB role>":["Alias1",…] } — the shared pool of alternative
+   names an Administrator has added per role (default label NOT included). Assigned in each app's
+   loadAll, same module-global pattern as NAV_ICONS / CUSTOM_DEPTS. */
+let ROLE_TITLES={};
+/* A PERSON's displayed title: their chosen alias (staff.title), else the default label for their
+   role. This REPLACES TIER_LABEL[p.role] / raw p.role at every person-display site in BOTH apps.
+   Falls back to the raw role string for any unmapped role. Display-only — p.role is untouched. */
+const roleLabel=p=>(p&&p.title)||ROLE_DEFAULT_LABEL[p&&p.role]||(p&&p.role)||'';
+/* The title choices for a given DB role's per-person picker: default label first, then the org's
+   aliases for that role. length>1 ⇒ the admin has added at least one alias (so a picker is worth
+   showing). */
+const roleTitleOptions=dbRole=>[ROLE_DEFAULT_LABEL[dbRole]||dbRole,...(ROLE_TITLES[dbRole]||[])];
+/* Administrator-only writes (org_settings / staff RLS). saveStaffTitle stores NULL for "use default". */
+async function saveRoleTitles(obj){await sb.from('org_settings').update({role_titles:obj}).eq('id',true);}
+async function saveStaffTitle(id,title){await sb.from('staff').update({title:title||null}).eq('id',id);}
+
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 /* YYYY-MM-DD -> DD-MM-YYYY, for CSV/XLSX cells only. On-screen dates keep their human forms
    (fmtDate "Jul 7", ord "31st") — this is just so raw ISO strings don't land in a spreadsheet. */

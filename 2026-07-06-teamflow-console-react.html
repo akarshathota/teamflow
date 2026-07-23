@@ -567,7 +567,12 @@ const AV_COLORS=['#0e7a6f','#39638f','#1a7a48','#b06e12','#c43a53','#0e7a8f','#a
    view's rendering of them) stay exactly as they are; this is presentation-layer relabeling so the
    chart reads as the Admin -> Management -> Sr. Manager -> Jr Manager -> Team Lead -> Staff
    tiers everyone agreed on, without a schema/UI-wide rename of "Manager"/"Team Member"/"Teacher". */
-const TIER_LABEL={'Administrator':'Admin','Management':'Management','Director':'Director','Manager':'Sr. Manager','Team Lead':'Team Lead','Team Member':'Jr Manager','Teacher':'Staff'};
+/* Canonical default role labels now live in shared.js (ROLE_DEFAULT_LABEL) so the console and mobile
+   resolve the same defaults for the custom-role-titles feature. TIER_LABEL is kept as the name that
+   category-B *role-tier* references use (role pickers/headers, promote/demote dropdowns, add/remove
+   flows) — it is the SAME object, so those sites are unchanged. Person-DISPLAY sites use roleLabel(p)
+   (shared.js), which overlays a person's chosen title on top of this default. */
+const TIER_LABEL=ROLE_DEFAULT_LABEL;
 /* org tiers highest -> lowest, used by the Demote flow to offer any role BELOW someone's current
    one (Administrator is excluded — it's never a demote source or target). In staff.role terms this
    is the same Sr. Manager -> Jr. Manager -> Team Lead -> Staff ladder above, plus the two tiers
@@ -596,6 +601,9 @@ function rowsToStaff(rows){
        only pre-migration → left undefined so deptChips()/head lookups fall back to [dept]; post-migration
        it's always a real array (possibly empty = a deliberately dept-less Sr. Manager). */
     headDepartments:Array.isArray(r.head_departments)?r.head_departments:undefined,
+    /* staff.title — the per-person chosen role title (alias). undefined = use the role's default
+       label. Read by roleLabel(p) at every person-display site. */
+    title:r.title||undefined,
     tempCovering:r.temp_covering,tempSnap:r.temp_cover_snapshot}));
 }
 function rowToTask(row,assignRows,logRows){
@@ -645,7 +653,7 @@ async function loadAll(){
     loadNotifs(),
     sb.from('cron_runs').select('*').order('ran_at',{ascending:false}).limit(1),
     sb.from('admin_activity_log').select('*').order('created_at',{ascending:false}).limit(30),
-    sb.from('org_settings').select('name,supply_requests_enabled,nav_icons,departments,hidden_departments').eq('id',true).maybeSingle(),
+    sb.from('org_settings').select('name,supply_requests_enabled,nav_icons,departments,hidden_departments,role_titles').eq('id',true).maybeSingle(),
     sb.from('routing_rules').select('*'),
     sb.from('checklist_items').select('*').eq('archived',false),
     sb.from('checklist_completions').select('*').gte('occ_date',clSince),
@@ -654,6 +662,7 @@ async function loadAll(){
   if(orgRow&&orgRow.name)ORG_NAME=orgRow.name;
   if(orgRow&&typeof orgRow.supply_requests_enabled==='boolean')SUPPLY_ENABLED=orgRow.supply_requests_enabled;
   NAV_ICONS=(orgRow&&orgRow.nav_icons&&typeof orgRow.nav_icons==='object')?orgRow.nav_icons:{};
+  ROLE_TITLES=(orgRow&&orgRow.role_titles&&typeof orgRow.role_titles==='object')?orgRow.role_titles:{}; // shared alias pool per role (custom role titles)
   applyDeptConfig(orgRow&&orgRow.departments,orgRow&&orgRow.hidden_departments); // merge custom + hide removed built-ins
   ROUTING_RULES.length=0;ROUTING_RULES.push(...(ruleRows||[]).map(rowToRule));
   STAFF.length=0;STAFF.push(...rowsToStaff(staffRows||[]));
@@ -1513,7 +1522,7 @@ function Topbar({ctx,searchRef}){
               <span className="avex">{p?p.av:'?'}</span><div><div className="t">{o.t.t}</div><div className="m">{p?p.n:o.t.who} · {fmtDate(o.t.date)} · {ST[o.t.status].l}</div></div></div>;})}
           {pHits.length?<div className="sd-head">People</div>:null}
           {pHits.map(p=><div key={'p'+p.s} className="sd-item" onClick={()=>{setQ('');ctx.setPersonTasks(p);}}>
-            <span className="avex" style={{background:avColor(p.n),color:'#fff'}}>{p.av}</span><div><div className="t">{p.n}</div><div className="m">{p.role} · {p.dept}</div></div></div>)}
+            <span className="avex" style={{background:avColor(p.n),color:'#fff'}}>{p.av}</span><div><div className="t">{p.n}</div><div className="m">{roleLabel(p)} · {p.dept}</div></div></div>)}
           {!tHits.length&&!pHits.length?<div className="sd-empty">No matches for “{q}”</div>:null}
         </div>:null}
       </div>
@@ -1776,7 +1785,7 @@ function QueuePanel({ctx}){
           <div className="ring" style={{background:'var(--amber)'}}><I n="box" c="#fff"/></div>
           <div style={{flex:1,minWidth:0}}>
             <div className="nm">{r.t} <span className="tag teal">Supply · awaiting approval</span></div>
-            <div className="rs">From {p?p.n:r.from} · {fmtDate(r.date)}{r.note?' · “'+r.note+'”':''} · approver: {approver?approver.n.split(' ')[0]+' · '+approver.role:'—'}</div></div>
+            <div className="rs">From {p?p.n:r.from} · {fmtDate(r.date)}{r.note?' · “'+r.note+'”':''} · approver: {approver?approver.n.split(' ')[0]+' · '+roleLabel(approver):'—'}</div></div>
           <div className="act">{canApproveReq?<><button className="linkbtn" onClick={()=>ctx.approveReq(o.i)}>Approve</button>
             <button className="linkbtn mut" onClick={()=>ctx.declineReq(o.i)}>Decline</button></>
             :<span className="rs" style={{whiteSpace:'nowrap'}}>Waiting for {approver?approver.n.split(' ')[0]:'the approver'}</span>}</div>
@@ -1793,7 +1802,7 @@ function StaffSelect({value,onChange}){
   const people=STAFF.slice().sort((a,b)=>a.n.localeCompare(b.n));
   return <select className="fsel" style={{minWidth:210,fontWeight:700}} value={value||''} onChange={e=>onChange(e.target.value||null)}>
     <option value="">— no recipient —</option>
-    {people.map(p=><option key={p.id} value={p.id}>{p.n} · {p.role}, {p.dept}</option>)}
+    {people.map(p=><option key={p.id} value={p.id}>{p.n} · {roleLabel(p)}, {p.dept}</option>)}
   </select>;
 }
 /* Curated emoji set for maintenance/facilities categories — no external picker lib (keeps the app
@@ -1893,7 +1902,19 @@ function SettingsView({ctx}){
       <span className="deptset-head">{h?h.n.split(' ')[0]:(n?n+' staff':'no head yet')}</span>
       <button className="deptset-rm" disabled={locked} title={locked?'Can’t remove — staff or a head use it':'Remove'} onClick={()=>{if(!locked)removeDept(lbl);}}>✕</button>
     </div>;};
-  const SECS=[['maint','🔧','Maintenance routing'],['supply','📦','Supply requests'],['depts','🏢','Departments'],['icons','🎨','Sidebar icons']];
+  /* Role titles — the org's per-role pool of alternative names (org_settings.role_titles). Admin adds
+     aliases here; each person is then given one in People & roles. Display-only; Administrator excluded
+     (it's the system admin). Same mutate-a-fresh-object + save + R() pattern as NAV_ICONS. */
+  const TITLE_ROLES=[['Management','Management'],['Director','Director'],['Manager','Sr. Manager'],['Team Lead','Team Lead'],['Team Member','Jr Manager'],['Teacher','Staff']];
+  const [titleInputs,setTitleInputs]=useState({});
+  const addAlias=role=>{const def=ROLE_DEFAULT_LABEL[role]||role;const v=(titleInputs[role]||'').trim();
+    if(!v)return;
+    const cur=ROLE_TITLES[role]||[];
+    if(v.toLowerCase()===def.toLowerCase()||cur.some(a=>a.toLowerCase()===v.toLowerCase())){ctx.say('“'+v+'” is already a title for '+def);setTitleInputs({...titleInputs,[role]:''});return;}
+    const nx={...ROLE_TITLES,[role]:[...cur,v]};ROLE_TITLES=nx;setTitleInputs({...titleInputs,[role]:''});R();saveRoleTitles(nx).catch(console.error);ctx.say('Added “'+v+'” to '+def);};
+  const removeAlias=(role,alias)=>{const nx={...ROLE_TITLES,[role]:(ROLE_TITLES[role]||[]).filter(a=>a!==alias)};
+    if(!nx[role].length)delete nx[role];ROLE_TITLES=nx;R();saveRoleTitles(nx).catch(console.error);ctx.say('Removed “'+alias+'”');};
+  const SECS=[['maint','🔧','Maintenance routing'],['supply','📦','Supply requests'],['depts','🏢','Departments'],['titles','🏷️','Role titles'],['icons','🎨','Sidebar icons']];
   return <div className="view">
     <div className="h-row" style={{marginBottom:4}}><h2 style={{margin:0,display:'flex',alignItems:'center',gap:8}}>{NAV_ICONS.settings?<span style={{fontSize:20}}>{NAV_ICONS.settings}</span>:<I n="gear" s={20}/>} Settings</h2></div>
     <div style={{color:'var(--muted)',fontSize:13,margin:'0 0 18px',maxWidth:760}}>Organisation-wide configuration. Only Administrators can change these.</div>
@@ -1962,6 +1983,27 @@ function SettingsView({ctx}){
           <button className="btn primary" onClick={addDept}>＋ Add department</button>
         </div>
         <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>A department can be removed only while no one belongs to it and no Sr. Manager heads it. A removed department can be added back any time.</div>
+      </div>}
+
+      {sec==='titles'&&<div className="panel" style={{maxWidth:760,marginBottom:0}}>
+        <div className="h-row"><h3>🏷️ Role titles</h3><span className="tag amber">Admin only</span></div>
+        <div style={{color:'var(--muted)',fontSize:12.5,margin:'2px 0 16px',lineHeight:1.5}}>Add the alternative names your organisation uses for each role. The default name is always available; aliases you add here become title choices in People &amp; roles. This only changes the label shown — permissions, routing and approvals are unchanged.</div>
+        {TITLE_ROLES.map(([role,def])=>{const aliases=ROLE_TITLES[role]||[];return (
+          <div key={role} style={{padding:'12px 2px',borderBottom:'1px solid var(--line)'}}>
+            <div style={{fontWeight:800,fontSize:13.5,marginBottom:8}}>{def}<span style={{fontWeight:500,fontSize:11.5,color:'var(--muted)',marginLeft:6}}>default label</span></div>
+            <div style={{display:'flex',gap:7,flexWrap:'wrap',alignItems:'center'}}>
+              <span style={{fontSize:12,fontWeight:700,borderRadius:999,padding:'5px 12px',background:'#eef0ec',color:'var(--ink2,#43494f)',border:'1px solid var(--line)'}}>{def}</span>
+              {aliases.map(a=><span key={a} style={{fontSize:12,fontWeight:700,borderRadius:999,padding:'5px 12px',display:'inline-flex',alignItems:'center',gap:7,background:'var(--accent-soft,#e2f1ee)',color:'var(--accent-ink)',border:'1px solid var(--accent-border,#bcdcd6)'}}>{a}<span onClick={()=>removeAlias(role,a)} title="Remove" style={{cursor:'pointer',opacity:.6,fontWeight:800}}>✕</span></span>)}
+              <span style={{display:'inline-flex',gap:6,alignItems:'center'}}>
+                <input placeholder="e.g. Vice President" value={titleInputs[role]||''}
+                  onChange={e=>setTitleInputs({...titleInputs,[role]:e.target.value})}
+                  onKeyDown={e=>{if(e.key==='Enter')addAlias(role);}}
+                  style={{border:'1px solid var(--line)',borderRadius:999,padding:'5px 10px',fontSize:12,fontFamily:'inherit',width:160,outline:'none'}}/>
+                <button className="btn primary" style={{padding:'6px 13px',fontSize:12}} onClick={()=>addAlias(role)}>Add</button>
+              </span>
+            </div>
+          </div>);})}
+        <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>Removing an alias here won’t change anyone already using it — it just stops being offered as a choice. Give each person their title in People &amp; roles (open a person → “Change title”).</div>
       </div>}
 
       {sec==='icons'&&<div className="panel" style={{maxWidth:760,marginBottom:0}}>
@@ -2172,7 +2214,7 @@ async function clSnapshotPdf(staffId,mode,anchorISO){
   const period=mode==='week'?pdfDate(days[0])+' – '+pdfDate(days[days.length-1])+', '+new Date(days[0]+'T00:00:00').getFullYear()
     :new Date(days[0]+'T00:00:00').toLocaleDateString('en',{month:'long',year:'numeric'});
   doc.setFont('helvetica','normal');doc.setFontSize(11);doc.setTextColor(27,30,33);
-  doc.text((person?person.n:'—')+'  ·  '+(person?person.role:'')+'  ·  '+(person?person.dept:'')+'    —    '+period,40,y);y+=16;
+  doc.text((person?person.n:'—')+'  ·  '+(person?roleLabel(person):'')+'  ·  '+(person?person.dept:'')+'    —    '+period,40,y);y+=16;
   let due=0,done=0;const absDays=new Set();
   days.forEach(d=>{if(clAbsOn(staffId,d)&&d<=todayISO)absDays.add(d);
     items.forEach(it=>{const s=clCellState(staffId,d,it,todayISO,doneOn);if(s==='done'){due++;done++;}else if(s==='miss')due++;});});
@@ -2276,7 +2318,7 @@ function KCompliance({ctx,team}){
             <span className="kav" style={{background:avColor(p.n),width:32,height:32,fontSize:13}}>{p.av}</span>
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:13.5}}><b>{p.n}</b><span style={{color:col,fontWeight:700}}>{st.pct==null?'—':st.pct+'%'}</span></div>
-              <div style={{fontSize:11,color:'var(--muted)'}}>{p.role} · {p.dept} · {st.full}/{st.evald} full days{st.absent?' · '+st.absent+' absent':''}{streak?' · 🔥 '+streak+'-day streak':''}</div>
+              <div style={{fontSize:11,color:'var(--muted)'}}>{roleLabel(p)} · {p.dept} · {st.full}/{st.evald} full days{st.absent?' · '+st.absent+' absent':''}{streak?' · 🔥 '+streak+'-day streak':''}</div>
               <div className="kcbar"><span style={{width:pct+'%',background:col}}/></div>
             </div></div>;})}
       </div>
@@ -2301,7 +2343,7 @@ function ChecklistsView({ctx}){
     return <div className="view">
       <div className="ktabs">{tabBtns()}</div>
       <div className="panel">
-        <div className="khead"><div className="kwho"><span className="kav" style={{background:avColor(viewer.n)}}>{viewer.av}</span><div><div className="kh-t">Your checklist</div><div className="ksetby">{boss?<>Set by <b>{boss.n}</b> ({boss.role})</>:'Self-managed'}{leById?' · last edited by '+leById:''}</div></div></div><span className="kspacer"/><span className="ktoday">Today · {fmtDate(today)}</span></div>
+        <div className="khead"><div className="kwho"><span className="kav" style={{background:avColor(viewer.n)}}>{viewer.av}</span><div><div className="kh-t">Your checklist</div><div className="ksetby">{boss?<>Set by <b>{boss.n}</b> ({roleLabel(boss)})</>:'Self-managed'}{leById?' · last edited by '+leById:''}</div></div></div><span className="kspacer"/><span className="ktoday">Today · {fmtDate(today)}</span></div>
         <div className="kreset"><span className="r">↻</span> Fresh every day — <b>Daily</b> resets each morning, <b>Weekly</b> on its weekday, <b>Monthly</b> on its date, <b>Yearly</b> on its day. You tick these off; a manager above you sets the list.</div>
         {feeds(viewer.n,true)}
         {n===0?<div className="kempty"><div className="big">🗒️</div><h3>No checklist yet</h3><div>{boss?boss.n+' hasn’t set one for you yet.':'No one manages your checklist.'}</div></div>
@@ -2326,7 +2368,7 @@ function ChecklistsView({ctx}){
         {showFilter&&<div className="kfilter"><input placeholder="🔍  Search by name…" value={fName} onChange={e=>setFName(e.target.value)}/><select value={fDept} onChange={e=>{setFDept(e.target.value);}}>{depts.map(d=><option key={d} value={d}>{d==='all'?'All departments':d}</option>)}</select></div>}
         {people.length?people.map(p=>{const done=clDoneSet(p.id,today),due=clItemsFor(p.id).filter(i=>clDueOn(i,today)),n=due.length,d=due.filter(i=>done.has(i.id)).length;
           return <button key={p.id} className={'kmem'+(selId===p.id?' on':'')} onClick={()=>{setSel(p.id);setEditing(false);setVDate(today);}}>
-            <span className="kav" style={{background:avColor(p.n)}}>{p.av}</span><div><div className="kmem-n">{p.n}</div><div className="kmem-r">{p.role} · {p.dept}</div></div>
+            <span className="kav" style={{background:avColor(p.n)}}>{p.av}</span><div><div className="kmem-n">{p.n}</div><div className="kmem-r">{roleLabel(p)} · {p.dept}</div></div>
             <div className="kmem-p"><b>{d}/{n}</b><div className="lab">done</div></div></button>;})
           :<div className="kempty" style={{padding:'26px 10px'}}><div>No one matches that filter.</div></div>}
       </div>
@@ -2738,7 +2780,7 @@ function orgDeepestOfType(rootName,dbRole){
   return last;
 }
 function personLabel(p){
-  const tier=TIER_LABEL[p.role]||p.role;
+  const tier=roleLabel(p);
   if(p.role==='Manager'){const hd=headDeptsOf(p);return tier+' — '+(hd.length?hd.join(', '):'no department')+' ('+p.n+')';}
   if(p.role==='Management'||p.role==='Director')return tier+' — '+p.n;
   return tier+' — '+p.n+' ('+p.dept+')';
@@ -2821,7 +2863,7 @@ function OrgNode({person,onNodeClick,canM,chainSiblings}){
   return <li>
     <div className={'onode-wrap'+(person.tempCovering?' temp':'')}>
       <div className={'onode'+(person.role==='Director'?' director':'')+(canM?'':' static')} onClick={()=>onNodeClick(person)}>
-        <div className="orole">{TIER_LABEL[person.role]||person.role}</div>
+        <div className="orole">{roleLabel(person)}</div>
         <div className="oname">{person.n}</div>
         {person.role==='Manager'?<div className="ochips">
           {heads.length?heads.map(d=><span className="ochip" key={d}>{d}</span>):<span className="ochip none">no department</span>}
@@ -3069,7 +3111,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
       sub={'This is the first '+TIER_LABEL[dbRole]+' in '+deptHead.dept+' — pick who moves from reporting to '+(TIER_LABEL[attachPoint.role]||attachPoint.role)+' to reporting to them instead.'}>
       <div className="org-checklist">{candidates.map(c=><label className="org-check-row" key={c.id}>
         <input type="checkbox" checked={checked[c.id]!==false} onChange={e=>setChecked({...checked,[c.id]:e.target.checked})}/>
-        {TIER_LABEL[c.role]||c.role} — {c.n}
+        {roleLabel(c)} — {c.n}
       </label>)}</div>
       <div className="qc-actions">
         <button className="btn soft" style={{flex:1}} onClick={close}>Back</button>
@@ -3511,11 +3553,14 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
     const {person}=oaCtx;
     const heads=person.role==='Manager'?headDeptsOf(person):null;
     const subLine=person.role==='Manager'
-      ?(TIER_LABEL[person.role]||person.role)+' · '+(heads.length?heads.join(', '):'no department')
-      :(TIER_LABEL[person.role]||person.role)+(person.dept?' · '+person.dept:'');
+      ?roleLabel(person)+' · '+(heads.length?heads.join(', '):'no department')
+      :roleLabel(person)+(person.dept?' · '+person.dept:'');
     return <ModalShell close={close} err={err} title={person.n} sub={subLine}>
       <div className="mf" style={{display:'flex',flexDirection:'column',gap:8}}>
         <button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('edit-name');}}>Edit name</button>
+        {/* Change title — only when the admin has added at least one alias for this person's role
+           (roleTitleOptions length>1). Display-only; never changes role/permissions. */}
+        {roleTitleOptions(person.role).length>1?<button className="btn soft" onClick={()=>{setF({title:person.title||''});setOaCtx({person});setStep('edit-title');}}>🏷️ Change title</button>:null}
         {person.role==='Manager'?<button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('edit-head-depts');}}><I n="grid" s={15}/>Manage departments</button>:null}
         {person.authId?<button className="btn soft" onClick={()=>{close();ctx.setResetTarget(person);}}><I n="key" s={15}/>Reset password</button>:null}
         {person.authId?<button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('change-login');}}><I n="redo" s={15}/>Change login</button>:null}
@@ -3523,6 +3568,37 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         {person.tempCovering?<button className="btn soft" onClick={()=>{setOaCtx({person});setStep('revert-name');}}>Revert to their original role</button>:null}
       </div>
       <div className="qc-actions"><button className="btn soft" style={{flex:1}} onClick={close}>Close</button></div>
+    </ModalShell>;
+  }
+  if(step==='edit-title'){
+    const {person}=oaCtx;
+    const opts=roleTitleOptions(person.role);            // [default label, ...aliases]
+    const def=opts[0];
+    const cur=f.title!==undefined?f.title:(person.title||''); // '' = the default option
+    return <ModalShell close={close} err={err} title={'Title — '+person.n}
+      sub={'Choose the title '+person.n.split(' ')[0]+' goes by. Display-only — it never changes their role, permissions or approvals.'}>
+      <div className="mf">
+        <label>Title (what they’re called)</label>
+        <select value={cur} onChange={e=>setF({...f,title:e.target.value})}>
+          <option value="">{def} (default)</option>
+          {opts.slice(1).map(o=><option key={o} value={o}>{o}</option>)}
+        </select>
+        <div style={{marginTop:10,fontSize:12.5,color:'var(--ink2,#43494f)'}}>Shows everywhere as: <b style={{color:'var(--accent-ink)'}}>{(cur||def)+' — '+person.n+(person.dept?' ('+person.dept+')':'')}</b></div>
+      </div>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={()=>setStep('person-detail')}>Back</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+          const chosen=(f.title!==undefined?f.title:(person.title||'')).trim();
+          /* store null for "use default" (picked the default, or an alias equal to the default) */
+          const store=chosen&&chosen.toLowerCase()!==def.toLowerCase()?chosen:null;
+          setBusy(true);setErr('');
+          try{
+            await saveStaffTitle(person.id,store);
+            person.title=store||undefined;   // local STAFF entry is the same object → updates everywhere
+            ctx.R();say(store?person.n+' now goes by “'+store+'”':person.n+' now uses the default title');setBusy(false);close();
+          }catch(e){setBusy(false);setErr(e.message);}
+        }}>{busy?'Saving…':'Save title'}</button>
+      </div>
     </ModalShell>;
   }
   if(step==='edit-name'){
@@ -4368,7 +4444,7 @@ function DailyReportModal({ctx,close}){
     const raiser=byId(row.created_by);
     if(!row.last_escalated_by)return 'Raised by '+(raiser?raiser.n:'someone');
     const esc=byId(row.last_escalated_by);
-    return 'Escalated by '+(esc?esc.n+' ('+esc.role+')':'someone')
+    return 'Escalated by '+(esc?esc.n+' ('+roleLabel(esc)+')':'someone')
       +' · originally raised by '+(raiser?raiser.n:'someone')
       +(row.hop_count>1?', '+row.hop_count+' levels down':'');
   }
@@ -4655,7 +4731,7 @@ function QuickCapture({ctx,close}){
                 background:on?'var(--accent-soft)':'#fff',borderRadius:11,padding:'11px 12px',cursor:'pointer',color:'inherit'}}>
               <div style={{fontSize:20,lineHeight:1}}>{c.icon}</div>
               <div style={{fontWeight:800,fontSize:13,marginTop:6}}>{c.label}</div>
-              <div style={{fontSize:11,color:'var(--muted)',marginTop:5,lineHeight:1.4}}>Goes to {h?<b style={{color:'var(--accent-ink)'}}>{h.n} · {h.role}, {h.dept}</b>:<b>the configured recipient</b>}{!h?<><br/>No recipient set — admins will handle it</>:null}</div>
+              <div style={{fontSize:11,color:'var(--muted)',marginTop:5,lineHeight:1.4}}>Goes to {h?<b style={{color:'var(--accent-ink)'}}>{h.n} · {roleLabel(h)}, {h.dept}</b>:<b>the configured recipient</b>}{!h?<><br/>No recipient set — admins will handle it</>:null}</div>
             </button>;})}
         </div>
       </div>:null}
