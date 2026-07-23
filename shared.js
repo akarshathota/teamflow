@@ -399,7 +399,9 @@ async function downloadTablePdf(fileLabel,meta,columns,rows){
   }else y+=8;
   doc.autoTable({startY:y,margin:{left:M,right:M},styles:{fontSize:9,cellPadding:4,overflow:'linebreak'},
     headStyles:{fillColor:[14,122,111],textColor:[255,255,255]},
-    head:[columns],body:rows});
+    head:[columns],body:rows,
+    /* overdue Due cell ("22 Jul\n2 days late") reddened whole — the only cell ending in "…late" */
+    didParseCell:d=>{if(d.section==='body'&&/\bdays? late$/.test(String(d.cell.raw||'')))d.cell.styles.textColor=[192,57,43];}});
   doc.save(iso(new Date())+'-teamflow-'+String(fileLabel).toLowerCase().replace(/[^\w]+/g,'-').replace(/^-+|-+$/g,'')+'.pdf');
 }
 async function downloadDailyReportPdf(rows,label,viewerName){

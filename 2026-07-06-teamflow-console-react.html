@@ -1899,15 +1899,18 @@ function SettingsView({ctx}){
    popup). taskPdfRow/taskPrintRow build one row for the jsPDF and window.print paths respectively;
    both render dates as "22 Jul" (pdfDate) and put the overdue "N days late" note under the Due
    date (CSV keeps DD-MM-YYYY via exportRows/exportCSV, untouched). */
-const TASK_PDF_COLS=['Task','Assignee','Assigned by','Department','Issued','Due','Status'];
-const TASK_PRINT_HEAD='<thead><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Task</th><th style="text-align:left;padding:6px">Assignee</th><th style="text-align:left;padding:6px">Assigned by</th><th style="text-align:left;padding:6px">Department</th><th style="text-align:left;padding:6px">Issued</th><th style="text-align:left;padding:6px">Due</th><th style="text-align:left;padding:6px">Status</th></tr></thead>';
+/* Remarks = an empty trailing column left blank for handwritten notes on the printout/PDF. */
+const TASK_PDF_COLS=['Task','Assignee','Assigned by','Department','Issued','Due','Status','Remarks'];
+const TASK_PRINT_HEAD='<thead><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Task</th><th style="text-align:left;padding:6px">Assignee</th><th style="text-align:left;padding:6px">Assigned by</th><th style="text-align:left;padding:6px">Department</th><th style="text-align:left;padding:6px">Issued</th><th style="text-align:left;padding:6px">Due</th><th style="text-align:left;padding:6px">Status</th><th style="text-align:left;padding:6px">Remarks</th></tr></thead>';
 const lateNote=t=>overdueDays(t)+' day'+(overdueDays(t)!=1?'s':'')+' late';
+/* joint assignees stacked one per line ('\n' for PDF autoTable, '<br>' for print) so they don't
+   eat horizontal width; overdue Due cell rendered fully red (date + late note). */
 function taskPdfRow(t){
-  return [t.t,assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),t.instructedBy||(t.selfAssigned?'Self':'—'),(byShort(t.who)||{}).dept||'—',
-    pdfDate(t.issued),pdfDate(t.date)+(isOverdue(t)?'\n'+lateNote(t):''),ST[t.status].l];
+  return [t.t,assignees(t).map(a=>(byShort(a)||{n:a}).n).join('\n'),t.instructedBy||(t.selfAssigned?'Self':'—'),(byShort(t.who)||{}).dept||'—',
+    pdfDate(t.issued),pdfDate(t.date)+(isOverdue(t)?'\n'+lateNote(t):''),ST[t.status].l,''];
 }
 function taskPrintRow(t){
-  return '<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+t.t+'</td><td style="padding:6px">'+assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')+'</td><td style="padding:6px">'+(t.instructedBy||(t.selfAssigned?'Self':'—'))+'</td><td style="padding:6px">'+((byShort(t.who)||{}).dept||'—')+'</td><td style="padding:6px;white-space:nowrap">'+pdfDate(t.issued)+'</td><td style="padding:6px"><span style="white-space:nowrap">'+pdfDate(t.date)+'</span>'+(isOverdue(t)?'<br><span style="color:#c0392b;font-size:11px">'+lateNote(t)+'</span>':'')+'</td><td style="padding:6px">'+ST[t.status].l+'</td></tr>';
+  return '<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+t.t+'</td><td style="padding:6px">'+assignees(t).map(a=>(byShort(a)||{n:a}).n).join('<br>')+'</td><td style="padding:6px">'+(t.instructedBy||(t.selfAssigned?'Self':'—'))+'</td><td style="padding:6px">'+((byShort(t.who)||{}).dept||'—')+'</td><td style="padding:6px;white-space:nowrap">'+pdfDate(t.issued)+'</td><td style="padding:6px'+(isOverdue(t)?';color:#c0392b':'')+'"><span style="white-space:nowrap">'+pdfDate(t.date)+'</span>'+(isOverdue(t)?'<br><span style="font-size:11px">'+lateNote(t)+'</span>':'')+'</td><td style="padding:6px">'+ST[t.status].l+'</td><td style="padding:6px"></td></tr>';
 }
 /* Download PDF for an arbitrary task row set ({t,i} objects) — used by the Tasks columns and the
    pending-task / KPI popup. */
