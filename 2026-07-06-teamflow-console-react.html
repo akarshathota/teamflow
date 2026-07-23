@@ -438,13 +438,24 @@
     .calhead .spacer{flex-basis:100%;height:0}
     .calhead .fsel{flex:1;min-width:0}
   }
-  /* Phone (≤600px): the console is desktop-first, but keep it usable on a phone browser — the 66px
-     icon rail (from @1100) stays; below tidies the parts that still overflowed/crammed there. */
+  /* Phone (≤600px): the console is desktop-first, but keep it usable on a phone browser — the left
+     rail becomes a fixed BOTTOM NAV BAR (like the mobile app), and the top bar / content reflow. */
   @media (max-width:600px){
     html,body{overflow-x:hidden}
-    .sidebar>div:not([class]){display:none}   /* org name / rename box — spilled out of the 66px rail */
-    .roleSel,.side-lab{display:none}           /* Preview-as / Signed-in-as — unusable at 66px (desktop-only) */
-    .topbar{padding:10px 12px}
+    /* sidebar -> fixed bottom nav bar */
+    .sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;height:auto;
+      flex-direction:row;align-items:center;justify-content:space-around;gap:0;
+      padding:5px 4px calc(5px + env(safe-area-inset-bottom,0px));
+      border-right:none;border-top:1px solid var(--line);
+      box-shadow:0 -2px 12px rgba(0,0,0,.07);z-index:60;overflow-x:auto}
+    .sidebar .brand,.sidebar>div:not([class]),.roleSel,.side-lab,.companion{display:none}
+    .navitem{width:auto;flex:0 0 auto;padding:7px 6px;border-radius:11px;justify-content:center}
+    .side-foot{margin:0;padding:0;border-top:none;flex:0 0 auto;display:flex;align-items:center}
+    .side-foot .btn{width:auto!important;margin:0!important;padding:6px 8px;font-size:10.5px;white-space:nowrap;min-height:0}
+    .main{padding-bottom:58px}                  /* clear the fixed bottom bar */
+    .drawer{z-index:80}                         /* task detail sits above the nav bar */
+    /* top bar + content */
+    .topbar{flex-wrap:wrap;gap:8px;padding:10px 12px}
     .topbar>.chip-s{display:none}              /* wide cron-status chip — admin diagnostic, not needed on a phone */
     .tb-right{margin-left:0;flex:1 1 100%;flex-wrap:wrap;gap:8px;justify-content:flex-end}
     .tb-right .searchwrap:first-child{flex:1 1 100%}   /* search gets its own full-width row */
