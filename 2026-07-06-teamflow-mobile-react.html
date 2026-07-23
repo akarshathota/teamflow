@@ -49,6 +49,20 @@
 
   .task{background:var(--card);border-radius:13px;padding:14px;margin-bottom:11px;box-shadow:0 2px 8px rgba(27,30,33,.05);border:1px solid var(--line);position:relative;overflow:hidden}
   .task.done .tt{text-decoration:line-through;color:var(--muted)}
+  .task.selr{border-color:var(--accent,#0e7a6f);background:var(--accent-soft,#e2f1ee)}
+  .mcb{position:absolute;right:12px;top:12px;width:22px;height:22px;border-radius:7px;border:2px solid #cfccbf;background:#fff}
+  .mcb.on{background:var(--accent,#0e7a6f);border-color:var(--accent,#0e7a6f)}
+  .mcb.on::after{content:"✓";color:#fff;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}
+  .mselbtn{font-size:12px;font-weight:700;color:var(--accent-ink,#0a5c54);background:var(--accent-soft,#e2f1ee);border:1px solid var(--accent-border,#bcdcd6);border-radius:8px;padding:5px 11px;cursor:pointer}
+  .mselbtn.on{background:var(--accent,#0e7a6f);color:#fff;border-color:var(--accent,#0e7a6f)}
+  .mbulkbar{position:sticky;bottom:72px;z-index:20;background:var(--card);border:1px solid var(--accent-border,#bcdcd6);border-radius:13px;padding:11px 12px;box-shadow:0 4px 16px rgba(27,30,33,.12);margin-top:8px}
+  .mbulkrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .mbulkrow .cnt{font-weight:800;font-size:12.5px;margin-right:2px}
+  .bpill{border:1px solid var(--line);background:#f3f2ec;border-radius:8px;padding:7px 10px;font-weight:700;font-size:12px;color:var(--ink2,#43494f);cursor:pointer}
+  .bpill.on{background:var(--accent,#0e7a6f);border-color:var(--accent,#0e7a6f);color:#fff}
+  .mbulkctl{display:flex;gap:8px;align-items:center;margin-top:9px}
+  .mbulkctl .selsel{flex:1}
+  .mbulkctl .send{width:auto;margin-top:0;padding:10px 16px;flex:0 0 auto}
   .stripe{position:absolute;left:0;top:0;bottom:0;width:4px}
   .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:5px}
   .pill.over{background:var(--red-soft);color:var(--red)}
@@ -1020,12 +1034,13 @@ function MobileEmpty({icon,t,s,style}){
 }
 
 /* ============ task card ============ */
-function TaskCard({o,ctx,acts}){
+function TaskCard({o,ctx,acts,sel,checked,onToggle}){
   const t=o.t,i=o.i;
   const st=t.done?'done':(t.date&&t.date<iso(TODAY)?'over':(t.date===iso(TODAY)?'today':'open'));
   const pl={over:'Overdue',today:'Due today',open:'Open',done:'Done'};
   const sc={over:'var(--red)',today:'var(--amber)',open:'#b9b5a6',done:'var(--green)'};
-  return <div className={'task'+(t.done?' done':'')}>
+  return <div className={'task'+(t.done?' done':'')+(sel&&checked?' selr':'')} onClick={sel?()=>onToggle(i):undefined} style={sel?{cursor:'pointer'}:undefined}>
+    {sel?<span className={'mcb'+(checked?' on':'')}/>:null}
     <div className="stripe" style={{background:sc[st]}}/>
     <span className={'pill '+st}>{t.done?'✓ ':''}{pl[st]}</span>
     <div className="tt">{t.t}</div>
@@ -1046,7 +1061,7 @@ function TaskCard({o,ctx,acts}){
     {t.note?<div className="notepv">“{t.note}”</div>:null}
     {t.files&&t.files.length?<div className="attrow">{t.files.map((f,ix)=><FileChip key={ix} f={f}/>)}</div>:null}
     <div className="meta" style={{marginTop:5}}>{t.done?'Closed'+(t.doneWhen?' · '+t.doneWhen:''):t.due}</div>
-    {!t.done?<div className="cardbtns" style={{flexWrap:'wrap'}}>
+    {sel?null:!t.done?<div className="cardbtns" style={{flexWrap:'wrap'}}>
       <button className="btn primary" onClick={()=>ctx.setSheet({kind:'update',idx:i})}>Update / Done</button>
       {ctx.role!=='worker'?<>
         <button className="btn ghost" title="Send reminder" onClick={()=>acts.remind(i)}><I n="bell" s={18}/></button>
@@ -1365,6 +1380,44 @@ function AllTasks({ctx,acts}){
   const [f,setF]=useState('all');
   const [fboss,setFboss]=useState('all');
   const bosses=bossesFor(ctx.role,ctx.r.self);
+  /* Bulk actions (mobile): Select mode → tick cards → Reassign / Change due / Priority / Status.
+     Each edits every selected task the viewer canEditTask (per-dept gate), skips the rest. Priority
+     is persisted with an explicit tasks update (mobile's saveTask omits priority). No bulk delete. */
+  const [selMode,setSelMode]=useState(false);
+  const [selSet,setSelSet]=useState(()=>new Set());
+  const [bulkAct,setBulkAct]=useState(null);
+  const [reVal,setReVal]=useState('');const [dueVal,setDueVal]=useState('');const [prioVal,setPrioVal]=useState('high');const [statusVal,setStatusVal]=useState('inprogress');
+  const exitSel=()=>{setSelMode(false);setSelSet(new Set());setBulkAct(null);};
+  const toggleSel=ix=>setSelSet(s=>{const n=new Set(s);n.has(ix)?n.delete(ix):n.add(ix);return n;});
+  const applyBulkM=(mut,label,persistPrio)=>{
+    let done=0,skipped=0;
+    selSet.forEach(ix=>{const tk=tasks[ix];if(!tk)return;
+      if(!canEditTask(tk,ctx.role)){skipped++;return;}
+      mut(tk);
+      if(persistPrio)sb.from('tasks').update({priority:tk.prio}).eq('id',tk.id).then(({error})=>{if(error)console.error(error);});
+      else saveTask(tk).catch(console.error);
+      notifyEvent(tk.id,ctx.r.id,label,concernedForM(tk,ctx.r.self));done++;});
+    ctx.R();ctx.say(done?('Updated '+done+' task'+(done!=1?'s':'')+(skipped?' · '+skipped+' skipped':'')):(skipped?'None updated — no permission':'Nothing selected'));
+    exitSel();
+  };
+  const doReassignM=()=>{if(!reVal){ctx.say('Pick a person');return;}const m=findMember(reVal);applyBulkM(tk=>{tk.who=reVal;tk.init=m?m.i:reVal[0];tk.coWho=undefined;},'reassigned to '+reVal);};
+  const doDueM=()=>{if(!dueVal){ctx.say('Pick a date');return;}applyBulkM(tk=>{tk.date=dueVal;tk.due='Due '+fmtD(dueVal);},'due date changed');};
+  const doPrioM=()=>applyBulkM(tk=>{tk.prio=prioVal;},'priority changed',true);
+  const doStatusM=()=>applyBulkM(tk=>{tk.completionPending=false;
+    if(statusVal==='done'){tk.done=true;tk.progress='inprogress';tk.doneWhen='just now';delete tk.extReq;if(tk.coWho&&tk.coWho.length)tk.doneBy=assigneesM(tk);}
+    else if(statusVal==='inprogress'){tk.done=false;tk.progress='inprogress';}
+    else{tk.done=false;tk.progress=undefined;delete tk.doneWhen;tk.doneBy=[];}},'status updated');
+  const mbulkBar=()=><div className="mbulkbar">
+    <div className="mbulkrow"><span className="cnt">{selSet.size} selected</span>
+      <button className={'bpill'+(bulkAct==='re'?' on':'')} onClick={()=>setBulkAct(a=>a==='re'?null:'re')}>↪ Reassign</button>
+      <button className={'bpill'+(bulkAct==='due'?' on':'')} onClick={()=>setBulkAct(a=>a==='due'?null:'due')}>📅 Due</button>
+      <button className={'bpill'+(bulkAct==='prio'?' on':'')} onClick={()=>setBulkAct(a=>a==='prio'?null:'prio')}>● Priority</button>
+      <button className={'bpill'+(bulkAct==='stat'?' on':'')} onClick={()=>setBulkAct(a=>a==='stat'?null:'stat')}>✓ Status</button></div>
+    {bulkAct==='re'?<div className="mbulkctl"><select className="selsel" value={reVal} onChange={e=>setReVal(e.target.value)}><option value="">Choose a person…</option>{MEMBERS.map(m=><option key={m.n} value={m.n}>{m.n} · {m.dept}</option>)}</select><button className="send" onClick={doReassignM}>Apply</button></div>:null}
+    {bulkAct==='due'?<div className="mbulkctl"><input type="date" className="selsel" value={dueVal} min={iso(TODAY)} onChange={e=>setDueVal(e.target.value)}/><button className="send" onClick={doDueM}>Apply</button></div>:null}
+    {bulkAct==='prio'?<div className="mbulkctl"><select className="selsel" value={prioVal} onChange={e=>setPrioVal(e.target.value)}><option value="high">High</option><option value="med">Medium</option><option value="low">Low</option></select><button className="send" onClick={doPrioM}>Apply</button></div>:null}
+    {bulkAct==='stat'?<div className="mbulkctl"><select className="selsel" value={statusVal} onChange={e=>setStatusVal(e.target.value)}><option value="open">Open</option><option value="inprogress">In progress</option><option value="done">Done</option></select><button className="send" onClick={doStatusM}>Apply</button></div>:null}
+  </div>;
   const byWho=ctx.role==='worker'?ctx.mine:ctx.mine.filter(o=>mode==='mine'?hasWhoM(o.t,ctx.r.self):!hasWhoM(o.t,ctx.r.self));
   const scoped=mode==='mine'&&fboss!=='all'?byWho.filter(o=>fboss==='self'?!o.t.instructedBy:o.t.instructedBy===fboss):byWho;
   const counts={all:scoped.length};
@@ -1381,13 +1434,15 @@ function AllTasks({ctx,acts}){
       <option value="self">Own initiative</option>
       {bosses.map(b=><option key={b.n} value={b.n}>{b.label}</option>)}
     </select>:null}
-    <div className="sec">All tasks</div>
+    <div className="sec" style={{display:'flex',alignItems:'center',gap:8}}>All tasks
+      {ctx.role!=='worker'&&list.length?<button className={'mselbtn'+(selMode?' on':'')} style={{marginLeft:'auto'}} onClick={()=>selMode?exitSel():setSelMode(true)}>{selMode?'✓ Done':'☑ Select'}</button>:null}</div>
     <div className="typechips" style={{overflowX:'auto',flexWrap:'nowrap'}}>
       {[['all','All','']].concat(Object.entries(TYPES).map(([k,v])=>[k,v.l,v.e])).map(([k,l,e])=>
         <button key={k} className={'tchip'+(k===f?' on':'')} style={{whiteSpace:'nowrap'}} onClick={()=>setF(k)}>{e?e+' ':''}{l}{counts[k]?' · '+counts[k]:''}</button>)}
     </div>
-    {list.length?list.map(o=><TaskCard key={o.i} o={o} ctx={ctx} acts={acts}/>)
+    {list.length?list.map(o=><TaskCard key={o.i} o={o} ctx={ctx} acts={acts} sel={selMode} checked={selSet.has(o.i)} onToggle={toggleSel}/>)
       :<MobileEmpty icon="📋" t={'No '+(f==='all'?'':TYPES[f].l.toLowerCase()+' ')+'tasks yet'} s="Tap + to create one."/>}
+    {selMode&&selSet.size?mbulkBar():null}
   </div>;
 }
 
