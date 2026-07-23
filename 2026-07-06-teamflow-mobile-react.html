@@ -2570,6 +2570,12 @@ function UpdateSheet({ctx,idx,close}){
       <select className="selsel" style={{width:'100%',marginBottom:8}} value={edType} onChange={e=>setEdType(e.target.value)}>{Object.keys(TYPES).map(k=><option key={k} value={k}>{TYPES[k].l}</option>)}</select>
       <div className="meta" style={{margin:'0 2px 4px'}}>Department</div>
       <select className="selsel" style={{width:'100%',marginBottom:8}} value={edBucket} onChange={e=>setEdBucket(e.target.value)}>{Object.keys(BUCKETS).map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}</select>
+      {(()=>{const as=assigneesM(t);const mm=!t.selfAssigned&&as.length&&!as.some(a=>{const m=findMember(a);return m&&LABEL_TO_BUCKET[m.dept]===edBucket;});
+        if(!mm)return null;const m0=findMember(as[0]);const sug=m0?LABEL_TO_BUCKET[m0.dept]:null;
+        return <div className="reason" style={{color:'var(--red)',display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',margin:'-2px 2px 8px'}}>
+          <span><b>⚠ Mismatch</b> — {as.length>1?'no assignee is':'the assignee isn’t'} in {BUCKETS[edBucket]||edBucket}.</span>
+          {sug&&sug!==edBucket?<button onClick={()=>setEdBucket(sug)} style={{background:'none',border:'none',color:'var(--accent-ink,#0a5c54)',fontWeight:700,fontSize:12.5,cursor:'pointer',padding:0,textDecoration:'underline'}}>→ Set to {BUCKETS[sug]}</button>:null}
+        </div>;})()}
       <div className="meta" style={{margin:'0 2px 4px'}}>Priority</div>
       <select className="selsel" style={{width:'100%',marginBottom:12}} value={edPrio} onChange={e=>setEdPrio(e.target.value)}>{[['high','High'],['med','Medium'],['low','Low']].map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
       {assigneesM(t).length>1?<><div className="meta" style={{margin:'0 2px 4px'}}>Assignees · remove to shrink the joint task</div>

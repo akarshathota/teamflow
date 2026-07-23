@@ -2780,7 +2780,17 @@ function Drawer({ctx,idx}){
         {editing?<select className="fsel" style={{width:'100%'}} value={edType} onChange={e=>setEdType(e.target.value)}>{Object.keys(TYPES).map(k=><option key={k} value={k}>{TYPES[k]}</option>)}</select>
           :<span className="tag gray">{TYPES[t.type||'work']}</span>}</div></div>
       <div className="kv"><div className="k">Department</div><div className="v" style={{flex:editing?1:undefined}}>
-        {editing?<select className="fsel" style={{width:'100%'}} value={edBucket} onChange={e=>setEdBucket(e.target.value)}>{Object.keys(BUCKETS).map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}</select>
+        {editing?<>
+          <select className="fsel" style={{width:'100%'}} value={edBucket} onChange={e=>setEdBucket(e.target.value)}>{Object.keys(BUCKETS).map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}</select>
+          {/* same preventive mismatch warning as New Task (v132), now on the edit flow — editing the
+              department to one no current assignee belongs to used to be silent. */}
+          {(()=>{const as=assignees(t);const mm=!t.selfAssigned&&as.length&&!as.some(a=>{const p=byShort(a);return p&&LABEL_TO_BUCKET[p.dept]===edBucket;});
+            if(!mm)return null;const p0=byShort(as[0]);const sug=p0?LABEL_TO_BUCKET[p0.dept]:null;
+            return <div className="whysm" style={{color:'var(--red)',display:'flex',gap:8,flexWrap:'wrap',marginTop:4,alignItems:'center'}}>
+              <span><b>⚠ Mismatch</b> — {as.length>1?'no assignee is':'the assignee isn’t'} in {BUCKETS[edBucket]||edBucket}.</span>
+              {sug&&sug!==edBucket?<button className="linkbtn" style={{fontSize:12}} onClick={()=>setEdBucket(sug)}>→ Set to {BUCKETS[sug]}</button>:null}
+            </div>;})()}
+        </>
           :<span className="tag blue">{BUCKETS[t.bucket]||'—'}</span>}</div></div>
       <div className="kv"><div className="k">Priority</div><div className="v" style={{flex:editing?1:undefined}}>
         {editing?<select className="fsel" style={{width:'100%'}} value={edPrio} onChange={e=>setEdPrio(e.target.value)}>{Object.keys(PRIOS).map(k=><option key={k} value={k}>{PRIOS[k].l}</option>)}</select>
