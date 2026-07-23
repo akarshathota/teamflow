@@ -624,6 +624,7 @@ let tasks=[];
 let ORG_NAME='';
 let SUPPLY_ENABLED=true; // org_settings.supply_requests_enabled — master toggle for the supply-request feature (read via shared.js supplyEnabled())
 let NAV_ICONS={};        // org_settings.nav_icons jsonb — Administrator-chosen emoji overrides for sidebar items (key→emoji); empty = use the default line icon
+let NAV_LABELS={};       // org_settings.nav_labels jsonb — Administrator-chosen text overrides for sidebar item names (key→label); no entry = use the default word
 let ROUTING_RULES=[]; // routing_rules rows (admin-configured recipients) — read via shared.js helpers
 let requests=[];
 let notifs=[];
@@ -693,7 +694,7 @@ async function loadAll(){
     loadNotifs(),
     sb.from('cron_runs').select('*').order('ran_at',{ascending:false}).limit(1),
     sb.from('admin_activity_log').select('*').order('created_at',{ascending:false}).limit(80),
-    sb.from('org_settings').select('name,supply_requests_enabled,nav_icons,departments,hidden_departments,role_titles,task_permissions').eq('id',true).maybeSingle(),
+    sb.from('org_settings').select('name,supply_requests_enabled,nav_icons,nav_labels,departments,hidden_departments,role_titles,task_permissions').eq('id',true).maybeSingle(),
     sb.from('routing_rules').select('*'),
     sb.from('checklist_items').select('*').eq('archived',false),
     sb.from('checklist_completions').select('*').gte('occ_date',clSince),
@@ -702,6 +703,7 @@ async function loadAll(){
   if(orgRow&&orgRow.name)ORG_NAME=orgRow.name;
   if(orgRow&&typeof orgRow.supply_requests_enabled==='boolean')SUPPLY_ENABLED=orgRow.supply_requests_enabled;
   NAV_ICONS=(orgRow&&orgRow.nav_icons&&typeof orgRow.nav_icons==='object')?orgRow.nav_icons:{};
+  NAV_LABELS=(orgRow&&orgRow.nav_labels&&typeof orgRow.nav_labels==='object')?orgRow.nav_labels:{};
   ROLE_TITLES=(orgRow&&orgRow.role_titles&&typeof orgRow.role_titles==='object')?orgRow.role_titles:{}; // shared alias pool per role (custom role titles)
   TASK_PERMS=(orgRow&&orgRow.task_permissions&&typeof orgRow.task_permissions==='object')?orgRow.task_permissions:{}; // per-department task edit/delete role gates
   applyDeptConfig(orgRow&&orgRow.departments,orgRow&&orgRow.hidden_departments); // merge custom + hide removed built-ins
@@ -793,6 +795,10 @@ async function addApproverRule(dept,staffId){const {data}=await sb.from('routing
 async function saveSupplyEnabled(on){await sb.from('org_settings').update({supply_requests_enabled:on}).eq('id',true);}
 /* sidebar-icon overrides — Administrator-only (org_settings RLS). Writes the whole nav_icons map. */
 async function saveNavIcons(obj){await sb.from('org_settings').update({nav_icons:obj}).eq('id',true);}
+/* sidebar-label overrides — Administrator-only. Writes the whole nav_labels map (key→custom word). */
+async function saveNavLabels(obj){await sb.from('org_settings').update({nav_labels:obj}).eq('id',true);}
+/* Sidebar display label for a nav key: the admin's custom word, else the built-in default. */
+function navLabel(key,def){return (NAV_LABELS[key]&&String(NAV_LABELS[key]).trim())||def;}
 async function saveRuleOrder(id,order){await sb.from('routing_rules').update({sort_order:order}).eq('id',id);}
 async function deleteRule(id){await sb.from('routing_rules').delete().eq('id',id);}
 /* deletes a staff row AND its linked auth account together via the delete-staff-account edge
@@ -1439,16 +1445,16 @@ function App(){
       </div>}
       {[['dashboard','grid','Dashboard','1'],['tasks','checkc','Tasks','2'],['checklists','checkc','Checklists','3'],['calendar','cal','Calendar','4'],['people','users','People & roles','5'],['reports','chart','Reports','6']].map(([v,ic,l,k])=>
         <button key={v} className={'navitem'+(view===v?' on':'')} onClick={()=>setView(v)}>
-          {NAV_ICONS[v]?<span style={{fontSize:16,width:18,textAlign:'center'}}>{NAV_ICONS[v]}</span>:<I n={ic}/>}<span className="lb">{l}</span><span className="kbd">{k}</span></button>)}
+          {NAV_ICONS[v]?<span style={{fontSize:16,width:18,textAlign:'center'}}>{NAV_ICONS[v]}</span>:<I n={ic}/>}<span className="lb">{navLabel(v,l)}</span><span className="kbd">{k}</span></button>)}
       {/* Reports & requests tracker — org-wide oversight of every maintenance report + supply request.
           Gated on the effective (Preview-As) role so it is visible ONLY to Management & Admin, and
           hidden the moment you preview as a Manager/Team member. The view below is guarded to match. */}
       {(role==='mgmt'||role==='admin')?<button className={'navitem'+(view==='tracker'?' on':'')} onClick={()=>setView('tracker')}>
-        {NAV_ICONS.tracker?<span style={{fontSize:16,width:18,textAlign:'center'}}>{NAV_ICONS.tracker}</span>:<I n="inbox"/>}<span className="lb">Reports &amp; requests</span><span className="kbd">7</span></button>:null}
+        {NAV_ICONS.tracker?<span style={{fontSize:16,width:18,textAlign:'center'}}>{NAV_ICONS.tracker}</span>:<I n="inbox"/>}<span className="lb">{navLabel('tracker','Reports & requests')}</span><span className="kbd">7</span></button>:null}
       {/* Settings is admin-only (org-management surface). Keyed off the real signed-in role, not the
           Preview-As role, so previewing as a non-admin still keeps the item available to switch back. */}
       {myRoleKey==='admin'?<button className={'navitem'+(view==='settings'?' on':'')} onClick={()=>setView('settings')}>
-        {NAV_ICONS.settings?<span style={{fontSize:16,width:18,textAlign:'center'}}>{NAV_ICONS.settings}</span>:<I n="gear"/>}<span className="lb">Settings</span><span className="kbd">·</span></button>:null}
+        {NAV_ICONS.settings?<span style={{fontSize:16,width:18,textAlign:'center'}}>{NAV_ICONS.settings}</span>:<I n="gear"/>}<span className="lb">{navLabel('settings','Settings')}</span><span className="kbd">·</span></button>:null}
       <div className="side-foot">
         {myRoleKey==='admin'?<>
           <div className="side-lab">Preview as</div>
@@ -1902,6 +1908,9 @@ function SettingsView({ctx}){
   const rename=(rule,label)=>{if(label===rule.label)return;rule.label=label;R();saveRuleLabel(rule.id,label).catch(console.error);};
   const setIcon=(rule,icon)=>{rule.icon=icon;R();if(!String(rule.id).startsWith('local-'))saveRuleIcon(rule.id,icon).catch(console.error);};
   const setNavIcon=(key,emoji)=>{const nx={...NAV_ICONS};if(emoji)nx[key]=emoji;else delete nx[key];NAV_ICONS=nx;R();saveNavIcons(nx).catch(console.error);};
+  /* Rename a sidebar menu item. Store the trimmed word only when it differs from the built-in default;
+     a blank or a value equal to the default clears the override (falls back to the default word). */
+  const setNavLabel=(key,text,def)=>{const t=String(text||'').trim();const nx={...NAV_LABELS};if(t&&t!==def)nx[key]=t;else delete nx[key];NAV_LABELS=nx;R();saveNavLabels(nx).catch(console.error);};
   const remove=rule=>{const i=ROUTING_RULES.indexOf(rule);if(i>=0)ROUTING_RULES.splice(i,1);R();deleteRule(rule.id).catch(console.error);};
   const addType=()=>{const label=newLabel.trim()||'New maintenance type';
     const local={id:'local-'+Date.now(),kind:'maintenance',label,icon:(newIcon.trim()||'🔧'),staff_id:null,sort_order:cats.length};
@@ -1973,9 +1982,9 @@ function SettingsView({ctx}){
     if((!nextDept.edit||!nextDept.edit.length)&&(!nextDept.delete||!nextDept.delete.length)){
       const nx={...TASK_PERMS};delete nx[dept];TASK_PERMS=nx;R();saveTaskPerms(nx).catch(console.error);return;}
     const nx={...TASK_PERMS,[dept]:nextDept};TASK_PERMS=nx;R();saveTaskPerms(nx).catch(console.error);};
-  const SECS=[['maint','🔧','Maintenance routing'],['supply','📦','Supply requests'],['depts','🏢','Departments'],['titles','🏷️','Role titles'],['icons','🎨','Sidebar icons'],['taskperms','🔑','Task permissions']];
+  const SECS=[['maint','🔧','Maintenance routing'],['supply','📦','Supply requests'],['depts','🏢','Departments'],['titles','🏷️','Role titles'],['icons','🎨','Sidebar menu'],['taskperms','🔑','Task permissions']];
   return <div className="view">
-    <div className="h-row" style={{marginBottom:4}}><h2 style={{margin:0,display:'flex',alignItems:'center',gap:8}}>{NAV_ICONS.settings?<span style={{fontSize:20}}>{NAV_ICONS.settings}</span>:<I n="gear" s={20}/>} Settings</h2></div>
+    <div className="h-row" style={{marginBottom:4}}><h2 style={{margin:0,display:'flex',alignItems:'center',gap:8}}>{NAV_ICONS.settings?<span style={{fontSize:20}}>{NAV_ICONS.settings}</span>:<I n="gear" s={20}/>} {navLabel('settings','Settings')}</h2></div>
     <div style={{color:'var(--muted)',fontSize:13,margin:'0 0 18px',maxWidth:760}}>Organisation-wide configuration. Only Administrators can change these.</div>
     <div className="set-wrap">
       <div className="set-subnav">
@@ -2066,17 +2075,23 @@ function SettingsView({ctx}){
       </div>}
 
       {sec==='icons'&&<div className="panel" style={{maxWidth:760,marginBottom:0}}>
-        <div className="h-row"><h3><I n="grid" c="var(--accent-ink)"/>Sidebar icons</h3><span className="tag amber">Admin only</span></div>
-        <div style={{color:'var(--muted)',fontSize:12.5,margin:'2px 0 12px'}}>Pick an emoji for any menu item, or keep the default line icon. Only the Administrator can change these; the choice applies for everyone.</div>
-        {NAV_ITEMS.map(([key,def,label])=>
+        <div className="h-row"><h3><I n="grid" c="var(--accent-ink)"/>Sidebar menu</h3><span className="tag amber">Admin only</span></div>
+        <div style={{color:'var(--muted)',fontSize:12.5,margin:'2px 0 12px'}}>Rename any menu item and pick an emoji for it — or keep the default word and line icon. Only the Administrator can change these; the choice applies for everyone.</div>
+        {NAV_ITEMS.map(([key,def,label])=>{const custom=NAV_LABELS[key]&&NAV_LABELS[key]!==label;return (
           <div key={key} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 2px',borderBottom:'1px solid var(--line)'}}>
             <span style={{width:30,height:30,display:'flex',alignItems:'center',justifyContent:'center',flex:'0 0 auto'}}>
               {NAV_ICONS[key]?<span style={{fontSize:18}}>{NAV_ICONS[key]}</span>:<I n={def}/>}</span>
-            <div style={{flex:1,fontWeight:700,fontSize:13.5}}>{label}<div style={{fontWeight:500,fontSize:11,color:'var(--muted)'}}>{NAV_ICONS[key]?'Custom emoji':'Default icon'}</div></div>
+            <div style={{flex:1,minWidth:0}}>
+              <input className="fsel" style={{width:'100%',fontWeight:700,fontSize:13.5}} defaultValue={NAV_LABELS[key]||label}
+                key={key+':'+(NAV_LABELS[key]||'')} placeholder={label} title="Rename this menu item"
+                onBlur={e=>setNavLabel(key,e.target.value,label)}
+                onKeyDown={e=>{if(e.key==='Enter')e.target.blur();if(e.key==='Escape'){e.target.value=NAV_LABELS[key]||label;e.target.blur();}}}/>
+              <div style={{fontWeight:500,fontSize:11,color:'var(--muted)',marginTop:2}}>Default: {label}{custom?' · renamed':''}{NAV_ICONS[key]?' · custom emoji':''}</div>
+            </div>
             <EmojiPicker value={NAV_ICONS[key]||''} onPick={e=>setNavIcon(key,e)}/>
-            {NAV_ICONS[key]?<button className="linkbtn" style={{fontSize:12}} onClick={()=>setNavIcon(key,null)}>Reset to default</button>:null}
-          </div>)}
-        <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>Every menu item can be personalised (or left as the clean default). “Reset to default” brings back the line icon.</div>
+            {(NAV_ICONS[key]||custom)?<button className="linkbtn" style={{fontSize:12,whiteSpace:'nowrap'}} onClick={()=>{setNavIcon(key,null);setNavLabel(key,'',label);}}>Reset</button>:null}
+          </div>);})}
+        <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>Every menu item can be personalised (or left as the clean default). Editing the name and pressing Enter (or clicking away) saves it; “Reset” brings back the default word and line icon.</div>
       </div>}
 
       {sec==='taskperms'&&<div className="panel" style={{maxWidth:760,marginBottom:0}}>
