@@ -893,7 +893,12 @@ function App(){
 
   /* actions shared */
   const acts={
-    remind:i=>say('Reminder sent to '+assigneesM(tasks[i]).join(' & ')+' 🔔'),
+    /* real nudge (was a fake toast) — writes a task_activity_notifications row to everyone concerned
+       with the task minus the nudger, matching console v133. Preview-as guarded. */
+    remind:i=>{const t=tasks[i];
+      if(previewing){say("You're previewing — switch back to remind for real");return;}
+      if(t&&t.id)notifyEvent(t.id,r.id,'nudged — this task is overdue',concernedForM(t,r.self));
+      say('Reminded '+assigneesM(t).join(' & ')+' 🔔');},
     /* Supply stage 1: the requester's Sr. Manager approves — no longer buys/deletes here; moves the
        request to stage='approved' and stamps the configured supply recipient, so it now surfaces on
        THAT person's dashboard to fulfil (stage 2 = fulfilReq). */
@@ -1700,6 +1705,10 @@ function More({ctx}){
       <Row e="🔑" t="Users & roles" s="Add people · set Admin / Director / Manager / Team Lead / Teacher" onClick={()=>onConsole('Users & roles')}/>
       {ctx.r.billing?<Row e="💳" t="Billing & plan" s="Subscription · invoices · seats" onClick={()=>soon('Billing & plan')}/>:null}
     </>:null}
+    {(ctx.role==='admin'||ctx.role==='mgmt')?<><div className="sec">Oversight</div>
+      <Row e="⚠️" t="Dept / assignee mismatches" s="Tasks tagged into a department none of the assignees belong to" onClick={()=>ctx.setSheet({kind:'mismatch'})}/>
+      {ctx.r.admin?<Row e="🗒️" t="Recent admin activity" s="Account changes · deletions · promotions · permission changes" onClick={()=>ctx.setSheet({kind:'activitylog'})}/>:null}
+    </>:null}
     <div className="sec">More</div>
     <Row e="📅" t="Calendar" s="Duty roster, exams & task due-dates in one view" onClick={()=>ctx.setPage('calendar')}/>
     <Row e="👥" t="People & departments" s="academic · maintenance · accounts · hr · +4 more" onClick={()=>onConsole('People & departments')}/>
@@ -1725,6 +1734,74 @@ function Attendance(){
   </div>;
 }
 
+/* ===== oversight sheets — mobile parity with console v131 (mismatch) + v128 (activity log) ===== */
+function DeptMismatchSheet({ctx,close}){
+  const [editing,setEditing]=useState(null); // {key} of the row being reassigned
+  // same check as the console modal: a task is flagged when no assignee's real department maps to the
+  // task's tagged bucket. Scoped to what the viewer can see (ctx.scope = names on their team). Self-
+  // assigned tasks excluded (you can't misassign to yourself).
+  const flagged=tasks.filter(t=>!t.selfAssigned&&assigneesM(t).some(a=>ctx.scope.includes(a))).map(t=>{
+    const as=assigneesM(t).map(findMember).filter(Boolean);
+    return {t,as,ok:as.some(m=>LABEL_TO_BUCKET[m.dept]===t.bucket)};
+  }).filter(o=>!o.ok&&o.as.length);
+  const guard=()=>{if(ctx.previewing){ctx.say("You're previewing — switch back to fix this for real");return true;}return false;};
+  const move=(t,k)=>{if(guard())return;if(!k||k===t.bucket)return;t.bucket=k;saveTask(t).catch(console.error);ctx.R();ctx.say('Moved to '+BUCKETS[k]);setEditing(null);};
+  const reassign=(t,name)=>{if(guard())return;if(!name)return;const m=findMember(name);t.who=name;t.init=m?m.i:name[0];t.coWho=undefined;saveTask(t).catch(console.error);ctx.R();ctx.say('Reassigned to '+name);setEditing(null);};
+  const lk={background:'none',border:'none',color:'var(--accent-ink,#0a5c54)',fontWeight:700,fontSize:12.5,cursor:'pointer',padding:0};
+  return <>
+    <h3>Dept / assignee mismatches</h3>
+    <div className="sub">{flagged.length?flagged.length+' task'+(flagged.length===1?'':'s')+' tagged into a department none of the assignees belong to.':'No mismatches in your scope. ✓'}</div>
+    {flagged.map(o=>{const key=o.t.id||o.t.t;const taggedLabel=BUCKETS[o.t.bucket]||o.t.bucket;
+      const suggest=LABEL_TO_BUCKET[o.as[0].dept];
+      const inDept=MEMBERS.filter(m=>ctx.scope.includes(m.n)&&m.dept===taggedLabel&&!assigneesM(o.t).includes(m.n));
+      const open=editing===key;
+      return <div className="task" key={key}>
+        <div className="tt">{o.t.t}</div>
+        <div className="meta" style={{marginTop:4}}>Tagged: <b>{taggedLabel}</b> · {o.as.map(m=>m.n+' ('+m.dept+')').join(', ')}</div>
+        {open?
+          <div style={{marginTop:8}}>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <select className="selsel" style={{flex:1}} defaultValue="" disabled={!inDept.length} onChange={e=>{if(e.target.value)reassign(o.t,e.target.value);}}>
+                <option value="">Choose someone in {taggedLabel}…</option>
+                {inDept.map(m=><option key={m.n} value={m.n}>{m.n}</option>)}
+              </select>
+              <button className="bpill" onClick={()=>setEditing(null)}>Cancel</button>
+            </div>
+            {!inDept.length?<div className="reason" style={{marginTop:4}}>No one in your scope is in {taggedLabel} — use Move instead.</div>:null}
+          </div>
+        :<div style={{marginTop:8,display:'flex',gap:16,flexWrap:'wrap'}}>
+          {suggest&&suggest!==o.t.bucket?<button style={lk} onClick={()=>move(o.t,suggest)}>→ Move to {BUCKETS[suggest]}</button>:null}
+          <button style={lk} onClick={()=>setEditing(key)}>→ Reassign within {taggedLabel}</button>
+        </div>}
+      </div>;})}
+    <button className="send" onClick={close}>Done ✓</button>
+  </>;
+}
+const MACT_LABEL={create_staff:'Created account',delete_staff:'Removed account',reset_password:'Reset password',update_login:'Updated login',
+  delete_task:'Deleted task',task_permissions:'Changed task permissions',promote:'Promoted',cover:'Temp cover',demote:'Demoted'};
+function mActDetail(a){const d=a.detail||{};
+  if(a.action==='task_permissions')return (d.role||'A role')+(d.allowed?' can now ':' can no longer ')+(d.can==='delete'?'delete':'edit')+' tasks in '+(a.target_name||'a department');
+  if(a.action==='delete_task')return '“'+(a.target_name||'?')+'”'+(d.dept?' · '+d.dept:'')+(d.assignee?' · was '+d.assignee:'');
+  if(a.action==='promote'||a.action==='cover')return (a.target_name||'?')+' → '+(d.to||'?')+(d.dept?' ('+d.dept+')':'');
+  if(a.action==='demote')return (a.target_name||'?')+' · '+(d.from||'?')+' → '+(d.to||'?');
+  return a.target_name||'—';}
+function ActivityLogSheet({ctx,close}){
+  const [rows,setRows]=useState(null);
+  useEffect(()=>{let live=true;sb.from('admin_activity_log').select('*').order('created_at',{ascending:false}).limit(80)
+    .then(({data})=>{if(live)setRows(data||[]);},()=>{if(live)setRows([]);});return()=>{live=false;};},[]);
+  const nameOf=id=>{const p=ALL_PEOPLE.find(x=>x.id===id);return p?p.n:'—';};
+  return <>
+    <h3>Recent admin activity</h3>
+    <div className="sub">Account changes · task deletions · promotions/demotions · permission changes.</div>
+    {rows===null?<div className="reason">Loading…</div>:rows.length?rows.map(a=>
+      <div className="task" key={a.id}>
+        <div className="tt" style={{fontSize:14}}>{nameOf(a.actor_staff_id)} · {MACT_LABEL[a.action]||a.action}</div>
+        <div className="meta" style={{marginTop:4}}>{mActDetail(a)} · {new Date(a.created_at).toLocaleString('en',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}</div>
+      </div>)
+    :<MobileEmpty icon="🗒️" t="No activity yet" s="Admin actions will show up here."/>}
+    <button className="send" onClick={close}>Done ✓</button>
+  </>;
+}
 /* ============ sheets ============ */
 function Sheets({ctx,acts,sheet}){
   const close=()=>ctx.setSheet(null);
@@ -1744,6 +1821,8 @@ function Sheets({ctx,acts,sheet}){
       {sheet.kind==='event'&&<EventSheet ctx={ctx} idx={sheet.idx} close={close}/>}
       {sheet.kind==='day'&&<DaySheet ctx={ctx} day={sheet.day} events={sheet.events} title={sheet.title} close={close}/>}
       {sheet.kind==='notifs'&&<NotifSheet ctx={ctx} acts={acts} close={close}/>}
+      {sheet.kind==='mismatch'&&<DeptMismatchSheet ctx={ctx} close={close}/>}
+      {sheet.kind==='activitylog'&&<ActivityLogSheet ctx={ctx} close={close}/>}
     </div>
   </div>;
 }
