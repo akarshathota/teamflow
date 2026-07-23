@@ -14,6 +14,21 @@ const BUCKETS={academic:"Academic",maintenance:"Maintenance",construction:"Const
 const BUCKET_COLORS={academic:'#39638f',maintenance:'#b06e12',construction:'#8a6a52',hr:'#a34d78',accounts:'#1a7a48',administration:'#5d6672',transport:'#0e7a8f',it:'#5b5ea6'};
 const LABEL_TO_BUCKET=Object.fromEntries(Object.entries(BUCKETS).map(([k,v])=>[v,k]));
 const bucketColor=b=>BUCKET_COLORS[b]||'#5d6672';
+/* Custom departments an org adds in Settings (org_settings.departments jsonb = array of labels).
+   They're merged into the built-in BUCKETS/LABEL_TO_BUCKET maps at load (and on every refetch) so
+   every existing department code path — task.bucket, realDeptKeys, the New Task picker, the
+   Sr.-Manager "Manage departments" checkboxes, reports — works unchanged. Custom keys are prefixed
+   `x_` so applyCustomDepts can rebuild them cleanly (drop-then-add) without touching built-ins. */
+const DEPT_BUILTINS=Object.keys(BUCKETS).slice(); // the original 8 keys, never removable
+let CUSTOM_DEPTS=[];
+const deptSlug=label=>'x_'+String(label).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+function applyCustomDepts(labels){
+  Object.keys(BUCKETS).forEach(k=>{if(k.startsWith('x_')){const lbl=BUCKETS[k];delete BUCKETS[k];delete LABEL_TO_BUCKET[lbl];}});
+  CUSTOM_DEPTS=Array.isArray(labels)?[...new Set(labels.map(x=>String(x).trim()).filter(Boolean))]:[];
+  CUSTOM_DEPTS.forEach(l=>{if(!LABEL_TO_BUCKET[l]){const k=deptSlug(l);BUCKETS[k]=l;LABEL_TO_BUCKET[l]=k;}});
+}
+/* org departments a viewer manages in Settings — Administrator-only (org_settings RLS). */
+async function saveDepartments(list){await sb.from('org_settings').update({departments:list}).eq('id',true);}
 /* Admin-configurable, RECIPIENT-based routing (routing_rules table). Replaces the old hardcoded
    category→department-head mapping: an Administrator now edits, in Settings, which specific staff
    member receives each report/request. Loaded into each app's ROUTING_RULES global (declared in the
