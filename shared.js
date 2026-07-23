@@ -19,16 +19,26 @@ const bucketColor=b=>BUCKET_COLORS[b]||'#5d6672';
    every existing department code path — task.bucket, realDeptKeys, the New Task picker, the
    Sr.-Manager "Manage departments" checkboxes, reports — works unchanged. Custom keys are prefixed
    `x_` so applyCustomDepts can rebuild them cleanly (drop-then-add) without touching built-ins. */
-const DEPT_BUILTINS=Object.keys(BUCKETS).slice(); // the original 8 keys, never removable
-let CUSTOM_DEPTS=[];
+const BUILTIN_BUCKETS=Object.assign({},BUCKETS); // frozen snapshot of the original built-ins
+const DEPT_BUILTINS=Object.keys(BUCKETS).slice(); // the original 8 keys
+let CUSTOM_DEPTS=[],HIDDEN_DEPTS=[];
 const deptSlug=label=>'x_'+String(label).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
-function applyCustomDepts(labels){
-  Object.keys(BUCKETS).forEach(k=>{if(k.startsWith('x_')){const lbl=BUCKETS[k];delete BUCKETS[k];delete LABEL_TO_BUCKET[lbl];}});
-  CUSTOM_DEPTS=Array.isArray(labels)?[...new Set(labels.map(x=>String(x).trim()).filter(Boolean))]:[];
+/* Rebuild BUCKETS/LABEL_TO_BUCKET from scratch each call: built-ins (from the snapshot) MINUS the
+   ones the org removed (hidden), then the org's custom departments. "Management" (the leadership
+   tier) can never be hidden. Rebuilding from the snapshot is what lets a removed built-in come back
+   when it's un-hidden. */
+function applyDeptConfig(custom,hidden){
+  HIDDEN_DEPTS=Array.isArray(hidden)?[...new Set(hidden.map(x=>String(x).trim()).filter(Boolean))].filter(l=>l!=='Management'):[];
+  CUSTOM_DEPTS=Array.isArray(custom)?[...new Set(custom.map(x=>String(x).trim()).filter(Boolean))]:[];
+  Object.keys(BUCKETS).forEach(k=>delete BUCKETS[k]);
+  Object.keys(LABEL_TO_BUCKET).forEach(k=>delete LABEL_TO_BUCKET[k]);
+  Object.entries(BUILTIN_BUCKETS).forEach(([k,v])=>{if(!HIDDEN_DEPTS.includes(v)){BUCKETS[k]=v;LABEL_TO_BUCKET[v]=k;}});
   CUSTOM_DEPTS.forEach(l=>{if(!LABEL_TO_BUCKET[l]){const k=deptSlug(l);BUCKETS[k]=l;LABEL_TO_BUCKET[l]=k;}});
 }
+const isBuiltinDept=lbl=>Object.values(BUILTIN_BUCKETS).includes(lbl);
 /* org departments a viewer manages in Settings — Administrator-only (org_settings RLS). */
 async function saveDepartments(list){await sb.from('org_settings').update({departments:list}).eq('id',true);}
+async function saveHiddenDepts(list){await sb.from('org_settings').update({hidden_departments:list}).eq('id',true);}
 /* Admin-configurable, RECIPIENT-based routing (routing_rules table). Replaces the old hardcoded
    category→department-head mapping: an Administrator now edits, in Settings, which specific staff
    member receives each report/request. Loaded into each app's ROUTING_RULES global (declared in the

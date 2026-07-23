@@ -138,14 +138,10 @@
   .set-subitem.on{background:var(--accent-soft);color:var(--accent-ink);font-weight:800}
   .set-subitem .ic{width:18px;text-align:center;flex:0 0 auto}
   /* Settings › Departments */
-  .deptset-lab{font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin:16px 0 6px}
   .deptset-row{display:flex;align-items:center;gap:11px;padding:10px 2px;border-bottom:1px solid var(--line)}
-  .deptset-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+  .deptset-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;background:var(--accent)}
   .deptset-name{font-weight:700;font-size:13.5px;flex:1}
   .deptset-head{font-size:11.5px;color:var(--muted)}
-  .pill{font-size:10px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;border-radius:6px;padding:2px 7px;border:1px solid}
-  .pill-common{color:var(--blue,#2b5c86);background:var(--blue-soft,#e5eef6);border-color:#cddcec}
-  .pill-custom{color:var(--accent-ink);background:var(--accent-soft);border-color:var(--accent-border)}
   .deptset-rm{border:none;background:none;color:#b23;font-size:15px;cursor:pointer;width:26px;text-align:center}
   .deptset-rm:disabled{color:#cfccc2;cursor:default}
   .deptset-add{display:flex;gap:9px;margin-top:16px}
@@ -649,7 +645,7 @@ async function loadAll(){
     loadNotifs(),
     sb.from('cron_runs').select('*').order('ran_at',{ascending:false}).limit(1),
     sb.from('admin_activity_log').select('*').order('created_at',{ascending:false}).limit(30),
-    sb.from('org_settings').select('name,supply_requests_enabled,nav_icons,departments').eq('id',true).maybeSingle(),
+    sb.from('org_settings').select('name,supply_requests_enabled,nav_icons,departments,hidden_departments').eq('id',true).maybeSingle(),
     sb.from('routing_rules').select('*'),
     sb.from('checklist_items').select('*').eq('archived',false),
     sb.from('checklist_completions').select('*').gte('occ_date',clSince),
@@ -658,7 +654,7 @@ async function loadAll(){
   if(orgRow&&orgRow.name)ORG_NAME=orgRow.name;
   if(orgRow&&typeof orgRow.supply_requests_enabled==='boolean')SUPPLY_ENABLED=orgRow.supply_requests_enabled;
   NAV_ICONS=(orgRow&&orgRow.nav_icons&&typeof orgRow.nav_icons==='object')?orgRow.nav_icons:{};
-  applyCustomDepts(orgRow&&orgRow.departments); // merge org-added departments into BUCKETS
+  applyDeptConfig(orgRow&&orgRow.departments,orgRow&&orgRow.hidden_departments); // merge custom + hide removed built-ins
   ROUTING_RULES.length=0;ROUTING_RULES.push(...(ruleRows||[]).map(rowToRule));
   STAFF.length=0;STAFF.push(...rowsToStaff(staffRows||[]));
   const byId=Object.fromEntries(STAFF.map(p=>[p.id,p]));
@@ -1871,25 +1867,31 @@ function SettingsView({ctx}){
     const local={id:'local-'+Date.now(),kind:'supply_approver',label:dept,icon:'',staff_id:staffId,sort_order:0};
     ROUTING_RULES.push(local);R();
     addApproverRule(dept,staffId).then(d=>{if(d){local.id=d.id;R();}}).catch(console.error);};
-  /* Departments section — the org's department vocabulary. Built-ins (the original BUCKETS, minus the
-     "Management" leadership tier) are common to every org and can't be removed; custom ones live in
-     org_settings.departments and are removable only while nothing uses them. */
+  /* Departments section — the org's department vocabulary. Built-ins live in BUCKETS; a removed
+     built-in is remembered in org_settings.hidden_departments (rebuilt from the snapshot on load, so
+     re-adding restores it). Custom ones live in org_settings.departments. ANY department can be
+     removed while nothing uses it (no staff, no Sr. Manager head). "Management" (leadership tier) is
+     excluded from this list entirely. */
   const [newDept,setNewDept]=useState('');
-  const builtinDeptLabels=DEPT_BUILTINS.map(k=>BUCKETS[k]).filter(l=>l&&l!=='Management');
+  const visibleDeptLabels=[...DEPT_BUILTINS.map(k=>BUILTIN_BUCKETS[k]).filter(l=>l!=='Management'&&!HIDDEN_DEPTS.includes(l)),...CUSTOM_DEPTS];
   const deptStaffCount=lbl=>STAFF.filter(p=>p.dept===lbl).length;
   const addDept=()=>{const l=newDept.trim();if(!l)return;
+    // re-adding a removed built-in just un-hides it
+    const hiddenMatch=HIDDEN_DEPTS.find(h=>h.toLowerCase()===l.toLowerCase());
+    if(hiddenMatch){const nh=HIDDEN_DEPTS.filter(x=>x!==hiddenMatch);applyDeptConfig(CUSTOM_DEPTS,nh);setNewDept('');R();saveHiddenDepts(nh).catch(console.error);ctx.say('Restored “'+hiddenMatch+'”');return;}
     if(Object.values(BUCKETS).some(v=>v.toLowerCase()===l.toLowerCase())){ctx.say('“'+l+'” already exists');return;}
-    const nx=[...CUSTOM_DEPTS,l];applyCustomDepts(nx);setNewDept('');R();saveDepartments(nx).catch(console.error);ctx.say('Added “'+l+'”');};
+    const nx=[...CUSTOM_DEPTS,l];applyDeptConfig(nx,HIDDEN_DEPTS);setNewDept('');R();saveDepartments(nx).catch(console.error);ctx.say('Added “'+l+'”');};
   const removeDept=lbl=>{
     if(deptStaffCount(lbl)||headOfDept(lbl)){ctx.say('Can’t remove “'+lbl+'” — staff or a head still use it');return;}
-    const nx=CUSTOM_DEPTS.filter(x=>x!==lbl);applyCustomDepts(nx);R();saveDepartments(nx).catch(console.error);ctx.say('Removed “'+lbl+'”');};
-  const deptRow=(lbl,custom)=>{const h=headOfDept(lbl);const n=deptStaffCount(lbl);const locked=!custom||n>0||!!h;
+    if(isBuiltinDept(lbl)){const nh=[...HIDDEN_DEPTS,lbl];applyDeptConfig(CUSTOM_DEPTS,nh);R();saveHiddenDepts(nh).catch(console.error);}
+    else{const nx=CUSTOM_DEPTS.filter(x=>x!==lbl);applyDeptConfig(nx,HIDDEN_DEPTS);R();saveDepartments(nx).catch(console.error);}
+    ctx.say('Removed “'+lbl+'”');};
+  const deptRow=lbl=>{const h=headOfDept(lbl);const n=deptStaffCount(lbl);const locked=n>0||!!h;
     return <div key={lbl} className="deptset-row">
-      <span className="deptset-dot" style={{background:custom?'#5b3d86':'var(--accent)'}}/>
+      <span className="deptset-dot"/>
       <span className="deptset-name">{lbl}</span>
       <span className="deptset-head">{h?h.n.split(' ')[0]:(n?n+' staff':'no head yet')}</span>
-      <span className={'pill '+(custom?'pill-custom':'pill-common')}>{custom?'Custom':'Common'}</span>
-      <button className="deptset-rm" disabled={locked} title={custom?(locked?'Can’t remove — staff or a head use it':'Remove'):'Built-in — can’t remove'} onClick={()=>{if(!locked)removeDept(lbl);}}>✕</button>
+      <button className="deptset-rm" disabled={locked} title={locked?'Can’t remove — staff or a head use it':'Remove'} onClick={()=>{if(!locked)removeDept(lbl);}}>✕</button>
     </div>;};
   const SECS=[['maint','🔧','Maintenance routing'],['supply','📦','Supply requests'],['depts','🏢','Departments'],['icons','🎨','Sidebar icons']];
   return <div className="view">
@@ -1952,16 +1954,14 @@ function SettingsView({ctx}){
 
       {sec==='depts'&&<div className="panel" style={{maxWidth:760,marginBottom:0}}>
         <div className="h-row"><h3>🏢 Departments</h3><span className="tag amber">Admin only</span></div>
-        <div style={{color:'var(--muted)',fontSize:12.5,margin:'2px 0 14px',lineHeight:1.5}}>The departments your organisation runs. Common ones are built in; add any others your org needs. A new department is available immediately in the New Task picker, the Sr. Manager “Manage departments” list, the org chart and reports. Assign a Sr. Manager head to it in People &amp; roles.</div>
-        <div className="deptset-lab">Common departments</div>
-        {builtinDeptLabels.map(l=>deptRow(l,false))}
-        {CUSTOM_DEPTS.length?<><div className="deptset-lab">Added by your organisation</div>{CUSTOM_DEPTS.map(l=>deptRow(l,true))}</>:null}
+        <div style={{color:'var(--muted)',fontSize:12.5,margin:'2px 0 14px',lineHeight:1.5}}>The departments your organisation runs. Rename them by removing one and adding it back under the name you use, or add any others your org needs. A new department is available immediately in the New Task picker, the Sr. Manager “Manage departments” list, the org chart and reports. Assign a Sr. Manager head to it in People &amp; roles.</div>
+        {visibleDeptLabels.length?visibleDeptLabels.map(l=>deptRow(l)):<div style={{fontSize:12.5,color:'var(--muted)',padding:'8px 2px'}}>No departments yet — add your first one below.</div>}
         <div className="deptset-add">
           <input placeholder="Add a department — e.g. “Housekeeping”" value={newDept}
             onChange={e=>setNewDept(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addDept();}}/>
           <button className="btn primary" onClick={addDept}>＋ Add department</button>
         </div>
-        <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>Common departments can’t be removed. A custom department can be removed only while no one belongs to it and no Sr. Manager heads it.</div>
+        <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>A department can be removed only while no one belongs to it and no Sr. Manager heads it. A removed department can be added back any time.</div>
       </div>}
 
       {sec==='icons'&&<div className="panel" style={{maxWidth:760,marginBottom:0}}>
