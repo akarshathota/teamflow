@@ -892,16 +892,25 @@ function App(){
 
   const needExt=t=>{if(t.done||!t.date)return false;const lim=new Date(TODAY);lim.setDate(lim.getDate()+2);return t.date<=iso(lim);};
 
+  /* real nudge (was a fake toast) — stamps last_nudged_at (de-dup + "nudged Xh ago") then writes a
+     task_activity_notifications row to everyone concerned minus the nudger. Matches console v133/v136. */
+  const nudgeOneM=t=>{if(!t||!t.id)return;t.lastNudgedAt=new Date().toISOString();
+    sb.from('tasks').update({last_nudged_at:t.lastNudgedAt}).eq('id',t.id).then(({error})=>{if(error)console.error(error);});
+    notifyEvent(t.id,r.id,'nudged — this task is overdue',concernedForM(t,r.self));};
   /* actions shared */
   const acts={
-    /* real nudge (was a fake toast) — writes a task_activity_notifications row to everyone concerned
-       with the task minus the nudger, matching console v133. Preview-as guarded. */
     remind:i=>{const t=tasks[i];
       if(previewing){say("You're previewing — switch back to remind for real");return;}
-      if(t&&t.id){t.lastNudgedAt=new Date().toISOString();
-        sb.from('tasks').update({last_nudged_at:t.lastNudgedAt}).eq('id',t.id).then(({error})=>{if(error)console.error(error);});
-        notifyEvent(t.id,r.id,'nudged — this task is overdue',concernedForM(t,r.self));}
-      say('Reminded '+assigneesM(t).join(' & ')+' 🔔');},
+      nudgeOneM(t);say('Reminded '+assigneesM(t).join(' & ')+' 🔔');},
+    /* bulk "Nudge all overdue" (mobile parity with console v133/v136). Nudges every overdue task in the
+       viewer's scope, skipping any nudged in the last 12h so it doesn't spam. Preview-as guarded. */
+    nudgeAll:()=>{if(previewing){say("You're previewing — switch back to nudge for real");return;}
+      const od=tasks.filter(t=>t.id&&!t.done&&t.date&&t.date<iso(TODAY)&&assigneesM(t).some(a=>scope.includes(a)));
+      if(!od.length){say('Nothing overdue to nudge');return;}
+      const fresh=od.filter(t=>!nudgedRecently(t.lastNudgedAt));
+      if(!fresh.length){say('Everyone was already nudged in the last few hours');return;}
+      fresh.forEach(nudgeOneM);R();const skipped=od.length-fresh.length;
+      say('Nudged '+fresh.length+' overdue task'+(fresh.length!=1?'s':'')+(skipped?' · '+skipped+' already nudged recently':''));},
     /* Supply stage 1: the requester's Sr. Manager approves — no longer buys/deletes here; moves the
        request to stage='approved' and stamps the configured supply recipient, so it now surfaces on
        THAT person's dashboard to fulfil (stage 2 = fulfilReq). */
@@ -1014,7 +1023,7 @@ function App(){
       {page==='alltasks'&&<AllTasks ctx={ctx} acts={acts}/>}
       {page==='checklist'&&<ChecklistMobile ctx={ctx}/>}
       {page==='calendar'&&<div><div className="sec">My calendar · due dates</div><Cal ctx={ctx} personal/></div>}
-      {page==='insights'&&<Insights ctx={ctx}/>}
+      {page==='insights'&&<Insights ctx={ctx} acts={acts}/>}
       {page==='notices'&&<Notices ctx={ctx}/>}
       {page==='more'&&<More ctx={ctx}/>}
       {page==='attendance'&&<Attendance/>}
@@ -1642,7 +1651,8 @@ function exportDailyReportsM(scoped){
 }
 
 /* ============ insights ============ */
-function Insights({ctx}){
+function Insights({ctx,acts}){
+  const overdueN=tasks.filter(t=>t.id&&!t.done&&t.date&&t.date<iso(TODAY)&&assigneesM(t).some(a=>ctx.scope.includes(a))).length;
   return <div>
     <div className="insight">
       <div className="lab"><I n="spark" s={13}/> Daily briefing</div>
@@ -1650,6 +1660,7 @@ function Insights({ctx}){
     </div>
     <div className="sec">Due dates · your span</div>
     <Cal ctx={ctx} allowFilter/>
+    {overdueN&&acts&&!ctx.previewing?<button className="send" style={{background:'var(--red,#c43a53)',marginTop:4}} onClick={()=>acts.nudgeAll()}>🔔 Nudge all {overdueN} overdue</button>:null}
     <div className="sec">Who needs attention <span className="free">FREE</span></div>
     {(()=>{const at=attentionList(ctx.scope);
       return at.length?at.map(x=><div className="attn" key={x.m.n}>
