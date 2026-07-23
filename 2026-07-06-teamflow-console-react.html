@@ -4012,6 +4012,7 @@ function DailyReportModal({ctx,close}){
   const [resolveMode,setResolveMode]=useState(null);
   const [resTaskTitle,setResTaskTitle]=useState('');
   const [resTaskWho,setResTaskWho]=useState('');
+  const [resTaskDept,setResTaskDept]=useState('');
   const [resTaskDue,setResTaskDue]=useState('');
   const [resText,setResText]=useState('');
   const [resBusy,setResBusy]=useState(false);
@@ -4154,19 +4155,23 @@ function DailyReportModal({ctx,close}){
                 <button className="linkbtn" onClick={()=>{setResolveId(isRes?null:row.id);setResolveMode(null);setResText('');}}>{isRes?'Cancel':'✓ Resolve here'}</button>
               </div>
               {isRes&&!resolveMode?<div style={{marginTop:8,display:'flex',gap:8,flexWrap:'wrap'}}>
-                <button className="btn soft" onClick={()=>{setResolveMode('task');setResTaskTitle(row.issue);setResTaskWho('');setResTaskDue(iso(TODAY));}}>Issue a task</button>
+                <button className="btn soft" onClick={()=>{setResolveMode('task');setResTaskTitle(row.issue);setResTaskWho('');setResTaskDept('');setResTaskDue(iso(TODAY));}}>Issue a task</button>
                 <button className="btn soft" onClick={()=>{setResolveMode('text');setResText('');}}>Describe how it was resolved</button>
               </div>:null}
-              {isRes&&resolveMode==='task'?<div style={{marginTop:8,display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+              {isRes&&resolveMode==='task'?(()=>{const scopeDepts=[...new Set(ctx.scope.map(p=>p.dept).filter(Boolean))].sort();return <div style={{marginTop:8,display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
                 <input className="fsel" style={{flex:'1 1 220px'}} value={resTaskTitle} onChange={e=>setResTaskTitle(e.target.value)} placeholder="Task title"/>
+                <select className="fsel" style={{flex:'0 1 170px'}} value={resTaskDept} onChange={e=>{const d=e.target.value;setResTaskDept(d);if(resTaskWho){const who=byShort(resTaskWho);if(d&&(!who||who.dept!==d))setResTaskWho('');}}}>
+                  <option value="">All departments</option>
+                  {scopeDepts.map(d=><option key={d} value={d}>{d}</option>)}
+                </select>
                 <select className="fsel" value={resTaskWho} onChange={e=>setResTaskWho(e.target.value)}>
                   <option value="">Assign to…</option>
-                  {ctx.scope.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}
+                  {ctx.scope.filter(p=>!resTaskDept||p.dept===resTaskDept).map(p=><option key={p.s} value={p.s}>{p.n}</option>)}
                 </select>
                 <input type="date" className="fsel" value={resTaskDue} min={iso(TODAY)} onChange={e=>setResTaskDue(e.target.value)}/>
                 <button className="btn ghost" onClick={()=>setResolveMode(null)}>Back</button>
                 <button className="btn primary" disabled={resBusy} onClick={()=>resolveWithTask(row)}>{resBusy?'Creating…':'Create task & resolve'}</button>
-              </div>:null}
+              </div>;})():null}
               {isRes&&resolveMode==='text'?<div style={{marginTop:8,display:'flex',gap:8,flexWrap:'wrap'}}>
                 <input className="fsel" style={{flex:'1 1 220px'}} value={resText} onChange={e=>setResText(e.target.value)} placeholder="How was this resolved?"/>
                 <button className="btn ghost" onClick={()=>setResolveMode(null)}>Back</button>
