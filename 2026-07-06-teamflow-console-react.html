@@ -1710,6 +1710,14 @@ function Dashboard({ctx,open,over,today,done}){
   const wRows=wStaff.map(p=>({p,l:wCnt(p)})).sort((a,b)=>b.l-a.l);
   const wMax=Math.max(1,...wRows.map(o=>o.l));
   const ods=tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,shorts)&&isOverdue(o.t)).sort((a,b)=>a.t.date<b.t.date?-1:1);
+  /* Week-ahead digest — turns reactive overdue-chasing into a weekly habit. "At risk" = due in the next
+     7 days AND assigned to someone already behind (has ≥1 overdue task), i.e. likely to slip. */
+  const weekEnd=iso(new Date(TODAY.getTime()+7*864e5));
+  const dueThisWeek=t=>t.status!=='done'&&t.date&&t.date>=iso(TODAY)&&t.date<weekEnd;
+  const behindSet=new Set(tasks.filter(t=>inScope(t,shorts)&&isOverdue(t)).flatMap(t=>assignees(t).filter(Boolean)));
+  const atRiskPred=t=>dueThisWeek(t)&&assignees(t).some(a=>behindSet.has(a));
+  const weekRows=tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,shorts)&&dueThisWeek(o.t));
+  const atRisk=weekRows.filter(o=>atRiskPred(o.t)).sort((a,b)=>a.t.date<b.t.date?-1:1);
   const attn=ctx.attentionList().slice(0,4);
   const attnColors=['var(--red)','var(--amber)','var(--accent)','var(--blue)'];
   const [kpiPop,setKpiPop]=useState(null); // {title,pred} — resolved to rows at render so realtime refetches stay live
@@ -1764,6 +1772,23 @@ function Dashboard({ctx,open,over,today,done}){
       </div>
       <div>
         <QueuePanel ctx={ctx}/>
+        {/* Week-ahead digest: a Monday-review summary that adds a predictive "at risk" signal (due this
+            week + assignee already behind) on top of the current overdue/attention panels. */}
+        <div className="panel">
+          <div className="h-row"><h3><I n="clock" c="var(--accent-ink)"/>This week · at a glance</h3><span className="tag gray">Mon review</span></div>
+          <div style={{display:'flex',gap:8,margin:'2px 0 12px',flexWrap:'wrap'}}>
+            <span className="chip-s red" style={{cursor:'pointer'}} title="Review overdue" onClick={()=>setKpiPop({title:'Overdue',pred:isOverdue})}>{over} overdue</span>
+            <span className="chip-s amber" style={{cursor:'pointer'}} title="Due in the next 7 days" onClick={()=>setKpiPop({title:'Due this week',pred:dueThisWeek})}>{weekRows.length} due this week</span>
+            <span className="chip-s" style={{cursor:'pointer',background:'#fbe6cf',color:'#8a5316',border:'1px solid #f0c98f'}} title="Due this week and assigned to someone already behind" onClick={()=>setKpiPop({title:'At risk this week',pred:atRiskPred})}>{atRisk.length} at risk</span>
+          </div>
+          {atRisk.length?atRisk.slice(0,4).map(o=>{const p=byShort(o.t.who);
+            return <div className="attn" key={o.i}>
+              <div className="ring" style={{background:'var(--amber)'}}>{p?p.av:'?'}</div>
+              <div style={{flex:1,minWidth:0}}><div className="nm">{o.t.t}</div><div className="rs">{p?p.n:o.t.who} · due {fmtDate(o.t.date)} · behind on other work</div></div>
+              <div className="act"><button className="linkbtn" onClick={()=>ctx.setDrawerIdx(o.i)}>Open</button></div></div>;})
+          :<div className="whysm" style={{padding:'6px 2px'}}>No one behind is due this week — you’re ahead. 🎉</div>}
+          {atRisk.length>4?<button className="linkbtn" style={{marginTop:6}} onClick={()=>setKpiPop({title:'At risk this week',pred:atRiskPred})}>View all {atRisk.length} at risk →</button>:null}
+        </div>
         <div className="panel">
           <div className="h-row"><h3><I n="spark" c="var(--accent-ink)"/>Who needs attention</h3><span className="tag green">FREE · LIVE</span></div>
           {attn.length?attn.map((x,ix)=><div className="attn" key={x.p.s}>
