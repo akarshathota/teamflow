@@ -760,6 +760,11 @@ const BOSS_LABEL={"Rajesh Menon":"Rajesh (Management)","Anita Desai":"Anita (Man
    for every such task, so Akarsh (or anyone else BOSS_LABEL covers) never made it into
    concernedFor's notification recipients. Confirmed live: 5 real tasks had this before the fix. */
 const bossLabelOf=n=>BOSS_LABEL[n]||n;
+/* Escalation-target label: when an issue/incident escalates up to the Management or Administrator
+   tier, name the TIER ("Management") rather than the individual — those are collective leadership
+   tiers, so "Escalate to Management" reads truer than "Escalate to Akarsh". Below that (Director,
+   Manager, …) keep naming the specific person you're handing it to. */
+function escalateTargetLabel(v){const b=v&&v.boss?byName(v.boss):null;if(!b)return (v&&v.boss)||'';return (b.role==='Management'||b.role==='Administrator')?b.role:b.n;}
 const SCOPE_WORD={admin:"all teams",mgmt:"org-wide",dir:"your departments",srm:"your teams",jrm:"your team",lead:"your team"};
 
 /* ============ helpers ============ */
@@ -3941,7 +3946,7 @@ function DailyReportsPanel({ctx,fw,fb}){
       priority:escPrio,files:[]});
     if(error){console.error(error);ctx.say('Could not escalate — try again');setEscBusy(false);return;}
     setEscBusy(false);setEscId(null);setEscText('');setEscPrio('Medium');
-    ctx.say('Escalated'+(ctx.viewer.boss?' to '+bossLabelOf(ctx.viewer.boss):''));
+    ctx.say('Escalated'+(ctx.viewer.boss?' to '+escalateTargetLabel(ctx.viewer):''));
   }
 
   return <>
@@ -4072,7 +4077,7 @@ function DailyReportModal({ctx,close}){
     const {error}=await sb.from('report_issues').update({escalated_to:viewer.bossId}).eq('id',row.id);
     if(error){console.error(error);say('Could not escalate — try again');return;}
     setInbox(inbox.filter(x=>x.id!==row.id));
-    say('Escalated to '+bossLabelOf(viewer.boss));
+    say('Escalated to '+escalateTargetLabel(viewer));
   }
   // Two real resolution paths (see 20260717000002_report_issue_resolution.sql): issue a task,
   // reusing the exact same tasks-insert path QuickCapture/saveTask already use, or describe how
@@ -4151,7 +4156,7 @@ function DailyReportModal({ctx,close}){
               <div className="rs">{fromLabel(row)}{row.remarks?' · “'+row.remarks+'”':''}</div>
               {row.files&&row.files.length?<div className="filelist">{row.files.map((x,ix)=><FileChip key={ix} x={x}/>)}</div>:null}
               <div className="act" style={{marginTop:7,marginLeft:0}}>
-                {viewer.bossId?<button className="linkbtn" onClick={()=>escalate(row)}>↑ Escalate to {bossLabelOf(viewer.boss).split(' (')[0]}</button>:null}
+                {viewer.bossId?<button className="linkbtn" onClick={()=>escalate(row)}>↑ Escalate to {escalateTargetLabel(viewer)}</button>:null}
                 <button className="linkbtn" onClick={()=>{setResolveId(isRes?null:row.id);setResolveMode(null);setResText('');}}>{isRes?'Cancel':'✓ Resolve here'}</button>
               </div>
               {isRes&&!resolveMode?<div style={{marginTop:8,display:'flex',gap:8,flexWrap:'wrap'}}>

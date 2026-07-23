@@ -385,6 +385,9 @@ const findPerson=n=>ALL_PEOPLE.find(p=>p.n.toLowerCase()===String(n).toLowerCase
    looks the person up for real and reuses the exact "Name (Role)" shape bossesFor() already
    produces, so it can never drift the same way. */
 const bossLabelOf=n=>{const p=findPerson(n);return p?p.n+' ('+p.role+')':n;};
+/* Escalation-target label: name the TIER ("Management") when escalating up to Management/
+   Administrator (collective leadership tiers), else the individual. Mirrors console's helper. */
+const escalateTargetLabel=n=>{const p=findPerson(n);if(!p)return n||'';return (p.role==='Management'||p.role==='Administrator')?p.role:p.n;};
 /* srm/jrm's real reporting-line scope, mirroring console's descendants() — walks ALL_PEOPLE's
    boss field (short names, matching t.who's convention) rather than a role-config hardcoded list.
    Only need this for srm/jrm: admin/mgmt scope is role-based (ALL_STAFF, position-independent) and
@@ -1502,7 +1505,7 @@ function DailyReportsSection({ctx}){
       priority:escPrio,files:[]});
     if(error){console.error(error);ctx.say('Could not escalate — try again');setEscBusy(false);return;}
     setEscBusy(false);setEscId(null);setEscText('');setEscPrio('Medium');
-    ctx.say('Escalated'+(ctx.r.boss?' to '+bossLabelOf(ctx.r.boss):''));
+    ctx.say('Escalated'+(ctx.r.boss?' to '+escalateTargetLabel(ctx.r.boss):''));
   }
 
   return <>
@@ -2105,7 +2108,7 @@ function DailyReportSheet({ctx,close}){
     const {error}=await sb.from('report_issues').update({escalated_to:r.bossId}).eq('id',row.id);
     if(error){console.error(error);say('Could not escalate — try again');return;}
     setInbox(inbox.filter(x=>x.id!==row.id));
-    say('Escalated to '+bossLabelOf(r.boss));
+    say('Escalated to '+escalateTargetLabel(r.boss));
   }
   // Two real resolution paths (see 20260717000002_report_issue_resolution.sql): issue a task,
   // reusing the exact same tasks-insert path TaskSheet/saveTask already use, or describe how it
@@ -2183,7 +2186,7 @@ function DailyReportSheet({ctx,close}){
         <div className="meta" style={{marginTop:2}}>{fromLabel(row)}{row.remarks?' · "'+row.remarks+'"':''}</div>
         {row.files&&row.files.length?<div className="filelist">{row.files.map((f,ix)=><FileChip key={ix} f={f}/>)}</div>:null}
         <div style={{display:'flex',gap:8,marginTop:8}}>
-          {r.bossId?<button className="chipbtn" onClick={()=>escalate(row)}>↑ Escalate to {bossLabelOf(r.boss).split(' (')[0]}</button>:null}
+          {r.bossId?<button className="chipbtn" onClick={()=>escalate(row)}>↑ Escalate to {escalateTargetLabel(r.boss)}</button>:null}
           <button className="chipbtn" onClick={()=>{setResolveId(isRes?null:row.id);setResolveMode(null);setResText('');}}>{isRes?'Cancel':'✓ Resolve here'}</button>
         </div>
         {isRes&&!resolveMode?<div style={{display:'flex',gap:8,marginTop:8}}>
