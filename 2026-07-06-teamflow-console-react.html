@@ -2167,39 +2167,6 @@ function ExportTrio({label,rows,viewerName}){
     <button className="exp-btn" onClick={()=>printRows(rows,label,viewerName)}><I n="print" s={13}/>Print</button>
   </div>;
 }
-function ExportKebab({label,rows,viewerName,onExport}){
-  const [open,setOpen]=useState(false);
-  const ref=useRef();
-  useEffect(()=>{
-    if(!open)return;
-    const h=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
-    document.addEventListener('click',h);
-    return ()=>document.removeEventListener('click',h);
-  },[open]);
-  return <div className="kebab" ref={ref} onClick={()=>setOpen(o=>!o)}>
-    <I n="dots3" s={16}/>
-    {open?<div className="kebab-menu">
-      <button onClick={e=>{e.stopPropagation();setOpen(false);onExport({label,rows,viewerName});}}><I n="dl" s={14}/>Export list</button>
-      <button onClick={e=>{e.stopPropagation();setOpen(false);printRows(rows,label,viewerName);}}><I n="print" s={14}/>Print list</button>
-    </div>:null}
-  </div>;
-}
-function ExportFormatModal({target,close,say}){
-  return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
-    <div className="modal" style={{width:320}}>
-      <div className="qc-head"><h3>Export list</h3><button className="iconbtn" onClick={close}><I n="x"/></button></div>
-      <div className="mf">
-        <div className="whysm" style={{marginTop:0,marginBottom:14}}>Choose a format for "{target.label}"</div>
-        <div style={{display:'flex',gap:10}}>
-          <button className="btn ghost" style={{flex:1,flexDirection:'column',height:70,gap:6}}
-            onClick={()=>{printRows(target.rows,target.label,target.viewerName);close();}}><I n="print"/>PDF</button>
-          <button className="btn ghost" style={{flex:1,flexDirection:'column',height:70,gap:6}}
-            onClick={()=>{exportRows(target.rows,target.label);say('Exported "'+target.label+'" — CSV, opens directly in Excel');close();}}><I n="dl"/>XLSX</button>
-        </div>
-      </div>
-    </div>
-  </div>;
-}
 /* KPI drill-down: clicking a stat card opens this list of exactly the tasks behind the number.
    Each row explicitly closes the popup AND opens the task drawer — deliberately not left to the
    TaskRow's own click bubbling, which can be swallowed when the close-triggered re-render
@@ -2470,7 +2437,6 @@ function TasksView({ctx}){
   const [fboss,setFboss]=useState('all');
   const [bossMode,setBossMode]=useState('tome');
   const [deptFb,setDeptFb]=useState('all');
-  const [exportFor,setExportFor]=useState(null);
 
   const showDept=ctx.role==='admin'||ctx.role==='srm'||ctx.role==='mgmt'||ctx.role==='dir';
   const isManagerTier=ctx.role==='srm';
@@ -2543,7 +2509,6 @@ function TasksView({ctx}){
         </div>
       </div>:null}
     </div>
-    {exportFor?<ExportFormatModal target={exportFor} close={()=>setExportFor(null)} say={ctx.say}/>:null}
   </div>;
 }
 
@@ -4505,7 +4470,7 @@ function DailyReportModal({ctx,close}){
       if(error){console.error(error);say('Could not send report — try again');setBusy(false);return;}
     }
     setBusy(false);
-    say('Daily report sent'+(viewer.boss?' to '+bossLabelOf(viewer.boss):''));
+    say('Daily report sent'+(viewer.boss?' to '+escalateTargetLabel(viewer):''));
     close();
   }
   async function escalate(row){
