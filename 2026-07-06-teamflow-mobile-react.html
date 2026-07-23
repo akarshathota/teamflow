@@ -312,10 +312,14 @@ const bossesFor=(role,self)=>{
    just the creator's boss chain — anyone at that tier can hand a task down. Excludes the creator
    ("own initiative" covers that). Kept separate from bossesFor(), which stays a real boss chain for
    approval routing (its .slice(-1)[0] = the topmost boss who approves). self is a short name. */
+/* Mobile person-title: the chosen custom title (staff.title) if set, else the RAW DB role — mobile
+   deliberately keeps the raw role for untitled people (unlike shared roleLabel, which falls back to
+   the canonical label). A titled person shows their title in both apps. */
+const roleLabelM=p=>(p&&p.title)||(p&&p.role)||'';
 const INSTRUCT_RANK_M={Administrator:0,Director:1,Management:2};
 const instructorsFor=self=>ALL_PEOPLE.filter(p=>p.role in INSTRUCT_RANK_M&&p.s!==self)
   .sort((a,b)=>INSTRUCT_RANK_M[a.role]-INSTRUCT_RANK_M[b.role]||a.n.localeCompare(b.n))
-  .map(p=>({n:p.n,label:p.n+' ('+roleLabel(p)+')'}));
+  .map(p=>({n:p.n,label:p.n+' ('+roleLabelM(p)+')'}));
 /* same approval model as the console's canApprove: admin/mgmt approve anything, otherwise only the
    person's real direct boss (checked live via ALL_PEOPLE/findPerson, matching console's
    `p.boss===viewer.n` exactly) — not a hardcoded name→role table. The old BOSS_ROLE map only ever
@@ -386,7 +390,7 @@ const findPerson=n=>ALL_PEOPLE.find(p=>p.n.toLowerCase()===String(n).toLowerCase
    leans on a hardcoded 4-name BOSS_LABEL map that already went stale for this org once — this
    looks the person up for real and reuses the exact "Name (Role)" shape bossesFor() already
    produces, so it can never drift the same way. */
-const bossLabelOf=n=>{const p=findPerson(n);return p?p.n+' ('+roleLabel(p)+')':n;};
+const bossLabelOf=n=>{const p=findPerson(n);return p?p.n+' ('+roleLabelM(p)+')':n;};
 /* Escalation-target label: name the TIER ("Management") when escalating up to Management/
    Administrator (collective leadership tiers), else the individual. Mirrors console's helper. */
 const escalateTargetLabel=n=>{const p=findPerson(n);if(!p)return n||'';return (p.role==='Management'||p.role==='Administrator')?p.role:p.n;};
@@ -458,7 +462,7 @@ async function loadAll(){
   const byId=Object.fromEntries((staffRows||[]).map(r=>[r.id,{name:r.name,short:r.short_name,initials:r.initials}]));
   ALL_PEOPLE.length=0;ALL_PEOPLE.push(...(staffRows||[]).map(r=>({n:r.name,s:r.short_name,id:r.id,authId:r.auth_user_id,role:r.role,department:r.department,
     headDepartments:Array.isArray(r.head_departments)?r.head_departments:undefined, // Sr. Managers may head several departments
-    title:r.title||undefined, // staff.title — chosen role title (alias); undefined = default label. Read by shared.js roleLabel(p)
+    title:r.title||undefined, // staff.title — chosen role title (alias); undefined = default label. Read by roleLabelM(p) (mobile) / roleLabel (shared)
     boss:r.boss_id&&byId[r.boss_id]?byId[r.boss_id].short:null,bossId:r.boss_id||null})));
   MEMBERS.length=0;MEMBERS.push(...(staffRows||[]).map(r=>({
     n:r.short_name,i:r.initials,dept:r.department,role:JOB_TITLE[r.short_name]||r.role,title:r.title||undefined,
@@ -847,7 +851,7 @@ function App(){
     // admin/mgmt are org-wide, not tied to a department, so their org string is the live
     // organisation name (org_settings, admin-editable in console) + tier — everyone else's
     // real department replaces the old hardcoded one.
-    org:(role==='admin'||role==='mgmt')?ORG_NAME+' · '+ROLES[role].org:roleLabel(person)+' · '+(person.department||''),
+    org:(role==='admin'||role==='mgmt')?ORG_NAME+' · '+ROLES[role].org:roleLabelM(person)+' · '+(person.department||''),
     team:role==='worker'?[person.s]
       :(role==='srm'||role==='dir'||role==='jrm'||role==='lead')?[person.s].concat(descendantsM(person.s).map(p=>p.s))
       :ROLES[role].team};
@@ -1106,7 +1110,7 @@ function Home({ctx,acts}){
             {sug?<div className="meta" style={{marginTop:7,color:'var(--accent-ink)',fontWeight:600}}>✨ Suggested: {sug.n} — {sug.why}</div>:null}
             <div className="picker" style={{marginTop:8}}>
               {pool.length?pool.map(m=>
-                <button key={m.n} className={'pickchip'+(sug&&m.n===sug.n?' cur':'')} onClick={()=>acts.assignIssue(qi,m.n)}>{m.n} · {roleLabel(m)}</button>)
+                <button key={m.n} className={'pickchip'+(sug&&m.n===sug.n?' cur':'')} onClick={()=>acts.assignIssue(qi,m.n)}>{m.n} · {roleLabelM(m)}</button>)
                 :<span className="meta">No {poolDept} staff to assign yet</span>}
             </div></div>;})}</>:null}
       {reqs.length?<><div className="sec">Supply requests — approve</div>
@@ -1203,7 +1207,7 @@ async function clSnapshotPdf(staffId,mode,anchorISO){
   const period=mode==='week'?pdfDate(days[0])+' – '+pdfDate(days[days.length-1])+', '+new Date(days[0]+'T00:00:00').getFullYear()
     :new Date(days[0]+'T00:00:00').toLocaleDateString('en',{month:'long',year:'numeric'});
   doc.setFont('helvetica','normal');doc.setFontSize(11);doc.setTextColor(27,30,33);
-  doc.text((person?person.n:'—')+'  ·  '+(person?roleLabel(person):'')+'  ·  '+(person?person.department:'')+'    —    '+period,40,y);y+=16;
+  doc.text((person?person.n:'—')+'  ·  '+(person?roleLabelM(person):'')+'  ·  '+(person?person.department:'')+'    —    '+period,40,y);y+=16;
   let due=0,done=0;const absDays=new Set();
   days.forEach(d=>{if(clAbsOn(staffId,d)&&d<=todayISO)absDays.add(d);
     items.forEach(it=>{const s=clCellState(staffId,d,it,todayISO,doneOn);if(s==='done'){due++;done++;}else if(s==='miss')due++;});});
@@ -1296,7 +1300,7 @@ function ClTeamListMobile({ctx,people,pick}){
     {shown.map(p=>{const done=clDoneSet(p.id,today),due=clItemsFor(p.id).filter(i=>clDueOn(i,today)),n=due.length,d=due.filter(i=>done.has(i.id)).length;
       return <div key={p.id} className="task" onClick={()=>pick(p)} style={{display:'flex',alignItems:'center',gap:11,cursor:'pointer',padding:12}}>
         <span style={{width:34,height:34,borderRadius:'50%',background:"#0e7a6f",color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:13,flex:'0 0 auto'}}>{p.i||p.n[0]}</span>
-        <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14}}>{p.n}</div><div style={{fontSize:11.5,color:'#71797f'}}>{roleLabel(p)} · {p.department}</div></div>
+        <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14}}>{p.n}</div><div style={{fontSize:11.5,color:'#71797f'}}>{roleLabelM(p)} · {p.department}</div></div>
         <div style={{textAlign:'right'}}><b style={{fontSize:14}}>{d}/{n}</b><div style={{fontSize:9.5,color:'#71797f',textTransform:'uppercase',letterSpacing:.4}}>today</div></div>
       </div>;})}
     {!shown.length&&<div className="task" style={{textAlign:'center',color:'#71797f',padding:24}}>No one matches.</div>}
@@ -1924,7 +1928,7 @@ function TaskSheet({ctx,close}){
             {joint?<div className="reason" style={{marginBottom:6}}>Tap each person to include — the task appears in everyone’s list</div>:null}
             <div className="empcol">
               {emp.length?emp.map(m=><button key={m.n} className={'pickchip'+(cur.whos.includes(m.n)?' cur':'')} onClick={()=>toggleWho(m.n)}>
-                {cur.whos.includes(m.n)?'✓ ':''}<b>{m.n}</b> · {load[m.n]} open<span className="emprole">{m.dept} · {roleLabel(m)}</span></button>)
+                {cur.whos.includes(m.n)?'✓ ':''}<b>{m.n}</b> · {load[m.n]} open<span className="emprole">{m.dept} · {roleLabelM(m)}</span></button>)
                 :<MobileEmpty icon="🔍" t="No one matches" s="Try a different name, department, or skill." style={{padding:12}}/>}
             </div>
           </div>:null}
@@ -2021,7 +2025,7 @@ function IssueSheet({ctx,close}){
             background:on?'var(--accent-soft)':'#fff',borderRadius:12,padding:'11px 12px',cursor:'pointer',color:'inherit'}}>
           <div style={{fontSize:22,lineHeight:1}}>{c.icon}</div>
           <div style={{fontWeight:800,fontSize:13.5,marginTop:6}}>{c.label}</div>
-          <div style={{fontSize:11,color:'var(--muted)',marginTop:5,lineHeight:1.4}}>Goes to {h?<b style={{color:'var(--accent-ink)'}}>{h.n} · {roleLabel(h)}, {h.department}</b>:<b>the configured recipient</b>}{!h?<><br/>No recipient set — admins will handle it</>:null}</div>
+          <div style={{fontSize:11,color:'var(--muted)',marginTop:5,lineHeight:1.4}}>Goes to {h?<b style={{color:'var(--accent-ink)'}}>{h.n} · {roleLabelM(h)}, {h.department}</b>:<b>the configured recipient</b>}{!h?<><br/>No recipient set — admins will handle it</>:null}</div>
         </button>;})}
     </div>
     <textarea className="typein" rows={3} autoFocus value={txt} onChange={e=>setTxt(e.target.value)}
@@ -2505,7 +2509,7 @@ function ReassignSheet({ctx,idx,close}){
     <input className="empsearch" placeholder="🔍 Name, department or skill…" value={q} onChange={e=>setQ(e.target.value)}/>
     <div className="empcol" style={{maxHeight:290}}>
       {list.length?list.map(m=><button key={m.n} className={'pickchip'+(hasWhoM(t,m.n)?' cur':'')} onClick={()=>go(m.n)}>
-        {hasWhoM(t,m.n)?'✓ ':''}<b>{m.n}</b> · {load[m.n]} open<span className="emprole">{m.dept} · {roleLabel(m)}</span></button>)
+        {hasWhoM(t,m.n)?'✓ ':''}<b>{m.n}</b> · {load[m.n]} open<span className="emprole">{m.dept} · {roleLabelM(m)}</span></button>)
         :<MobileEmpty icon="🔍" t="No one matches" s="Try a different name, department, or skill." style={{padding:12}}/>}
     </div>
   </>;
@@ -2520,7 +2524,7 @@ function EventSheet({ctx,idx,close}){
     <h3 style={{lineHeight:1.4}}>{t.t}</h3>
     <div className="sub">{stat} · {t.due||t.date}</div>
     <div className="field"><div className="k">Assigned to</div><div className="v">
-      <span className="who" style={{marginRight:6}}>{t.init||''}</span>{t.who}{t.coWho&&t.coWho.length?' + '+t.coWho.join(' + '):''}{m.dept?' · '+m.dept:''}{m.role?' ('+roleLabel(m)+')':''}</div></div>
+      <span className="who" style={{marginRight:6}}>{t.init||''}</span>{t.who}{t.coWho&&t.coWho.length?' + '+t.coWho.join(' + '):''}{m.dept?' · '+m.dept:''}{m.role?' ('+roleLabelM(m)+')':''}</div></div>
     {!t.selfAssigned&&t.instructedBy?<div className="field"><div className="k">Assigned by</div><div className="v">{t.instructedBy}</div></div>:null}
     <div className="field"><div className="k">Department</div><div className="v">
       <span className="ldot" style={{display:'inline-block',background:bucketColor(t.bucket),marginRight:6}}/>{BUCKETS[t.bucket]||t.bucket||'—'}</div></div>
