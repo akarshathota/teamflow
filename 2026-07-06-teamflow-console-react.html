@@ -653,7 +653,7 @@ async function loadAll(){
     loadNotifs(),
     sb.from('cron_runs').select('*').order('ran_at',{ascending:false}).limit(1),
     sb.from('admin_activity_log').select('*').order('created_at',{ascending:false}).limit(30),
-    sb.from('org_settings').select('name,supply_requests_enabled,nav_icons,departments,hidden_departments,role_titles').eq('id',true).maybeSingle(),
+    sb.from('org_settings').select('name,supply_requests_enabled,nav_icons,departments,hidden_departments,role_titles,task_permissions').eq('id',true).maybeSingle(),
     sb.from('routing_rules').select('*'),
     sb.from('checklist_items').select('*').eq('archived',false),
     sb.from('checklist_completions').select('*').gte('occ_date',clSince),
@@ -663,6 +663,7 @@ async function loadAll(){
   if(orgRow&&typeof orgRow.supply_requests_enabled==='boolean')SUPPLY_ENABLED=orgRow.supply_requests_enabled;
   NAV_ICONS=(orgRow&&orgRow.nav_icons&&typeof orgRow.nav_icons==='object')?orgRow.nav_icons:{};
   ROLE_TITLES=(orgRow&&orgRow.role_titles&&typeof orgRow.role_titles==='object')?orgRow.role_titles:{}; // shared alias pool per role (custom role titles)
+  TASK_PERMS=(orgRow&&orgRow.task_permissions&&typeof orgRow.task_permissions==='object')?orgRow.task_permissions:{}; // per-department task edit/delete role gates
   applyDeptConfig(orgRow&&orgRow.departments,orgRow&&orgRow.hidden_departments); // merge custom + hide removed built-ins
   ROUTING_RULES.length=0;ROUTING_RULES.push(...(ruleRows||[]).map(rowToRule));
   STAFF.length=0;STAFF.push(...rowsToStaff(staffRows||[]));
@@ -1914,7 +1915,18 @@ function SettingsView({ctx}){
     const nx={...ROLE_TITLES,[role]:[...cur,v]};ROLE_TITLES=nx;setTitleInputs({...titleInputs,[role]:''});R();saveRoleTitles(nx).catch(console.error);ctx.say('Added “'+v+'” to '+def);};
   const removeAlias=(role,alias)=>{const nx={...ROLE_TITLES,[role]:(ROLE_TITLES[role]||[]).filter(a=>a!==alias)};
     if(!nx[role].length)delete nx[role];ROLE_TITLES=nx;R();saveRoleTitles(nx).catch(console.error);ctx.say('Removed “'+alias+'”');};
-  const SECS=[['maint','🔧','Maintenance routing'],['supply','📦','Supply requests'],['depts','🏢','Departments'],['titles','🏷️','Role titles'],['icons','🎨','Sidebar icons']];
+  /* Task permissions — per department, which non-admin roles may edit / delete a task (org_settings.
+     task_permissions). Role KEYS stored (never 'admin' — Administrators are always allowed). A dept with
+     no entry ⇒ admin-only for both. Same mutate-fresh-object + save + R() pattern as NAV_ICONS. */
+  const PERM_ROLES=[['mgmt','Management'],['dir','Director'],['srm','Sr. Manager'],['lead','Team Lead'],['jrm','Jr Manager'],['worker','Staff']];
+  const togglePerm=(dept,kind,roleKey)=>{
+    const cur=TASK_PERMS[dept]||{};const arr=cur[kind]||[];
+    const nextArr=arr.includes(roleKey)?arr.filter(r=>r!==roleKey):[...arr,roleKey];
+    const nextDept={...cur,[kind]:nextArr};
+    if((!nextDept.edit||!nextDept.edit.length)&&(!nextDept.delete||!nextDept.delete.length)){
+      const nx={...TASK_PERMS};delete nx[dept];TASK_PERMS=nx;R();saveTaskPerms(nx).catch(console.error);return;}
+    const nx={...TASK_PERMS,[dept]:nextDept};TASK_PERMS=nx;R();saveTaskPerms(nx).catch(console.error);};
+  const SECS=[['maint','🔧','Maintenance routing'],['supply','📦','Supply requests'],['depts','🏢','Departments'],['titles','🏷️','Role titles'],['icons','🎨','Sidebar icons'],['taskperms','🔑','Task permissions']];
   return <div className="view">
     <div className="h-row" style={{marginBottom:4}}><h2 style={{margin:0,display:'flex',alignItems:'center',gap:8}}>{NAV_ICONS.settings?<span style={{fontSize:20}}>{NAV_ICONS.settings}</span>:<I n="gear" s={20}/>} Settings</h2></div>
     <div style={{color:'var(--muted)',fontSize:13,margin:'0 0 18px',maxWidth:760}}>Organisation-wide configuration. Only Administrators can change these.</div>
@@ -2018,6 +2030,25 @@ function SettingsView({ctx}){
             {NAV_ICONS[key]?<button className="linkbtn" style={{fontSize:12}} onClick={()=>setNavIcon(key,null)}>Reset to default</button>:null}
           </div>)}
         <div style={{fontSize:11,color:'var(--muted)',marginTop:12,lineHeight:1.5}}>Every menu item can be personalised (or left as the clean default). “Reset to default” brings back the line icon.</div>
+      </div>}
+
+      {sec==='taskperms'&&<div className="panel" style={{maxWidth:760,marginBottom:0}}>
+        <div className="h-row"><h3>🔑 Task permissions</h3><span className="tag amber">Admin only</span></div>
+        <div style={{color:'var(--muted)',fontSize:12.5,margin:'2px 0 14px',lineHeight:1.5}}>Per department, tick the roles that may <b>edit</b> a task and the roles that may <b>delete</b> one. A task follows its own department’s rule. Administrators can always edit and delete. Editing/deleting also still respects a person’s normal scope — they must be able to see the task.</div>
+        {visibleDeptLabels.length?visibleDeptLabels.map(dept=>{const cfg=TASK_PERMS[dept]||{};return (
+          <div key={dept} style={{padding:'12px 2px',borderBottom:'1px solid var(--line)'}}>
+            <div style={{fontWeight:800,fontSize:13.5,marginBottom:8}}>{dept}</div>
+            {[['edit','Can edit'],['delete','Can delete']].map(([kind,lbl])=>{const on=cfg[kind]||[];const del=kind==='delete';return (
+              <div key={kind} style={{display:'flex',alignItems:'baseline',gap:8,margin:'0 0 7px',flexWrap:'wrap'}}>
+                <span style={{fontSize:11,fontWeight:800,letterSpacing:'.3px',textTransform:'uppercase',color:'var(--muted)',width:78,flex:'0 0 auto'}}>{lbl}</span>
+                <span style={{fontSize:12,fontWeight:800,borderRadius:999,padding:'4px 11px',background:'#eef0ec',color:'var(--ink2,#43494f)',border:'1px solid var(--line)'}} title="Administrators can always edit and delete">Admin</span>
+                {PERM_ROLES.map(([rk,rl])=>{const active=on.includes(rk);
+                  const style=active?(del?{background:'var(--red-soft,#fbe4e8)',color:'#a52741',border:'1px solid #f0c4cf'}:{background:'var(--accent-soft,#e2f1ee)',color:'var(--accent-ink)',border:'1px solid var(--accent-border,#bcdcd6)'})
+                    :{background:'#f6f5f0',color:'var(--muted)',border:'1px solid var(--line)'};
+                  return <span key={rk} onClick={()=>togglePerm(dept,kind,rk)} title={(active?'Remove ':'Allow ')+rl} style={{...style,fontSize:12,fontWeight:700,borderRadius:999,padding:'4px 11px',cursor:'pointer',userSelect:'none'}}>{rl}</span>;})}
+              </div>);})}
+          </div>);}):<div style={{fontSize:12.5,color:'var(--muted)',padding:'8px 2px'}}>No departments yet — add one under Departments first.</div>}
+        <div className="note" style={{background:'var(--accent-soft,#e2f1ee)',border:'1px solid var(--accent-border,#bcdcd6)',borderRadius:9,padding:'9px 12px',fontSize:12,color:'var(--accent-ink)',marginTop:14,lineHeight:1.5}}><b>Default (unconfigured department):</b> only Administrators can edit or delete. Tick roles above to widen it — e.g. tick Management under “Can edit” to let managers edit that department’s tasks.</div>
       </div>}
 
       </div>
@@ -2507,7 +2538,8 @@ function Drawer({ctx,idx}){
   const [editing,setEditing]=useState(false);
   const [edT,setEdT]=useState('');const [edDate,setEdDate]=useState('');const [edType,setEdType]=useState('work');
   const [edBucket,setEdBucket]=useState('administration');const [edPrio,setEdPrio]=useState('med');
-  useEffect(()=>{setNote('');setReassign(false);setReDate('');setReNote('');setPendingDone(tasks[idx]&&tasks[idx].status==='done');setExtDate('');setExtReason('');setEditingLogId(null);setEditText('');setEditing(false);},[idx]);
+  const [confirmDel,setConfirmDel]=useState(false); // inline "Delete this task?" confirmation step
+  useEffect(()=>{setNote('');setReassign(false);setReDate('');setReNote('');setPendingDone(tasks[idx]&&tasks[idx].status==='done');setExtDate('');setExtReason('');setEditingLogId(null);setEditText('');setEditing(false);setConfirmDel(false);},[idx]);
   /* Issue 4: opening your own assigned task moves it open -> inprogress automatically. Gated on
      the REAL signed-in viewer (ctx.previewing false, not a Preview As simulation) genuinely being
      an assignee (hasWho, the same helper used everywhere else) — an admin/manager just reviewing
@@ -2523,8 +2555,29 @@ function Drawer({ctx,idx}){
   },[idx]);
   if(!t)return null;
   const p=byShort(t.who),od=isOverdue(t);
-  const canEdit=(ctx.role==='admin'||ctx.role==='mgmt')&&!ctx.previewing; // Management/Admin only
+  const canEdit=canEditTask(t,ctx.role)&&!ctx.previewing;   // per-department role gate (shared.js); Admin always
+  const canDelete=canDeleteTask(t,ctx.role)&&!ctx.previewing; // per-department delete gate (shared.js); Admin always
   const startEdit=()=>{setEdT(t.t);setEdDate(t.date||'');setEdType(t.type||'work');setEdBucket(t.bucket||'administration');setEdPrio(t.prio||'med');setEditing(true);};
+  /* Joint → normal: drop `short` from the assignee set. If it was the primary (t.who), promote the
+     first remaining co-assignee; when only one assignee is left, clear coWho so it's a plain task.
+     saveTask rewrites task_assignees from the new t.who/coWho. */
+  const removeAssignee=short=>{
+    const rest=assignees(t).filter(a=>a!==short);
+    if(!rest.length)return;                       // never remove the last assignee
+    t.who=rest[0];
+    t.coWho=rest.length>1?rest.slice(1):undefined;
+    if(t.doneBy)t.doneBy=t.doneBy.filter(a=>a!==short);
+    saveTask(t).catch(console.error);
+    const who=byShort(short);
+    notifyEvent(t.id,ctx.viewer.id,'removed '+(who?who.n:short)+' from the task',concernedFor(t,ctx.viewer.s));
+    ctx.R();ctx.say('Removed '+(who?who.n.split(' ')[0]:short)+(t.coWho&&t.coWho.length?'':' — now a normal task'));
+  };
+  const doDelete=async()=>{
+    const res=await deleteTaskEverywhere(t);
+    if(!res.ok){ctx.say(res.blocked?"Couldn't delete — out of your scope":'Delete failed — try again');return;}
+    const gi=tasks.findIndex(x=>x.id===t.id);if(gi>=0)tasks.splice(gi,1);
+    ctx.setDrawerIdx(-1);ctx.R();ctx.say('Task deleted');
+  };
   const saveEdit=()=>{
     const nt=edT.trim();if(!nt){ctx.say('The task needs a title');return;}
     t.t=nt;t.date=edDate||t.date;t.type=edType;t.bucket=edBucket;t.prio=edPrio;
@@ -2603,6 +2656,12 @@ function Drawer({ctx,idx}){
       <div className="kv"><div className="k">Assignee{t.coWho&&t.coWho.length?'s':''}</div>
         <div className="v">{assignees(t).map(a=>{const q=byShort(a);return <React.Fragment key={a}><span className="avex">{q?q.av:'?'}</span>{q?q.n:a}</React.Fragment>;})}
         {t.coWho&&t.coWho.length?<span className="tag teal">joint</span>:<span className="roletag">{p?p.dept:''}</span>}</div></div>
+      {editing&&assignees(t).length>1?<div className="kv"><div className="k">Remove</div>
+        <div className="v" style={{flex:1,display:'flex',flexWrap:'wrap',gap:6}}>
+          {assignees(t).map(a=>{const q=byShort(a);return <span key={a} style={{display:'inline-flex',alignItems:'center',gap:7,background:'#f3f2ec',border:'1px solid var(--line)',borderRadius:999,padding:'4px 6px 4px 10px',fontSize:12.5,fontWeight:600}}>
+            {q?q.n:a}<span title="Remove from task" onClick={()=>removeAssignee(a)} style={{width:18,height:18,borderRadius:'50%',background:'#e3e0d7',color:'var(--red)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:12,cursor:'pointer'}}>✕</span></span>;})}
+          <div className="whysm" style={{flexBasis:'100%',margin:'2px 0 0',color:'var(--muted)'}}>Remove people to shrink the joint task. Down to one person it becomes a normal task.</div>
+        </div></div>:null}
       {!t.selfAssigned&&t.instructedBy?<div className="kv"><div className="k">Assigned by</div><div className="v">{t.instructedBy}</div></div>:null}
       {t.completionPending?<div className="kv"><div className="k">Completion</div><div className="v"><span className="tag amber"><I n="clock" s={11}/> Pending approval</span></div></div>:null}
       {reassign?<div className="kv"><div className="k">Move to</div><div className="v" style={{flex:1}}>
@@ -2706,6 +2765,16 @@ function Drawer({ctx,idx}){
           <div className="when">{x.d}</div></div>;
       })}</div>
     </div>
+    {canDelete?<div className="dr-actions" style={{borderBottom:'none',paddingBottom:0}}>
+      {confirmDel?<div style={{flex:1,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+        <span style={{fontSize:12.5,fontWeight:700,color:'var(--red)'}}>Delete this task? This can’t be undone.</span>
+        <div style={{marginLeft:'auto',display:'flex',gap:8}}>
+          <button className="btn ghost" style={{padding:'7px 14px'}} onClick={()=>setConfirmDel(false)}>Cancel</button>
+          <button className="btn" style={{padding:'7px 14px',color:'#a52741',borderColor:'#f0c4cf',background:'var(--red-soft,#fbe4e8)'}} onClick={doDelete}>Delete</button>
+        </div>
+      </div>:
+        <button className="btn" style={{flex:1,color:'#a52741',borderColor:'#f0c4cf',background:'var(--red-soft,#fbe4e8)'}} onClick={()=>setConfirmDel(true)}>🗑 Delete task</button>}
+    </div>:null}
     <div className="dr-actions">
       {editing?<>
         <button className="btn ghost" style={{flex:1}} onClick={()=>setEditing(false)}>Cancel</button>

@@ -114,6 +114,34 @@ const roleTitleOptions=dbRole=>[ROLE_DEFAULT_LABEL[dbRole]||dbRole,...(ROLE_TITL
 async function saveRoleTitles(obj){await sb.from('org_settings').update({role_titles:obj}).eq('id',true);}
 async function saveStaffTitle(id,title){await sb.from('staff').update({title:title||null}).eq('id',id);}
 
+/* ---- Per-department task edit/delete permissions (v122) ----
+   org_settings.task_permissions jsonb = { "<department label>": { "edit":["mgmt",…], "delete":["mgmt",…] } }
+   where the arrays hold role KEYS (mgmt/dir/srm/lead/jrm/worker — never 'admin', who is always allowed).
+   A department with no entry ⇒ Administrator-only for BOTH edit and delete. Loaded into the TASK_PERMS
+   module global by each app's loadAll (same pattern as ROLE_TITLES). These gates are ADDITIONAL to normal
+   scope — the task popup only ever opens for a task the viewer can already see. */
+let TASK_PERMS={};
+const taskDeptLabel=t=>BUCKETS[t.bucket]||t.bucket;
+const canEditTask=(t,roleKey)=>roleKey==='admin'||((TASK_PERMS[taskDeptLabel(t)]||{}).edit||[]).includes(roleKey);
+const canDeleteTask=(t,roleKey)=>roleKey==='admin'||((TASK_PERMS[taskDeptLabel(t)]||{}).delete||[]).includes(roleKey);
+/* Administrator-only write (org_settings RLS). Writes the whole task_permissions map. */
+async function saveTaskPerms(obj){await sb.from('org_settings').update({task_permissions:obj}).eq('id',true);}
+/* Deletes a task and everything hanging off it. task_assignees / task_log / task_notifications /
+   task_activity_notifications all have ON DELETE CASCADE FKs to tasks(id), so the single tasks delete
+   wipes them. report_issues.resolved_task_id is ON DELETE NO ACTION (a task used to resolve an issue),
+   so its link is best-effort NULLed first — otherwise the delete would be blocked by that FK. Chains
+   .select('id') so a delete that RLS silently matched to zero rows is detectable (returns blocked:true)
+   rather than a false success. */
+async function deleteTaskEverywhere(t){
+  if(!t||!t.id)return {ok:false};
+  await sb.from('report_issues').update({resolved_task_id:null}).eq('resolved_task_id',t.id)
+    .then(({error})=>{if(error)console.error(error);},e=>console.error(e));
+  const {data,error}=await sb.from('tasks').delete().eq('id',t.id).select('id');
+  if(error){console.error(error);return {ok:false,error};}
+  if(!data||!data.length)return {ok:false,blocked:true};
+  return {ok:true};
+}
+
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 /* YYYY-MM-DD -> DD-MM-YYYY, for CSV/XLSX cells only. On-screen dates keep their human forms
    (fmtDate "Jul 7", ord "31st") — this is just so raw ISO strings don't land in a spreadsheet. */

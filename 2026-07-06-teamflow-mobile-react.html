@@ -445,7 +445,7 @@ async function loadAll(){
     sb.from('requests').select('*').order('created_at'),
     sb.from('notices').select('*').order('created_at',{ascending:false}),
     loadNotifs(),
-    sb.from('org_settings').select('name,supply_requests_enabled,departments,hidden_departments,role_titles').eq('id',true).maybeSingle(),
+    sb.from('org_settings').select('name,supply_requests_enabled,departments,hidden_departments,role_titles,task_permissions').eq('id',true).maybeSingle(),
     sb.from('routing_rules').select('*'),
     sb.from('checklist_items').select('*').eq('archived',false),
     sb.from('checklist_completions').select('*').gte('occ_date',clSince),
@@ -454,6 +454,7 @@ async function loadAll(){
   if(orgRow&&orgRow.name)ORG_NAME=orgRow.name;
   if(orgRow&&typeof orgRow.supply_requests_enabled==='boolean')SUPPLY_ENABLED=orgRow.supply_requests_enabled;
   ROLE_TITLES=(orgRow&&orgRow.role_titles&&typeof orgRow.role_titles==='object')?orgRow.role_titles:{}; // shared alias pool per role (custom role titles) — read via shared.js roleLabel/roleTitleOptions
+  TASK_PERMS=(orgRow&&orgRow.task_permissions&&typeof orgRow.task_permissions==='object')?orgRow.task_permissions:{}; // per-department task edit/delete role gates (shared.js canEditTask/canDeleteTask)
   applyDeptConfig(orgRow&&orgRow.departments,orgRow&&orgRow.hidden_departments); // merge custom + hide removed built-ins
   ROUTING_RULES.length=0;ROUTING_RULES.push(...(ruleRows||[]).map(r=>({id:r.id,kind:r.kind,label:r.label,icon:r.icon||'',staff_id:r.target_staff_id||null,sort_order:r.sort_order||0,created_at:r.created_at})));
   clItems.length=0;clItems.push(...(clItemRows||[]));
@@ -2314,6 +2315,7 @@ function UpdateSheet({ctx,idx,close}){
   const [editing,setEditing]=useState(false);
   const [edT,setEdT]=useState('');const [edDate,setEdDate]=useState('');const [edType,setEdType]=useState('work');
   const [edBucket,setEdBucket]=useState('administration');const [edPrio,setEdPrio]=useState('med');
+  const [confirmDel,setConfirmDel]=useState(false); // inline "Delete this task?" confirmation step
   useEffect(()=>()=>clearTimeout(armTimer.current),[]);
   useEffect(()=>{setArmed(false);},[st]);
   /* Issue 4: opening your own assigned task moves it open -> inprogress automatically. Gated on
@@ -2330,8 +2332,28 @@ function UpdateSheet({ctx,idx,close}){
   },[idx]);
   if(!t)return null;
   const logs=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
-  const canEdit=(ctx.role==='admin'||ctx.role==='mgmt')&&!ctx.previewing; // Management/Admin only
+  const canEdit=canEditTask(t,ctx.role)&&!ctx.previewing;   // per-department role gate (shared.js); Admin always
+  const canDelete=canDeleteTask(t,ctx.role)&&!ctx.previewing; // per-department delete gate (shared.js); Admin always
   const startEdit=()=>{setEdT(t.t);setEdDate(t.date||'');setEdType(t.type||'work');setEdBucket(t.bucket||'administration');setEdPrio(t.prio||'med');setEditing(true);};
+  /* Joint → normal: drop `name` from the assignee set (mobile assignees are full names). If it was the
+     primary (t.who), promote the first remaining co-assignee; down to one, clear coWho → normal task.
+     saveTask rewrites task_assignees from the new t.who/coWho. */
+  const removeAssignee=name=>{
+    const rest=assigneesM(t).filter(a=>a!==name);
+    if(!rest.length)return;
+    t.who=rest[0];const m0=findMember(rest[0]);if(m0)t.init=m0.i;
+    t.coWho=rest.length>1?rest.slice(1):undefined;
+    if(t.doneBy)t.doneBy=t.doneBy.filter(a=>a!==name);
+    saveTask(t).catch(console.error);
+    notifyEvent(t.id,ctx.r.id,'removed '+name+' from the task',concernedForM(t,ctx.r.self));
+    ctx.R();ctx.say('Removed '+name.split(' ')[0]+(t.coWho&&t.coWho.length?'':' — now a normal task'));
+  };
+  const doDelete=async()=>{
+    const res=await deleteTaskEverywhere(t);
+    if(!res.ok){ctx.say(res.blocked?"Couldn't delete — out of your scope":'Delete failed — try again');return;}
+    const gi=tasks.findIndex(x=>x.id===t.id);if(gi>=0)tasks.splice(gi,1);
+    close();ctx.R();ctx.say('Task deleted');
+  };
   const saveEdit=()=>{
     const nt=edT.trim();if(!nt){ctx.say('The task needs a title');return;}
     t.t=nt;t.date=edDate||t.date;t.due='Due '+fmtD(t.date);t.type=edType;t.bucket=edBucket;t.prio=edPrio;
@@ -2406,6 +2428,12 @@ function UpdateSheet({ctx,idx,close}){
       <select className="selsel" style={{width:'100%',marginBottom:8}} value={edBucket} onChange={e=>setEdBucket(e.target.value)}>{Object.keys(BUCKETS).map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}</select>
       <div className="meta" style={{margin:'0 2px 4px'}}>Priority</div>
       <select className="selsel" style={{width:'100%',marginBottom:12}} value={edPrio} onChange={e=>setEdPrio(e.target.value)}>{[['high','High'],['med','Medium'],['low','Low']].map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
+      {assigneesM(t).length>1?<><div className="meta" style={{margin:'0 2px 4px'}}>Assignees · remove to shrink the joint task</div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:12}}>
+          {assigneesM(t).map(a=><span key={a} style={{display:'inline-flex',alignItems:'center',gap:7,background:'#f3f2ec',border:'1px solid var(--line)',borderRadius:999,padding:'5px 7px 5px 11px',fontSize:13,fontWeight:600}}>
+            {a}<span title="Remove from task" onClick={()=>removeAssignee(a)} style={{width:20,height:20,borderRadius:'50%',background:'#e3e0d7',color:'var(--red)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:13,cursor:'pointer'}}>✕</span></span>)}
+          <div style={{flexBasis:'100%',fontSize:11.5,color:'var(--muted)',marginTop:2}}>Down to one person it becomes a normal task automatically.</div>
+        </div></>:null}
       <div style={{display:'flex',gap:8}}>
         <button className="btn ghost" style={{flex:1}} onClick={()=>setEditing(false)}>Cancel</button>
         <button className="send" style={{flex:2,marginTop:0}} onClick={saveEdit}>Save changes</button>
@@ -2459,6 +2487,13 @@ function UpdateSheet({ctx,idx,close}){
       save();
     }}>{st==='done'?(t.completionPending?'Mark done ✓':(armed?'Tap again to confirm ✓':'Mark done ✓')):'Save update'}</button>
     </>}
+    {canDelete?(confirmDel?<div style={{marginTop:12,padding:'11px 12px',border:'1px solid #f0c4cf',background:'var(--red-soft,#fbe4e8)',borderRadius:12}}>
+      <div style={{fontSize:13,fontWeight:700,color:'#a52741',marginBottom:8}}>Delete this task? This can’t be undone.</div>
+      <div style={{display:'flex',gap:8}}>
+        <button className="btn ghost" style={{flex:1}} onClick={()=>setConfirmDel(false)}>Cancel</button>
+        <button className="send" style={{flex:1,marginTop:0,background:'#c43a53'}} onClick={doDelete}>Delete</button>
+      </div></div>
+      :<button className="btn ghost" style={{marginTop:12,width:'100%',color:'#a52741',borderColor:'#f0c4cf',background:'var(--red-soft,#fbe4e8)'}} onClick={()=>setConfirmDel(true)}>🗑 Delete task</button>):null}
   </>;
 }
 function ExtSheet({ctx,idx,close}){
