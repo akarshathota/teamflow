@@ -194,6 +194,20 @@
   .trow:hover{border-color:var(--accent-border);box-shadow:var(--sh-md)}
   .trow.done{opacity:.6}
   .trow.done .tt{text-decoration:line-through;color:var(--muted)}
+  .trow.selrow{border-color:var(--accent-border);background:var(--accent-soft)}
+  .rowcb{width:20px;height:20px;border-radius:6px;border:2px solid #c9cdc4;flex:0 0 auto;background:#fff;position:relative}
+  .rowcb.on{background:var(--accent);border-color:var(--accent)}
+  .rowcb.on::after{content:"✓";color:#fff;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
+  /* bulk action bar */
+  .selbtn{font-size:12px;font-weight:700;color:var(--accent-ink);background:var(--accent-soft);border:1px solid var(--accent-border);border-radius:8px;padding:5px 11px;cursor:pointer}
+  .selbtn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .bulkbar{margin-top:8px;padding:11px 12px;background:var(--card);border:1px solid var(--accent-border);border-radius:11px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;box-shadow:var(--sh-sm)}
+  .bulkbar .cnt{font-weight:800;font-size:12.5px;margin-right:2px}
+  .bpill{border:1px solid var(--line);background:#f3f2ec;border-radius:8px;padding:7px 11px;font-weight:700;font-size:12px;color:var(--ink2);cursor:pointer}
+  .bpill.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .bpill.ghost{background:none;margin-left:auto}
+  .bulkctl{flex-basis:100%;display:flex;gap:8px;align-items:center;margin-top:4px}
+  .bulkctl .fsel{flex:1}
   .trow .body{flex:1;min-width:0}
   .trow .tt{font-size:14px;font-weight:600;line-height:1.35}
   .trow .meta{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted);margin-top:5px;flex-wrap:wrap}
@@ -1613,9 +1627,10 @@ function TagsFor({t}){
     {t.completionPending?<span className="tag amber"><I n="clock" s={11}/> Completion pending approval</span>:null}
   </>;
 }
-function TaskRow({t,i,ctx}){
+function TaskRow({t,i,ctx,sel,checked,onToggle}){
   const p=byShort(t.who),od=isOverdue(t),dn=t.status==='done';
-  return <div className={'trow'+(dn?' done':'')} onClick={()=>ctx.setDrawerIdx(i)}>
+  return <div className={'trow'+(dn?' done':'')+(sel&&checked?' selrow':'')} onClick={()=>sel?onToggle(i):ctx.setDrawerIdx(i)}>
+    {sel?<span className={'rowcb'+(checked?' on':'')} aria-hidden/>:null}
     <div className="body">
       <div className="tt">{t.t}</div>
       <div className="meta">
@@ -2437,6 +2452,46 @@ function TasksView({ctx}){
   const [fboss,setFboss]=useState('all');
   const [bossMode,setBossMode]=useState('tome');
   const [deptFb,setDeptFb]=useState('all');
+  /* Bulk actions: one column selects at a time (selCol), selSet holds task indices, bulkAct is the
+     open action control. Each action edits every selected task the viewer canEditTask (per-department
+     gate), skipping the rest — reassign/due/priority/status only, no bulk delete. */
+  const [selCol,setSelCol]=useState(null);
+  const [selSet,setSelSet]=useState(()=>new Set());
+  const [bulkAct,setBulkAct]=useState(null);
+  const [reVal,setReVal]=useState('');const [dueVal,setDueVal]=useState('');
+  const [prioVal,setPrioVal]=useState('high');const [statusVal,setStatusVal]=useState('inprogress');
+  const startSel=c=>{setSelCol(sc=>sc===c?null:c);setSelSet(new Set());setBulkAct(null);};
+  const toggleSel=i=>setSelSet(s=>{const n=new Set(s);n.has(i)?n.delete(i):n.add(i);return n;});
+  const clearSel=()=>{setSelSet(new Set());setBulkAct(null);};
+  const applyBulk=(mut,label)=>{
+    let done=0,skipped=0;
+    selSet.forEach(i=>{const t=tasks[i];if(!t)return;
+      if(!canEditTask(t,ctx.role)){skipped++;return;}
+      mut(t);saveTask(t).catch(console.error);
+      notifyEvent(t.id,ctx.viewer.id,label,concernedFor(t,ctx.viewer.s));done++;});
+    ctx.R();
+    ctx.say(done?('Updated '+done+' task'+(done!=1?'s':'')+(skipped?' · '+skipped+' skipped (no permission)':''))
+      :(skipped?'None updated — you can’t edit those tasks':'Nothing selected'));
+    setSelCol(null);setSelSet(new Set());setBulkAct(null);
+  };
+  const doReassign=()=>{if(!reVal){ctx.say('Pick a person');return;}const nm=(byShort(reVal)||{}).n||reVal;applyBulk(t=>{t.who=reVal;t.coWho=undefined;},'reassigned to '+nm);};
+  const doDue=()=>{if(!dueVal){ctx.say('Pick a date');return;}applyBulk(t=>{t.date=dueVal;},'due date changed to '+fmtDate(dueVal));};
+  const doPrio=()=>applyBulk(t=>{t.prio=prioVal;},'priority set to '+PRIOS[prioVal].l);
+  const doStatus=()=>applyBulk(t=>{t.status=statusVal;t.completionPending=false;
+    if(statusVal==='done'){t.doneOn=iso(TODAY);if(t.coWho&&t.coWho.length)t.doneBy=assignees(t);}
+    else{delete t.doneOn;t.doneBy=[];}},'marked '+ST[statusVal].l);
+  const bulkBar=()=><div className="bulkbar">
+    <span className="cnt">{selSet.size} selected</span>
+    <button className={'bpill'+(bulkAct==='reassign'?' on':'')} onClick={()=>setBulkAct(a=>a==='reassign'?null:'reassign')}>↪ Reassign</button>
+    <button className={'bpill'+(bulkAct==='due'?' on':'')} onClick={()=>setBulkAct(a=>a==='due'?null:'due')}>📅 Change due</button>
+    <button className={'bpill'+(bulkAct==='prio'?' on':'')} onClick={()=>setBulkAct(a=>a==='prio'?null:'prio')}>● Priority</button>
+    <button className={'bpill'+(bulkAct==='status'?' on':'')} onClick={()=>setBulkAct(a=>a==='status'?null:'status')}>✓ Status</button>
+    <button className="bpill ghost" onClick={clearSel}>Clear</button>
+    {bulkAct==='reassign'?<div className="bulkctl"><select className="fsel" value={reVal} onChange={e=>setReVal(e.target.value)}><option value="">Choose a person…</option>{ctx.scope.map(x=><option key={x.s} value={x.s}>{x.n} · {x.dept}</option>)}</select><button className="btn primary" onClick={doReassign}>Apply</button></div>:null}
+    {bulkAct==='due'?<div className="bulkctl"><input type="date" className="fsel" value={dueVal} min={iso(TODAY)} onChange={e=>setDueVal(e.target.value)}/><button className="btn primary" onClick={doDue}>Apply</button></div>:null}
+    {bulkAct==='prio'?<div className="bulkctl"><select className="fsel" value={prioVal} onChange={e=>setPrioVal(e.target.value)}>{Object.keys(PRIOS).map(k=><option key={k} value={k}>{PRIOS[k].l}</option>)}</select><button className="btn primary" onClick={doPrio}>Apply</button></div>:null}
+    {bulkAct==='status'?<div className="bulkctl"><select className="fsel" value={statusVal} onChange={e=>setStatusVal(e.target.value)}><option value="open">Open</option><option value="inprogress">In progress</option><option value="done">Done</option></select><button className="btn primary" onClick={doStatus}>Apply</button></div>:null}
+  </div>;
 
   const showDept=ctx.role==='admin'||ctx.role==='srm'||ctx.role==='mgmt'||ctx.role==='dir';
   const isManagerTier=ctx.role==='srm';
@@ -2458,14 +2513,17 @@ function TasksView({ctx}){
   const rowsDept=showDept?tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)&&!hasWho(o.t,ctx.viewer.s)
     &&(effectiveDeptFb==='all'||o.t.bucket===effectiveDeptFb)):[];
 
-  const col=(label,rows,note)=><>
-    <div className="col-head"><h3>{label}</h3>{note}<ExportTrio label={label} rows={rows} viewerName={ctx.viewer.n}/></div>
+  const col=(label,rows,colId,note)=><>
+    <div className="col-head"><h3>{label}</h3>
+      {rows.length?<button className={'selbtn'+(selCol===colId?' on':'')} onClick={()=>startSel(colId)}>{selCol===colId?'✓ Done':'☑ Select'}</button>:null}
+      {note}<ExportTrio label={label} rows={rows} viewerName={ctx.viewer.n}/></div>
   </>;
+  const rowProps=colId=>o=>({sel:selCol===colId,checked:selSet.has(o.i),onToggle:toggleSel});
 
   return <div className="view">
     <div className="cols3">
       <div className="panel colpanel">
-        {col('My tasks',rowsMine)}
+        {col('My tasks',rowsMine,'mine')}
         <div className="col-toprow">
           <select className="fsel" style={{flex:1}} value={fb} onChange={e=>setFb(e.target.value)}>
             <option value="all">All departments</option>
@@ -2473,12 +2531,13 @@ function TasksView({ctx}){
           </select>
         </div>
         <div className="scrollbox col-scroll">
-          {rowsMine.length?rowsMine.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx}/>):<Empty t="No tasks" s="Nothing here — try clearing the department filter."/>}
+          {rowsMine.length?rowsMine.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx} {...rowProps('mine')(o)}/>):<Empty t="No tasks" s="Nothing here — try clearing the department filter."/>}
         </div>
+        {selCol==='mine'&&selSet.size?bulkBar():null}
       </div>
 
       <div className="panel colpanel">
-        {col(bossToMe?'Tasks assigned to me by':'Tasks assigned by me',rowsBossCol)}
+        {col(bossToMe?'Tasks assigned to me by':'Tasks assigned by me',rowsBossCol,'boss')}
         <div className="selfseg" style={{margin:'0 0 12px'}}>
           <button className={bossToMe?'on':''} onClick={()=>setBossMode('tome')}>To me</button>
           <button className={bossToMe?'':'on'} onClick={()=>setBossMode('byme')}>By me</button>
@@ -2490,13 +2549,14 @@ function TasksView({ctx}){
           </select>
         </div>:null}
         <div className="scrollbox col-scroll">
-          {rowsBossCol.length?rowsBossCol.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx}/>)
+          {rowsBossCol.length?rowsBossCol.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx} {...rowProps('boss')(o)}/>)
             :<Empty t="No tasks" s={bossToMe?"Nothing assigned to you right now.":"You haven't assigned any tasks to others."}/>}
         </div>
+        {selCol==='boss'&&selSet.size?bulkBar():null}
       </div>
 
       {showDept?<div className="panel colpanel">
-        {col('Department tasks',rowsDept,<span className="col-note">Manager · Management</span>)}
+        {col('Department tasks',rowsDept,'dept',<span className="col-note">Manager · Management</span>)}
         <div className="col-toprow">
           <select className="fsel" style={{flex:1}} disabled={isManagerTier} value={effectiveDeptFb} onChange={e=>setDeptFb(e.target.value)}>
             <option value="all">All departments</option>
@@ -2505,8 +2565,9 @@ function TasksView({ctx}){
         </div>
         {isManagerTier?<div className="col-empty-note">Fixed to your team — only Management can filter by department here.</div>:null}
         <div className="scrollbox col-scroll">
-          {rowsDept.length?rowsDept.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx}/>):<Empty t="No tasks" s="Nothing here — try clearing the department filter."/>}
+          {rowsDept.length?rowsDept.map(o=><TaskRow key={o.i} t={o.t} i={o.i} ctx={ctx} {...rowProps('dept')(o)}/>):<Empty t="No tasks" s="Nothing here — try clearing the department filter."/>}
         </div>
+        {selCol==='dept'&&selSet.size?bulkBar():null}
       </div>:null}
     </div>
   </div>;
