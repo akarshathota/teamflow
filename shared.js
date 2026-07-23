@@ -357,6 +357,13 @@ async function notifyEvent(taskId,actorId,label,staffIds){
     sb.from('task_activity_notifications').insert({staff_id,task_id:taskId,actor_staff_id:actorId,label})
       .then(({error})=>{if(error)console.error(error);})));
 }
+/* overdue-nudge de-dup + display helpers (shared by console + mobile). tasks.last_nudged_at is stamped
+   each time a task is nudged; a bulk "Nudge all" skips anything nudged within the window so assignees
+   aren't spammed, and the UI shows "nudged 2h ago". */
+function nudgedAgo(iso){if(!iso)return null;const ms=Date.now()-new Date(iso).getTime();if(ms<0)return'just now';
+  const m=Math.floor(ms/60000);if(m<1)return'just now';if(m<60)return m+'m ago';
+  const h=Math.floor(m/60);if(h<24)return h+'h ago';const d=Math.floor(h/24);return d===1?'yesterday':d+'d ago';}
+function nudgedRecently(iso,hours){return !!iso&&(Date.now()-new Date(iso).getTime())<(hours||12)*3600000;}
 /* Client-side admin audit log — inserts into admin_activity_log (edge functions log the staff-account
    events; this covers in-app admin actions like task delete, promote/demote, permission changes).
    actorId MUST be the REAL signed-in staff id (= auth_staff_id(), the INSERT RLS check) — pass the

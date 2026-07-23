@@ -439,6 +439,7 @@ function rowToMobileTask(row,assignRows,byId,logRows){
     origin:row.origin||undefined,
     files:row.files&&row.files.length?row.files:undefined,
     recur:row.recur||undefined,recurOn:row.recur_on!=null?row.recur_on:undefined,
+    lastNudgedAt:row.last_nudged_at||undefined,
     completionPending:row.completion_pending||undefined};
   if(row.ext_new_date)t.extReq={newDate:row.ext_new_date,label:extLabel(row.ext_new_date),reason:row.ext_reason||''};
   if(row.reopened_by)t.reopened={by:(byId[row.reopened_by]||{name:''}).name,comment:row.reopened_comment||''};
@@ -897,7 +898,9 @@ function App(){
        with the task minus the nudger, matching console v133. Preview-as guarded. */
     remind:i=>{const t=tasks[i];
       if(previewing){say("You're previewing — switch back to remind for real");return;}
-      if(t&&t.id)notifyEvent(t.id,r.id,'nudged — this task is overdue',concernedForM(t,r.self));
+      if(t&&t.id){t.lastNudgedAt=new Date().toISOString();
+        sb.from('tasks').update({last_nudged_at:t.lastNudgedAt}).eq('id',t.id).then(({error})=>{if(error)console.error(error);});
+        notifyEvent(t.id,r.id,'nudged — this task is overdue',concernedForM(t,r.self));}
       say('Reminded '+assigneesM(t).join(' & ')+' 🔔');},
     /* Supply stage 1: the requester's Sr. Manager approves — no longer buys/deletes here; moves the
        request to stage='approved' and stamps the configured supply recipient, so it now surfaces on
@@ -1065,7 +1068,7 @@ function TaskCard({o,ctx,acts,sel,checked,onToggle}){
     {t.progress==='inprogress'&&!t.done?<div className="meta" style={{marginTop:5}}><span className="tag2 blue">🔧 In progress</span></div>:null}
     {t.note?<div className="notepv">“{t.note}”</div>:null}
     {t.files&&t.files.length?<div className="attrow">{t.files.map((f,ix)=><FileChip key={ix} f={f}/>)}</div>:null}
-    <div className="meta" style={{marginTop:5}}>{t.done?'Closed'+(t.doneWhen?' · '+t.doneWhen:''):t.due}</div>
+    <div className="meta" style={{marginTop:5}}>{t.done?'Closed'+(t.doneWhen?' · '+t.doneWhen:''):t.due}{!t.done&&t.lastNudgedAt?<span style={{color:'var(--accent-ink,#0a5c54)'}}> · 🔔 nudged {nudgedAgo(t.lastNudgedAt)}</span>:null}</div>
     {sel?null:!t.done?<div className="cardbtns" style={{flexWrap:'wrap'}}>
       <button className="btn primary" onClick={()=>ctx.setSheet({kind:'update',idx:i})}>Update / Done</button>
       {ctx.role!=='worker'?<>

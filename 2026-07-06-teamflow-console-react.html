@@ -662,6 +662,7 @@ function rowToTask(row,assignRows,logRows){
     origin:row.origin||undefined,files:row.files&&row.files.length?row.files:undefined,
     recur:row.recur||undefined,recurOn:row.recur_on!=null?row.recur_on:undefined,
     issued:row.created_at||undefined,
+    lastNudgedAt:row.last_nudged_at||undefined,
     completionPending:row.completion_pending||undefined};
   if(row.ext_new_date)t.extReq={newDate:row.ext_new_date,reason:row.ext_reason||""};
   if(row.reopened_by)t.reopened={by:byId2Name(row.reopened_by),comment:row.reopened_comment||""};
@@ -1303,17 +1304,28 @@ function App(){
        nudgeTask(t)   — one overdue task (per-row "Remind" in the Overdue panel / list)
        nudgeMany(arr) — bulk (the "Nudge all" buttons)
        remindPerson(s)— every overdue task assigned to that person (Who-needs-attention "Remind") */
-  const nudgeOne=t=>{if(t&&t.id)notifyEvent(t.id,viewer.id,'nudged — this task is overdue',concernedFor(t,viewer.s));};
+  /* nudgeOne stamps tasks.last_nudged_at (for de-dup + "nudged 2h ago" display) then notifies. A single
+     explicit Remind always fires; the BULK paths skip anything nudged within the last 12h so a repeated
+     "Nudge all" doesn't spam the same people. */
+  const nudgeOne=t=>{if(!t||!t.id)return;t.lastNudgedAt=new Date().toISOString();
+    sb.from('tasks').update({last_nudged_at:t.lastNudgedAt}).eq('id',t.id).then(({error})=>{if(error)console.error(error);});
+    notifyEvent(t.id,viewer.id,'nudged — this task is overdue',concernedFor(t,viewer.s));};
   const nudgeTask=t=>{if(previewing){say("You're previewing — switch back to nudge for real");return;}
-    if(!t||!t.id)return;nudgeOne(t);const p=byShort(t.who);
+    if(!t||!t.id)return;nudgeOne(t);R();const p=byShort(t.who);
     say('Nudged '+(p?p.n.split(' ')[0]:t.who)+' about “'+t.t.slice(0,28)+(t.t.length>28?'…':'')+'”');};
   const nudgeMany=arr=>{if(previewing){say("You're previewing — switch back to nudge for real");return;}
     const list=(arr||[]).filter(t=>t&&t.id);if(!list.length){say('Nothing overdue to nudge');return;}
-    list.forEach(nudgeOne);say('Nudged everyone about '+list.length+' overdue task'+(list.length!=1?'s':''));};
+    const fresh=list.filter(t=>!nudgedRecently(t.lastNudgedAt));
+    if(!fresh.length){say('Everyone was already nudged in the last few hours');return;}
+    fresh.forEach(nudgeOne);R();const skipped=list.length-fresh.length;
+    say('Nudged '+fresh.length+' overdue task'+(fresh.length!=1?'s':'')+(skipped?' · '+skipped+' already nudged recently':''));};
   const remindPerson=s=>{if(previewing){say("You're previewing — switch back to remind for real");return;}
     const od=tasks.filter(t=>isOverdue(t)&&hasWho(t,s)&&inScope(t,shorts));const p=byShort(s);
     if(!od.length){say((p?p.n.split(' ')[0]:s)+' has nothing overdue');return;}
-    od.forEach(nudgeOne);say('Reminded '+(p?p.n.split(' ')[0]:s)+' about '+od.length+' overdue task'+(od.length!=1?'s':''));};
+    const fresh=od.filter(t=>!nudgedRecently(t.lastNudgedAt));
+    if(!fresh.length){say((p?p.n.split(' ')[0]:s)+' was already nudged in the last few hours');return;}
+    fresh.forEach(nudgeOne);R();const skipped=od.length-fresh.length;
+    say('Reminded '+(p?p.n.split(' ')[0]:s)+' about '+fresh.length+' overdue task'+(fresh.length!=1?'s':'')+(skipped?' · '+skipped+' already nudged':''));};
   /* Stage 1 of the supply two-stage: the requester's Sr. Manager approves. This no longer creates a
      procurement task or deletes the request — it moves the request to stage='approved' and stamps the
      configured supply recipient (routing_rules kind='supply') onto it, so the request now surfaces on
@@ -1768,7 +1780,7 @@ function Dashboard({ctx,open,over,today,done}){
           {ods.length?ods.slice(0,4).map(o=>{const p=byShort(o.t.who);
             return <div className="attn" key={o.i}>
               <div className="ring" style={{background:'var(--red)'}}>{p?p.av:'?'}</div>
-              <div style={{flex:1,minWidth:0}}><div className="nm">{o.t.t}</div><div className="rs">{p?p.n:o.t.who} · {overdueDays(o.t)} day{overdueDays(o.t)!=1?'s':''} late · was due {fmtDate(o.t.date)}</div></div>
+              <div style={{flex:1,minWidth:0}}><div className="nm">{o.t.t}</div><div className="rs">{p?p.n:o.t.who} · {overdueDays(o.t)} day{overdueDays(o.t)!=1?'s':''} late · was due {fmtDate(o.t.date)}{o.t.lastNudgedAt?<span style={{color:'var(--accent-ink)'}}> · 🔔 nudged {nudgedAgo(o.t.lastNudgedAt)}</span>:null}</div></div>
               <div className="act"><button className="linkbtn" onClick={()=>ctx.nudgeTask(o.t)}>Remind</button>
               <button className="linkbtn" onClick={()=>ctx.setDrawerIdx(o.i)}>Open</button></div></div>;})
           :<Empty t="Nothing overdue" s="All work is on schedule."/>}
