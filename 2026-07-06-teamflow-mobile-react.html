@@ -1773,6 +1773,7 @@ function TaskSheet({ctx,close}){
   const [deptTab,setDeptTab]=useState('within'); // Directors only: 'within' | 'other' (self is handled by assign==='self')
   const [pick,setPick]=useState(null);
   const [q,setQ]=useState('');const [dept,setDept]=useState('all');
+  const [joint,setJoint]=useState(false); // opt-in: only when ticked can more than one person be added
   const [instruct,setInstruct]=useState('');
   const [showOpts,setShowOpts]=useState(false);
   const canMulti=['admin','mgmt','srm'].includes(ctx.role);
@@ -1792,7 +1793,7 @@ function TaskSheet({ctx,close}){
     const allowedDepts=realDeptKeys(ctx.scope);
     let whos=p.whos.slice(),whoSugg=false,whoWhy='';
     if(ctx.role==='worker'){whos=[ctx.r.self];whoWhy='assigned to yourself';}
-    else if(whos.length>1){whoWhy='joint task — named in your sentence';}
+    else if(whos.length>1){whoWhy='joint task — named in your sentence';setJoint(true);}
     else if(whos.length===1){whoWhy='named in your sentence';}
     /* the assignee's own real department is a stronger signal than keywords in the raw text —
        prefer it whenever exactly one person is named; a joint task could span departments, so
@@ -1801,15 +1802,14 @@ function TaskSheet({ctx,close}){
     if(whos.length===1){const m=findMember(whos[0]);guessedBucket=m&&LABEL_TO_BUCKET[m.dept]?LABEL_TO_BUCKET[m.dept]:guessBucket(p.raw);}
     else guessedBucket=guessBucket(p.raw);
     const bucket=allowedDepts.includes(guessedBucket)?guessedBucket:(allowedDepts[0]||guessedBucket);
-    if(!whos.length){const s=suggestAssignee(gt,bucket);whos=[s.n];whoSugg=true;whoWhy=s.reason;}
-    /* suggestAssignee/named-in-sentence draw from the whole MEMBERS pool, which for a Director can
-       include people outside their assignable scope (e.g. Management) or outside the active tab.
-       Constrain the default to the current tab's allowed set so a Director is never pre-pointed at
-       someone they can't assign to; Self mode ignores whos entirely. */
+    /* No name in the sentence → DON'T auto-pick a "suggested" person; leave it empty so the assigner
+       chooses via the department filter + name picker (was: suggestAssignee lightest-workload). */
+    /* A named person outside a Director's assignable scope is simply dropped (they then pick
+       manually); we no longer fall back to auto-selecting the first in-scope person. */
     if(isDir&&assign!=='self'){
       const allow=deptTab==='other'?dirOtherSet:dirWithinSet;
       whos=whos.filter(n=>allow.has(n));
-      if(!whos.length){const first=MEMBERS.find(m=>allow.has(m.n));whos=first?[first.n]:[];whoSugg=!!first;whoWhy=first?'suggested — in your assignable scope':'';}
+      if(!whos.length)whoWhy='';
     }
     let when=p.when,whenSugg=false,whenWhy='';
     let dateIso;
@@ -1833,17 +1833,25 @@ function TaskSheet({ctx,close}){
   function toggleWho(n){
     if(!cur)return;
     let next;
-    if(!canMulti)next=[n];
+    // multi-select only when this is an opt-in joint task; otherwise a pick REPLACES the selection
+    if(!canMulti||!joint)next=[n];
     else{next=cur.whos.slice();const ix=next.indexOf(n);
       if(ix>-1){if(next.length>1)next.splice(ix,1);}else next.push(n);}
-    setCur({...cur,whos:next,whoSugg:false,
+    // department auto-follows a single assignee's own department (the person drives the department)
+    const m=next.length===1?findMember(next[0]):null;
+    const bk=(m&&LABEL_TO_BUCKET[m.dept])?LABEL_TO_BUCKET[m.dept]:cur.bucket;
+    setCur({...cur,whos:next,whoSugg:false,bucket:bk,bucketSugg:true,
       whoWhy:next.length>1?'joint task — it appears in each person’s list':'you picked '+next[0]});
-    if(!canMulti)setPick(null);
+    if(!joint)setPick(null);
   }
+  // ticking joint off collapses any multi-selection back to the first person (+ re-syncs department)
+  function setJointMode(on){setJoint(on);if(!on&&cur&&cur.whos.length>1){const first=[cur.whos[0]];const m=findMember(first[0]);
+    setCur({...cur,whos:first,whoWhy:'you picked '+first[0],bucket:(m&&LABEL_TO_BUCKET[m.dept])?LABEL_TO_BUCKET[m.dept]:cur.bucket,bucketSugg:true});}}
   function doAssign(){
     if(!cur)return;
     const self=assign==='self';
     const list=self?[ctx.r.self]:cur.whos;
+    if(!list.length){ctx.say('Pick at least one person');return;}
     const m=findMember(list[0])||{i:list[0][0]};
     const nt={t:cur.task,who:list[0],init:m.i,coWho:(!self&&list.length>1)?list.slice(1):undefined,
       due:'Due '+dueLabel(cur.dateIso,cur.timeHM).replace(/^Today/,'today').replace(/^Tomorrow/,'tomorrow'),date:cur.dateIso,bucket:cur.bucket,type,done:false,recur:cur.recur||undefined,recurOn:cur.recur?cur.recurOn:undefined,
@@ -1871,8 +1879,7 @@ function TaskSheet({ctx,close}){
     </div>
     <div className="typechips">
       {Object.entries(TYPES).map(([k,v])=><button key={k} className={'tchip'+(k===type?' on':'')}
-        onClick={()=>{typeByUser.current=true;setType(k);
-          if(cur&&cur.whoSugg){const s=suggestAssignee(k,cur.bucket);setCur({...cur,whos:[s.n],whoWhy:s.reason});}}}>{v.e} {v.l}</button>)}
+        onClick={()=>{typeByUser.current=true;setType(k);}}>{v.e} {v.l}</button>)}
     </div>
     {mode==='type'?<div>
       <textarea className="typein" rows={3} autoFocus value={txt} onChange={e=>setTxt(e.target.value)}
@@ -1900,16 +1907,19 @@ function TaskSheet({ctx,close}){
           <button className={'mtab'+(assign==='others'&&deptTab==='other'?' on':'')} onClick={()=>{setAssign('others');if(deptTab!=='other'){setDeptTab('other');setDept('all');setCur(c=>c?{...c,whos:[],whoWhy:'',whoSugg:false}:c);}}}>🌐 Other dept</button>
         </div>:null}
         {assign==='self'?<span>You ({ctx.r.self})</span>:<>
-          <span className="chipbtn" onClick={()=>setPick(pick==='who'?null:'who')}>{cur.whos.join(' + ')}</span>
+          <span className="chipbtn" onClick={()=>setPick(pick==='who'?null:'who')}>{cur.whos.length?cur.whos.join(' + '):'Choose a person'}</span>
           {cur.whoWhy?<div className="reason"><b>{cur.whoSugg?'✦ Suggested':'✓'}</b> — {cur.whoWhy}</div>:null}
           {pick==='who'?<div style={{marginTop:9}}>
+            {canMulti?<label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,fontWeight:600,color:'var(--ink)',marginBottom:8,cursor:'pointer'}}>
+              <input type="checkbox" style={{width:16,height:16,accentColor:'var(--accent)'}} checked={joint} onChange={e=>setJointMode(e.target.checked)}/>
+              Assign as a <b>joint task</b> (more than one person)</label>:null}
             <div style={{display:'flex',gap:8,marginBottom:8}}>
               <select className="selsel" style={{flex:'0 0 44%'}} value={dept} onChange={e=>setDept(e.target.value)}>
                 {depts.map(d=><option key={d} value={d}>{d==='all'?'All departments':d}</option>)}</select>
-              <input className="empsearch" style={{marginBottom:0}} placeholder="🔍 Name, dept or skill…" value={q} onChange={e=>setQ(e.target.value)}/>
+              <input className="empsearch" style={{marginBottom:0}} placeholder="🔍 Name…" value={q} onChange={e=>setQ(e.target.value)}/>
             </div>
             {isDir&&deptTab==='other'?<div className="reason" style={{marginBottom:6}}>🌐 Any department — everyone except Administrators &amp; Management</div>:null}
-            {canMulti?<div className="reason" style={{marginBottom:6}}>Tap more than one to assign jointly</div>:null}
+            {joint?<div className="reason" style={{marginBottom:6}}>Tap each person to include — the task appears in everyone’s list</div>:null}
             <div className="empcol">
               {emp.length?emp.map(m=><button key={m.n} className={'pickchip'+(cur.whos.includes(m.n)?' cur':'')} onClick={()=>toggleWho(m.n)}>
                 {cur.whos.includes(m.n)?'✓ ':''}<b>{m.n}</b> · {load[m.n]} open<span className="emprole">{m.dept} · {m.role}</span></button>)
