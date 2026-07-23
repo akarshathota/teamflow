@@ -357,6 +357,15 @@ async function notifyEvent(taskId,actorId,label,staffIds){
     sb.from('task_activity_notifications').insert({staff_id,task_id:taskId,actor_staff_id:actorId,label})
       .then(({error})=>{if(error)console.error(error);})));
 }
+/* Client-side admin audit log — inserts into admin_activity_log (edge functions log the staff-account
+   events; this covers in-app admin actions like task delete, promote/demote, permission changes).
+   actorId MUST be the REAL signed-in staff id (= auth_staff_id(), the INSERT RLS check) — pass the
+   real self, never a Preview-As persona. Best-effort; a logging failure never blocks the action. */
+async function logAdmin(actorId,action,targetName,detail){
+  if(!actorId)return;
+  await sb.from('admin_activity_log').insert({actor_staff_id:actorId,action,target_name:targetName||null,detail:detail||null})
+    .then(({error})=>{if(error)console.error('[logAdmin]',error.message);},e=>console.error(e));
+}
 /* Edits a task_log row's text — the "fix a typo within 2 minutes of posting" feature. Real
    enforcement lives in the log_update RLS policy (author_id = auth_staff_id() AND now() -
    created_at < interval '2 minutes'); this is just the client call, and it deliberately does NOT

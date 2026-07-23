@@ -692,7 +692,7 @@ async function loadAll(){
     sb.from('requests').select('*').order('created_at'),
     loadNotifs(),
     sb.from('cron_runs').select('*').order('ran_at',{ascending:false}).limit(1),
-    sb.from('admin_activity_log').select('*').order('created_at',{ascending:false}).limit(30),
+    sb.from('admin_activity_log').select('*').order('created_at',{ascending:false}).limit(80),
     sb.from('org_settings').select('name,supply_requests_enabled,nav_icons,departments,hidden_departments,role_titles,task_permissions').eq('id',true).maybeSingle(),
     sb.from('routing_rules').select('*'),
     sb.from('checklist_items').select('*').eq('archived',false),
@@ -1411,7 +1411,12 @@ function App(){
   const ctx={role,view,setView,say,R,scope,shorts,viewer,treeRoot,mine,canApprove,canAssignIssue,viewerIsRecipient,supplyApproverId,bossChain,instructors,previewing,syncTick,
     remindPerson,approveReq,fulfilReq,declineReq,assignIssue,approveExt,rejectExt,approveCompletion,rejectCompletion,
     setDrawerIdx,setModal,setDailyReport,setResetTarget,setPersonTasks,exportCSV,printReport,reportPdf,qReqs,qExts,qCompletions,attentionList,
-    notifs,openNotif,markAllNotifsSeen,lastCronRun,activityLog};
+    notifs,openNotif,markAllNotifsSeen,lastCronRun,activityLog,realSelfId:(myStaff&&myStaff.id)||null,
+    /* record an in-app admin action: unshift to the local list for instant display + persist via
+       shared logAdmin (actor = the REAL signed-in staff, so it satisfies the INSERT RLS check). */
+    logAdmin:(action,targetName,detail)=>{const actor=(myStaff&&myStaff.id)||null;
+      activityLog.unshift({id:'local-'+Date.now(),actor_staff_id:actor,action,target_name:targetName||null,detail:detail||null,created_at:new Date().toISOString()});
+      logAdmin(actor,action,targetName,detail);}};
 
   async function saveOrgName(){
     const v=orgDraft.trim();
@@ -1963,6 +1968,7 @@ function SettingsView({ctx}){
   const togglePerm=(dept,kind,roleKey)=>{
     const cur=TASK_PERMS[dept]||{};const arr=cur[kind]||[];
     const nextArr=arr.includes(roleKey)?arr.filter(r=>r!==roleKey):[...arr,roleKey];
+    ctx.logAdmin('task_permissions',dept,{can:kind,role:(PERM_ROLES.find(r=>r[0]===roleKey)||[])[1]||roleKey,allowed:!arr.includes(roleKey)});
     const nextDept={...cur,[kind]:nextArr};
     if((!nextDept.edit||!nextDept.edit.length)&&(!nextDept.delete||!nextDept.delete.length)){
       const nx={...TASK_PERMS};delete nx[dept];TASK_PERMS=nx;R();saveTaskPerms(nx).catch(console.error);return;}
@@ -2628,6 +2634,7 @@ function Drawer({ctx,idx}){
     const res=await deleteTaskEverywhere(t);
     if(!res.ok){ctx.say(res.blocked?"Couldn't delete — out of your scope":'Delete failed — try again');return;}
     const gi=tasks.findIndex(x=>x.id===t.id);if(gi>=0)tasks.splice(gi,1);
+    ctx.logAdmin('delete_task',t.t,{dept:BUCKETS[t.bucket]||t.bucket,assignee:(byShort(t.who)||{}).n});
     ctx.setDrawerIdx(-1);ctx.R();ctx.say('Task deleted');
   };
   const saveEdit=()=>{
@@ -3477,6 +3484,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
                (the same updateStaffFields path Promote uses, just pointed downward) */
             await updateStaffFields(target.id,{role:newRole});
             target.role=newRole;
+            ctx.logAdmin('demote',target.n,{from:oldLabel,to:newLabel});
             ctx.R();say('Demoted '+target.n+' from '+oldLabel+' to '+newLabel);
             setBusy(false);close();
           }catch(e){setBusy(false);setErr(e.message);}
@@ -3869,6 +3877,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
       Object.assign(promoted,{role:target.role,dept:target.dept,boss:target.boss,bossId:target.bossId,
         headDepartments:carriedHeads||promoted.headDepartments,
         tempCovering:temporary,tempSnap:temporary?homeSnapshot:null});
+      ctx.logAdmin(temporary?'cover':'promote',promoted.n,{to:TIER_LABEL[target.role],dept:target.dept||undefined});
       ctx.R();
       say((promoted.n)+(temporary?' temporarily covering ':' promoted to ')+TIER_LABEL[target.role]+(target.dept?' ('+target.dept+')':''));
       setBusy(false);close();
@@ -3878,7 +3887,15 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
 
 /* recent-entries panel for admin_activity_log — a list, not a full audit dashboard, matching the
    modal-wrap/modal pattern used everywhere else in this file (e.g. ResetPwModal below). */
-const ACTIVITY_LABEL={create_staff:'Created account',delete_staff:'Removed account',reset_password:'Reset password',update_login:'Updated login'};
+const ACTIVITY_LABEL={create_staff:'Created account',delete_staff:'Removed account',reset_password:'Reset password',update_login:'Updated login',
+  delete_task:'Deleted task',task_permissions:'Changed task permissions',promote:'Promoted',cover:'Temp cover',demote:'Demoted'};
+/* human-readable detail line per action, from the row's target_name + detail jsonb */
+function activityDetail(a){const d=a.detail||{};
+  if(a.action==='task_permissions')return (d.role||'A role')+(d.allowed?' can now ':' can no longer ')+(d.can==='delete'?'delete':'edit')+' tasks in '+(a.target_name||'a department');
+  if(a.action==='delete_task')return '“'+(a.target_name||'?')+'”'+(d.dept?' · '+d.dept:'')+(d.assignee?' · was '+d.assignee:'');
+  if(a.action==='promote'||a.action==='cover')return (a.target_name||'?')+' → '+(d.to||'?')+(d.dept?' ('+d.dept+')':'');
+  if(a.action==='demote')return (a.target_name||'?')+' · '+(d.from||'?')+' → '+(d.to||'?');
+  return a.target_name||'—';}
 function ActivityLogModal({close}){
   return <div className="modal-wrap" onClick={e=>{if(e.target===e.currentTarget)close();}}>
     <div className="modal" style={{width:480}}>
@@ -3888,10 +3905,10 @@ function ActivityLogModal({close}){
           <div key={a.id} className="attn">
             <div style={{flex:1,minWidth:0}}>
               <div className="nm">{byId2Name(a.actor_staff_id)||'—'} · {ACTIVITY_LABEL[a.action]||a.action}</div>
-              <div className="rs">{a.target_name||'—'} · {new Date(a.created_at).toLocaleString('en',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}</div>
+              <div className="rs">{activityDetail(a)} · {new Date(a.created_at).toLocaleString('en',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}</div>
             </div>
           </div>)
-        :<Empty t="No activity yet" s="Account creation, removal, password resets, and login changes will show up here."/>}
+        :<Empty t="No activity yet" s="Account changes, task deletions, promotions/demotions, and permission changes show up here."/>}
       </div>
       <div className="qc-actions"><button className="btn primary" style={{flex:1,justifyContent:'center'}} onClick={close}><I n="check"/>Done</button></div>
     </div>
