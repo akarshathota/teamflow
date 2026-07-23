@@ -1167,29 +1167,43 @@ function Home({ctx,acts}){
             <button className="btn primary" onClick={()=>acts.fulfilReq(o.qi)}>Mark for procurement ✓</button>
             <button className="btn ghost" onClick={()=>acts.declineReq(o.qi)}><I n="x" s={16}/></button>
           </div></div>)}</>:null}
-    </>:<WorkerPending ctx={ctx}/>}
+    </>:null}
+    <MyRequests ctx={ctx}/>
     <div className="sec">Today</div>
     {ctx.mine.length?ctx.mine.map(o=><TaskCard key={o.i} o={o} ctx={ctx} acts={acts}/>):<MobileEmpty icon="✅" t="Nothing due today" s="New tasks assigned to you will show up here."/>}
   </div>;
 }
-function WorkerPending({ctx}){
+function reporterFromNoteM(note){if(!note)return null;let m=note.match(/Reported by (.+?)(?: — |$)/);if(m)return m[1].trim();m=note.match(/request from (.+?)(?: — |$)/);if(m)return m[1].trim();return null;}
+/* "Your reports & requests" — every ticket the signed-in person raised, with live status, for ALL
+   roles (was worker-only + open-only). Open ones come from pendingReqs/pendingIssues; once a manager
+   actions them they become tasks (origin issue/request) matched back via the "Reported by X" note. */
+function MyRequests({ctx}){
   const r=ctx.r;
-  const myR=pendingReqs.filter(q=>q.from===r.name||q.from===r.self);
   const myI=pendingIssues.filter(q=>q.from===r.name||q.from===r.self);
-  if(!myR.length&&!myI.length)return null;
-  return <><div className="sec">Your requests</div>
-    {myI.map((q,ix)=>{const rec=issueRecipientM(q),hn=rec?rec.n.split(' ')[0]:'the configured recipient';
-      return <div className="task" key={'wi'+ix}>
-      <span className="pill today">🔧 Sent to {hn}</span>
-      <div className="tt">{q.t}</div>
+  const myR=pendingReqs.filter(q=>q.from===r.name||q.from===r.self);
+  const myA=tasks.filter(t=>(t.origin==='issue'||t.origin==='request')&&reporterFromNoteM(t.note)===r.name);
+  if(!myI.length&&!myR.length&&!myA.length)return null;
+  const tkt=n=>n?<b style={{color:'var(--accent-ink,#0a5c54)'}}>#{n} </b>:null;
+  const overdue=t=>!t.done&&t.date&&t.date<iso(TODAY);
+  return <><div className="sec">Your reports &amp; requests</div>
+    {myI.map((q,ix)=>{const rec=issueRecipientM(q),hn=rec?rec.n.split(' ')[0]:'the recipient';
+      return <div className="task" key={'oi'+ix}>
+      <span className="pill today">🔧 Reported · with {hn}</span>
+      <div className="tt">{tkt(q.ticket)}{q.t}</div>
       <div className="meta">{hn} will assign it to the right person</div>
       {q.files&&q.files.length?<div className="attrow">{q.files.map((f,fx)=><FileChip key={fx} f={f}/>)}</div>:null}
     </div>;})}
     {myR.map((q,ix)=>{const rec=q.stage==='approved'&&q.target_staff_id?ALL_PEOPLE.find(p=>p.id===q.target_staff_id):null;
-      return <div className="task" key={'wr'+ix}>
-      <span className="pill today">{q.stage==='approved'?'📦 Approved — with '+(rec?rec.n.split(' ')[0]:'procurement'):'⏳ Waiting Sr. Manager approval'}</span>
-      <div className="tt">📦 {q.t}</div>
+      return <div className="task" key={'or'+ix}>
+      <span className="pill today">{q.stage==='approved'?'📦 Approved — with '+(rec?rec.n.split(' ')[0]:'procurement'):'⏳ Awaiting approval'}</span>
+      <div className="tt">{tkt(q.ticket)}📦 {q.t}</div>
       <div className="meta">{q.stage==='approved'?'Approved — '+(rec?rec.n.split(' ')[0]+' will procure':'being procured'):'Sent to your department’s Sr. Manager'}{q.note?' · “'+q.note+'”':''}</div>
+    </div>;})}
+    {myA.map((t,ix)=>{const isI=t.origin==='issue';const late=overdue(t);
+      return <div className="task" key={'as'+ix}>
+      <span className={'pill '+(t.done?'done':late?'over':'today')}>{t.done?'✓ Done':late?'Assigned · late':'Assigned · '+(t.progress==='inprogress'?'in progress':'open')}</span>
+      <div className="tt">{tkt(t.ticket)}{isI?'🔧 ':'📦 '}{t.t}</div>
+      <div className="meta">{t.done?'Completed'+(t.doneWhen?' · '+t.doneWhen:''):'With '+(t.who||'the team')+(t.due?' · '+t.due:'')}</div>
     </div>;})}
   </>;
 }

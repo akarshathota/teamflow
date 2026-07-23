@@ -683,6 +683,28 @@ function rowToRequest(row){
     note:row.note||"",files:row.files&&row.files.length?row.files:undefined};
 }
 const rowToRule=r=>({id:r.id,kind:r.kind,label:r.label,icon:r.icon||'',staff_id:r.target_staff_id||null,sort_order:r.sort_order||0,created_at:r.created_at});
+/* pull the reporter's name out of a request-origin task's note (built at assign/fulfil time). Used by
+   the tracker AND the requester's own "Your reports & requests" card to match "tasks I reported". */
+function reporterFromNote(note){
+  if(!note)return null;
+  let m=note.match(/Reported by (.+?)(?: — |$)/);if(m)return m[1].trim();
+  m=note.match(/request from (.+?)(?: — |$)/);if(m)return m[1].trim();
+  return null;
+}
+/* status of one of MY raised items, for the requester card — a compact {text,dot} from a request row
+   (open/declined) or an assigned task. Mirrors the tracker's status logic, first-person. */
+function myReqStatus(x){
+  if(x.req){const r=x.req;
+    if(r.declined_at)return {text:'Declined',dot:'#9a938a'};
+    if(r.kind==='issue')return {text:'Reported · awaiting assignment',dot:'var(--amber)'};
+    if(r.stage==='approved')return {text:'Approved · being procured',dot:'var(--blue)'};
+    return {text:'Awaiting approval',dot:'var(--amber)'};
+  }
+  const t=x.task;
+  if(t.status==='done')return {text:'Done'+(t.doneOn?' · '+fmtDate(t.doneOn):''),dot:'var(--green)'};
+  if(isOverdue(t)){const d=overdueDays(t);return {text:'In progress · '+d+' day'+(d!=1?'s':'')+' late',dot:'var(--red)'};}
+  return {text:'Assigned · '+(ST[t.status]?ST[t.status].l:'in progress'),dot:'var(--blue)'};
+}
 async function loadAll(){
   /* cron_runs/admin_activity_log are both RLS-gated to admin/mgmt (see their migrations) — for
      everyone else these just come back empty, same as any other out-of-scope query in this app. */
@@ -1722,6 +1744,14 @@ function Dashboard({ctx,open,over,today,done}){
   const atRisk=weekRows.filter(o=>atRiskPred(o.t)).sort((a,b)=>a.t.date<b.t.date?-1:1);
   const attn=ctx.attentionList().slice(0,4);
   const attnColors=['var(--red)','var(--amber)','var(--accent)','var(--blue)'];
+  /* Things I raised — open requests still in `requests` (mine) + the ones already actioned into tasks
+     (matched back to me via the "Reported by <name>" note). So a requester sees their own ticket +
+     live status without needing the Management-only tracker. */
+  const myItems=[
+    ...requests.filter(r=>r.from===ctx.viewer.s).map(r=>({req:r,ticket:r.ticket,item:r.t,kind:r.kind,date:r.date})),
+    ...tasks.filter(t=>(t.origin==='issue'||t.origin==='request')&&reporterFromNote(t.note)===ctx.viewer.n)
+      .map(t=>({task:t,ticket:t.ticket,item:t.t,kind:t.origin,date:t.issued||t.date}))
+  ].sort((a,b)=>(''+(b.date||'')).localeCompare(''+(a.date||'')));
   const [kpiPop,setKpiPop]=useState(null); // {title,pred} — resolved to rows at render so realtime refetches stay live
   const kpiRows=pred=>tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,shorts)&&pred(o.t));
   const KP=[['Open tasks',open,'var(--accent)','var(--accent-soft)','checkc',100,t=>t.status!=='done'],
@@ -1773,6 +1803,15 @@ function Dashboard({ctx,open,over,today,done}){
         </div>
       </div>
       <div>
+        {myItems.length?<div className="panel">
+          <div className="h-row"><h3><I n="inbox" c="var(--accent-ink)"/>Your reports &amp; requests</h3><span className="tag gray">{myItems.length}</span></div>
+          {myItems.slice(0,5).map((x,ix)=>{const st=myReqStatus(x);return <div className="attn" key={ix}>
+            <div style={{flex:1,minWidth:0}}>
+              <div className="nm">{x.ticket?<b style={{color:'var(--accent-ink)'}}>#{x.ticket} </b>:null}{x.kind==='issue'?'🔧 ':'📦 '}{x.item}</div>
+              <div className="rs"><span style={{display:'inline-block',width:8,height:8,borderRadius:'50%',background:st.dot,marginRight:6,verticalAlign:'middle'}}/>{st.text}</div>
+            </div></div>;})}
+          {myItems.length>5?<div className="whysm" style={{marginTop:6}}>+{myItems.length-5} more</div>:null}
+        </div>:null}
         <QueuePanel ctx={ctx}/>
         {/* Week-ahead digest: a Monday-review summary that adds a predictive "at risk" signal (due this
             week + assignee already behind) on top of the current overdue/attention panels. */}
@@ -4280,11 +4319,6 @@ async function printDailyReports(rows,label,viewerName){
 function TrackerView({ctx}){
   const [tab,setTab]=useState('all');   // all | maint | supply | open
   const [mon,setMon]=useState('all');   // 'all' | 'YYYY-MM'
-  const reporterFromNote=note=>{        // pull "X" out of a task note built at assign/fulfil time
-    if(!note)return null;
-    let m=note.match(/Reported by (.+?)(?: — |$)/);if(m)return m[1].trim();
-    m=note.match(/request from (.+?)(?: — |$)/);if(m)return m[1].trim();
-    return null;};
   const rows=[];
   // --- un-actioned items still living in `requests` (open) + anything declined -----------------------
   requests.forEach(r=>{
