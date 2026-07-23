@@ -330,6 +330,11 @@
   .org-mgmt-member+.org-mgmt-member{border-top:1px dashed var(--accent);padding-top:5px;margin-top:1px}
   .org-edit-dept{cursor:pointer;margin-left:6px;font-size:14px;color:var(--red);vertical-align:middle;display:inline-block;transform:scaleX(-1)}
   .org-edit-dept:hover{color:#a51c2c;transform:scaleX(-1) scale(1.15)}
+  /* multi-department Sr. Manager: equal department chips on the node + a labelled column per dept below */
+  .onode .ochips{display:flex;gap:5px;flex-wrap:wrap;justify-content:center;margin-top:1px}
+  .onode .ochip{font-size:10.5px;font-weight:800;border-radius:999px;padding:2px 9px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent)}
+  .onode .ochip.none{border-color:var(--line);background:transparent;color:var(--muted);font-weight:600}
+  .odeptgroup{display:inline-flex;align-items:center;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent);border-radius:6px;padding:3px 10px}
   .org-checklist{display:flex;flex-direction:column;gap:9px;margin:12px 20px;max-height:220px;overflow-y:auto}
   .org-check-row{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink);cursor:pointer}
   .org-check-row input{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
@@ -575,6 +580,10 @@ function rowsToStaff(rows){
   const byId=Object.fromEntries(rows.map(r=>[r.id,r]));
   return rows.map(r=>({n:r.name,s:r.short_name,role:r.role,dept:r.department,subDept:r.sub_dept||undefined,
     boss:r.boss_id?byId[r.boss_id].name:null,bossId:r.boss_id,av:r.initials,id:r.id,authId:r.auth_user_id,
+    /* head_departments: the jsonb array of departments a Sr. Manager fully heads (multi-dept). null
+       only pre-migration → left undefined so deptChips()/head lookups fall back to [dept]; post-migration
+       it's always a real array (possibly empty = a deliberately dept-less Sr. Manager). */
+    headDepartments:Array.isArray(r.head_departments)?r.head_departments:undefined,
     tempCovering:r.temp_covering,tempSnap:r.temp_cover_snapshot}));
 }
 function rowToTask(row,assignRows,logRows){
@@ -885,8 +894,29 @@ function suggestFixer(text){const t=(text||'').toLowerCase();
    Maintenance branch keeps the lightest-workload fallback the original had (so the maintenance head
    is never silently nobody, and legacy issues always land somewhere); other departments simply
    return null when they have no Manager head yet — callers then fall back to admin/mgmt visibility. */
+/* ---- multi-department Sr. Manager helpers ----
+   A Sr. Manager can fully head several departments (staff.head_departments jsonb). headDeptsOf() is
+   the canonical "which departments does this Manager head" — the stored array, or [dept] as the
+   pre-migration/never-configured fallback (an empty array is respected: a deliberately dept-less
+   Sr. Manager). headOfDept() resolves a department to its single Manager head (head_departments
+   first, then the legacy dept=== match so nothing breaks pre-migration). allDepartments() is the
+   union of every Manager's headed departments — the real department vocabulary. */
+function headDeptsOf(p){
+  if(Array.isArray(p.headDepartments))return p.headDepartments;
+  return p.dept?[p.dept]:[];
+}
+function headOfDept(dept){
+  return STAFF.find(p=>p.role==='Manager'&&Array.isArray(p.headDepartments)&&p.headDepartments.includes(dept))
+    ||STAFF.find(p=>p.role==='Manager'&&p.dept===dept)
+    ||null;
+}
+function allDepartments(){
+  const s=new Set();
+  STAFF.forEach(p=>{if(p.role==='Manager')headDeptsOf(p).forEach(d=>d&&s.add(d));});
+  return [...s];
+}
 function deptHead(dept){
-  return STAFF.find(p=>p.role==='Manager'&&p.dept===dept)
+  return headOfDept(dept)
     ||(dept==='Maintenance'?STAFF.filter(p=>p.dept==='Maintenance').sort((a,b)=>workloadMap()[a.s]-workloadMap()[b.s])[0]:null)
     ||null;
 }
@@ -1164,7 +1194,7 @@ function App(){
     if(r.approver_staff_id)return r.approver_staff_id;
     const req=byShort(r.from);if(!req)return null;
     const cfg=supplyApproverIdForDept(req.dept);if(cfg)return cfg;
-    const mgr=STAFF.find(p=>p.role==='Manager'&&p.dept===req.dept);
+    const mgr=headOfDept(req.dept); // multi-dept aware: the Sr. Manager who heads the requester's dept
     if(mgr&&mgr.s!==req.s)return mgr.id;
     const boss=req.boss?byName(req.boss):null;return boss?boss.id:null;};
   const viewerSeesReq=r=>{
@@ -2658,7 +2688,7 @@ function orgDeepestOfType(rootName,dbRole){
 }
 function personLabel(p){
   const tier=TIER_LABEL[p.role]||p.role;
-  if(p.role==='Manager')return tier+' — '+p.dept+' ('+p.n+')';
+  if(p.role==='Manager'){const hd=headDeptsOf(p);return tier+' — '+(hd.length?hd.join(', '):'no department')+' ('+p.n+')';}
   if(p.role==='Management'||p.role==='Director')return tier+' — '+p.n;
   return tier+' — '+p.n+' ('+p.dept+')';
 }
@@ -2717,9 +2747,21 @@ function exportPersonTasksCsv(root){
 function OrgNode({person,onNodeClick,canM,chainSiblings}){
   const rawKids=STAFF.filter(x=>x.boss===person.n);
   const staffChain=!chainSiblings&&rawKids.length>1&&rawKids.every(k=>k.role==='Teacher');
+  /* heads: the departments this Sr. Manager fully heads (multi-dept). When they head >1, their
+     direct reports (which after reparenting = everyone in those departments) render grouped into a
+     labelled column per department instead of one flat sibling row — the mockup's org-chart layout. */
+  const heads=person.role==='Manager'?headDeptsOf(person):null;
+  const isMultiHead=heads&&heads.length>1;
   let below=null;
   if(chainSiblings&&chainSiblings.length){
     below=<ul><OrgNode person={chainSiblings[0]} onNodeClick={onNodeClick} canM={canM} chainSiblings={chainSiblings.slice(1)}/></ul>;
+  }else if(isMultiHead&&rawKids.length){
+    const order=[...heads,...[...new Set(rawKids.map(k=>k.dept))].filter(d=>!heads.includes(d))];
+    const groups=order.map(d=>({d,kids:rawKids.filter(k=>k.dept===d)})).filter(g=>g.kids.length);
+    below=<ul>{groups.map(g=><li key={g.d}>
+      <div className="onode-wrap"><div className="odeptgroup">{g.d}</div></div>
+      <ul>{g.kids.map(k=><OrgNode key={k.id} person={k} onNodeClick={onNodeClick} canM={canM}/>)}</ul>
+    </li>)}</ul>;
   }else if(staffChain){
     below=<ul><OrgNode key={rawKids[0].id} person={rawKids[0]} onNodeClick={onNodeClick} canM={canM} chainSiblings={rawKids.slice(1)}/></ul>;
   }else if(rawKids.length){
@@ -2730,8 +2772,11 @@ function OrgNode({person,onNodeClick,canM,chainSiblings}){
       <div className={'onode'+(person.role==='Director'?' director':'')+(canM?'':' static')} onClick={()=>onNodeClick(person)}>
         <div className="orole">{TIER_LABEL[person.role]||person.role}</div>
         <div className="oname">{person.n}</div>
-        {person.role==='Manager'?<div className="odept">{person.dept}
-          {canM?<span className="org-edit-dept" title="Rename department" onClick={e=>{e.stopPropagation();onNodeClick(person,'rename-dept');}}>✎</span>:null}
+        {person.role==='Manager'?<div className="ochips">
+          {heads.length?heads.map(d=><span className="ochip" key={d}>{d}</span>):<span className="ochip none">no department</span>}
+          {/* rename ✎ stays only for a single-department head (unambiguous); multi-dept is managed
+             from the person card's "Manage departments" picker */}
+          {canM&&heads.length<=1?<span className="org-edit-dept" title="Rename department" onClick={e=>{e.stopPropagation();onNodeClick(person,'rename-dept');}}>✎</span>:null}
         </div>:null}
         {(person.role==='Team Lead'||person.role==='Team Member')?(person.subDept?
           <div className="odept">{person.subDept}
@@ -2872,7 +2917,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
     </ModalShell>;
   }
   if(step==='add-dept'){
-    const takenDepts=new Set(orgDepts().map(d=>d.dept));
+    const takenDepts=new Set(allDepartments()); // union of every Sr. Manager's headed departments
     const availDepts=Object.values(BUCKETS).filter(d=>!takenDepts.has(d));
     const directorOpts=STAFF.filter(p=>p.role==='Director');
     return <ModalShell close={close} err={err} title="Add a department" sub="Creates a new Sr. Manager department — reports to Management by default, or to a Director if you pick one below.">
@@ -2895,12 +2940,15 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy||!availDepts.length} onClick={async()=>{
           const dept=(f.dept||availDepts[0]||'').trim(),name=(f.name||'').trim();
           if(!dept||!name){setErr('Enter both a department name and a Sr. Manager name.');return;}
-          if(orgDepts().some(d=>d.dept.toLowerCase()===dept.toLowerCase())){setErr('A department with that name already exists.');return;}
+          if(allDepartments().some(x=>x.toLowerCase()===dept.toLowerCase())){setErr('A department with that name already exists.');return;}
           setBusy(true);setErr('');
           try{
             const boss=(f.bossId&&f.bossId!=='mgmt')?byId(f.bossId):mgmtMembers()[0];
             const j=await createStaffAccount({name,role:'Manager',department:dept,boss:boss.n,username:(f.username||'').trim()||undefined,password:(f.password||'').trim()||undefined});
-            STAFF.push({n:j.name,s:j.short_name,role:'Manager',dept,boss:boss.n,bossId:boss.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
+            // the new Sr. Manager heads exactly the department they were created for (createStaffAccount
+            // defaults head_departments to []; set it so their chip shows the dept, not "no department")
+            await updateStaffFields(j.id,{head_departments:[dept]});
+            STAFF.push({n:j.name,s:j.short_name,role:'Manager',dept,headDepartments:[dept],boss:boss.n,bossId:boss.id,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
             ctx.R();say('Added department "'+dept+'" with Sr. Manager '+name+(boss.role==='Director'?' — reporting to '+boss.n:''));setBusy(false);setResult(j);
           }catch(e){setBusy(false);setErr(e.message);}
         }}>{busy?'Adding…':'Add'}</button>
@@ -2912,14 +2960,17 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
     const subs={'add-jrm':"Attaches directly under that department's Sr. Manager.",
       'add-lead':"Attaches under that department's most recent Jr Manager — or directly under the Sr. Manager if it has none yet.",
       'add-staff':'Attaches under the most specific existing manager in that department (Team Lead, else Jr Manager, else the Sr. Manager).'};
-    const depts=orgDepts();
+    /* one option per (Sr. Manager, headed department) pair — a Manager who heads several departments
+       offers each as a separate destination, so new staff land in the right department under the shared
+       head. Keyed by managerId::dept because a manager id alone is no longer unique across options. */
+    const depts=[];orgDepts().forEach(m=>headDeptsOf(m).forEach(d=>depts.push({key:m.id+'::'+d,id:m.id,dept:d,n:m.n})));
     return <ModalShell close={close} err={err} title={titles[step]} sub={subs[step]}>
       <div className="mf">
         <label>Name</label><input value={f.name||''} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Deepa Iyer" autoFocus/>
         <label>Username (optional)</label><input value={f.username||''} onChange={e=>setF({...f,username:e.target.value})} placeholder="auto-generated from name if left blank"/>
         <label>Department</label>
-        <select value={f.deptId||(depts[0]||{}).id||''} onChange={e=>setF({...f,deptId:e.target.value})}>
-          {depts.map(d=><option key={d.id} value={d.id}>{d.dept}{d.n?' — '+d.n:''}</option>)}
+        <select value={f.deptId||(depts[0]||{}).key||''} onChange={e=>setF({...f,deptId:e.target.value})}>
+          {depts.map(d=><option key={d.key} value={d.key}>{d.dept}{d.n?' — '+d.n:''}</option>)}
         </select>
         {(step==='add-lead'||step==='add-jrm')?<>
           <label>Sub-department name</label>
@@ -2931,8 +2982,8 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <button className="btn soft" style={{flex:1}} onClick={close}>Cancel</button>
         <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
           const name=(f.name||'').trim();
-          const deptId=f.deptId||(depts[0]||{}).id;
-          const deptHead=depts.find(d=>d.id===deptId);
+          const deptKey=f.deptId||(depts[0]||{}).key;
+          const deptHead=depts.find(d=>d.key===deptKey);
           const subDept=(step==='add-lead'||step==='add-jrm')?(f.subDept||'').trim()||undefined:undefined;
           if(!name){setErr('Enter a name.');return;}
           if(!deptHead){setErr('Pick a department.');return;}
@@ -3023,6 +3074,53 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
   }
   if(step==='remove-action'){
     const {target}=oaCtx;
+    /* Removing a Sr. Manager who heads ≥1 department FORCES a hand-over: their departments (and
+       everyone in them) must land on another Sr. Manager so nothing is left headless. This replaces
+       the usual replace/promote/merge/hand-over/demote choices for that case (mockup step 3). */
+    if(target.role==='Manager'){
+      const targetHeads=headDeptsOf(target);
+      if(targetHeads.length){
+        const srms=STAFF.filter(p=>p.role==='Manager'&&p.id!==target.id);
+        const absorber=byId(f.absorberId||(srms[0]||{}).id);
+        return <ModalShell close={close} err={err} title={target.n+' heads '+targetHeads.length+' department'+(targetHeads.length===1?'':'s')}
+          sub={srms.length
+            ?'Hand '+targetHeads.join(' & ')+' over to another Sr. Manager before removing '+target.n+". Both the departments and everyone in them move in one step; "+target.n+"'s account is then removed."
+            :'There is no other Sr. Manager to hand '+targetHeads.join(' & ')+" over to. Add or appoint another Sr. Manager first, then remove "+target.n+'.'}>
+          {srms.length?<div className="mf"><label>Hand {targetHeads.join(' & ')} over to</label>
+            <select value={f.absorberId||srms[0].id} onChange={e=>setF({...f,absorberId:e.target.value})}>
+              {srms.map(c=><option key={c.id} value={c.id}>{personLabel(c)}</option>)}
+            </select></div>:null}
+          <div className="qc-actions">
+            <button className="btn soft" style={{flex:1}} onClick={()=>setStep('remove-person')}>Back</button>
+            {srms.length?<button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+              setBusy(true);setErr('');
+              try{
+                const heads=headDeptsOf(target);
+                // combined set: absorber keeps their own departments and gains the removed head's
+                const newAbs=[...new Set([...headDeptsOf(absorber),...heads])];
+                await updateStaffFields(absorber.id,{head_departments:newAbs});
+                absorber.headDepartments=newAbs;
+                // everyone (non-Manager) in the moved departments reports up to the absorber
+                const movers=STAFF.filter(p=>heads.includes(p.dept)&&p.id!==target.id&&p.id!==absorber.id&&p.role!=='Manager');
+                for(const r of movers){await updateStaffFields(r.id,{boss_id:absorber.id});const local=byId(r.id);if(local){local.boss=absorber.n;local.bossId=absorber.id;}}
+                // carry any remaining reports + tasks over, then remove the account (mirrors hand-over)
+                await mergeTaskAssignees(target.id,absorber.id);
+                let movedTasks=0;
+                tasks.forEach(t=>{let changed=false;
+                  if(t.who===target.s){t.who=absorber.s;changed=true;}
+                  if(t.coWho&&t.coWho.includes(target.s)){t.coWho=t.coWho.map(s=>s===target.s?absorber.s:s);changed=true;}
+                  if(changed&&t.coWho)t.coWho=[...new Set(t.coWho)].filter(s=>s!==t.who);
+                  if(changed)movedTasks++;});
+                await deleteStaffAccount(target.id,absorber.id);
+                STAFF.splice(STAFF.indexOf(target),1);
+                ctx.R();say('Removed '+target.n+' — '+heads.join(' & ')+' now headed by '+absorber.n+(movedTasks?' · '+movedTasks+' task'+(movedTasks===1?'':'s')+' moved':''));
+                setBusy(false);close();
+              }catch(e){setBusy(false);setErr(e.message);}
+            }}>{busy?'Handing over…':'Hand over & remove'}</button>:null}
+          </div>
+        </ModalShell>;
+      }
+    }
     const openCount=tasks.filter(t=>t.status!=='done'&&assignees(t).includes(target.s)).length;
     const candidateCount=STAFF.filter(p=>p.role!=='Administrator'&&p.id!==target.id).length;
     const canMerge=target.role==='Team Lead'||target.role==='Team Member';
@@ -3157,11 +3255,15 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           setBusy(true);setErr('');
           try{
             const j=await createStaffAccount({name,role:target.role,department:target.dept,boss:target.boss,email:isAdminTier?f.email.trim():undefined});
+            // a replaced Sr. Manager inherits the departments they headed (dept-less here — a Manager
+            // who still heads departments is routed through the forced hand-over instead of Replace)
+            const carriedHeads=target.role==='Manager'?headDeptsOf(target):null;
+            if(carriedHeads)await updateStaffFields(j.id,{head_departments:carriedHeads});
             const reports=directReports(target.n);
             for(const r of reports){await updateStaffFields(r.id,{boss_id:j.id});const local=byId(r.id);if(local){local.boss=name;local.bossId=j.id;}}
             await deleteStaffAccount(target.id,j.id);
             STAFF.splice(STAFF.indexOf(target),1);
-            STAFF.push({n:j.name,s:j.short_name,role:target.role,dept:target.dept,boss:target.boss,bossId:target.bossId,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
+            STAFF.push({n:j.name,s:j.short_name,role:target.role,dept:target.dept,headDepartments:carriedHeads||undefined,boss:target.boss,bossId:target.bossId,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
             ctx.R();say(name+' now fills the '+TIER_LABEL[target.role]+' position'+(target.dept?' ('+target.dept+')':''));setBusy(false);setResult(j);
           }catch(e){setBusy(false);setErr(e.message);}
         }}>{busy?'Replacing…':'Confirm replace'}</button>
@@ -3214,6 +3316,10 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         try{
           const bossOfNewHire=byId(person.bossId);
           const j=await createStaffAccount({name,role:newHireRole,department:newHireDept,boss:bossOfNewHire?bossOfNewHire.n:null,email:isAdminTier?f.email.trim():undefined});
+          // if the covered role was a Sr. Manager, the permanent hire inherits the departments the
+          // covering person was heading so none is left headless when they step back down
+          const revertHeads=newHireRole==='Manager'?headDeptsOf(person):null;
+          if(revertHeads)await updateStaffFields(j.id,{head_departments:revertHeads});
           const homeTeam=snap.home_team_ids||[];
           const inherited=directReports(person.n).filter(c=>!homeTeam.includes(c.id));
           for(const c of inherited){await updateStaffFields(c.id,{boss_id:j.id});const local=byId(c.id);if(local){local.boss=name;local.bossId=j.id;}}
@@ -3226,7 +3332,7 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
           await updateStaffFields(person.id,{role:snap.home_role,department:snap.home_department,boss_id:resolvedHomeBossId,temp_covering:false,temp_cover_snapshot:null});
           const localPerson=byId(person.id);
           Object.assign(localPerson,{role:snap.home_role,dept:snap.home_department,boss:resolvedHomeBossName,bossId:resolvedHomeBossId,tempCovering:false,tempSnap:null});
-          STAFF.push({n:j.name,s:j.short_name,role:newHireRole,dept:newHireDept,boss:bossOfNewHire?bossOfNewHire.n:null,bossId:bossOfNewHire?bossOfNewHire.id:null,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
+          STAFF.push({n:j.name,s:j.short_name,role:newHireRole,dept:newHireDept,headDepartments:revertHeads||undefined,boss:bossOfNewHire?bossOfNewHire.n:null,bossId:bossOfNewHire?bossOfNewHire.id:null,av:j.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),id:j.id,authId:null});
           ctx.R();say(name+' now fills '+TIER_LABEL[newHireRole]+' — '+person.n+' is back to '+TIER_LABEL[snap.home_role]);setBusy(false);setResult(j);
         }catch(e){setBusy(false);setErr(e.message);}
       }}>{busy?'Reverting…':'Confirm revert'}</button>
@@ -3235,7 +3341,8 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
   }
   if(step==='rename-dept'){
     const {person}=oaCtx;
-    const takenByOthers=new Set(orgDepts().filter(d=>d.n!==person.n).map(d=>d.dept));
+    // multi-dept aware: a department is "taken" if ANY other Sr. Manager heads it (not just as their .dept)
+    const takenByOthers=new Set(orgDepts().filter(d=>d.n!==person.n).flatMap(d=>headDeptsOf(d)));
     const renameOpts=Object.values(BUCKETS).filter(d=>d===person.dept||!takenByOthers.has(d));
     return <ModalShell close={close} err={err} title="Rename department" sub="Updates the department name for everyone in it.">
       <div className="mf"><label>Department name</label>
@@ -3247,12 +3354,18 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
           const newName=(f.dept!==undefined?f.dept:person.dept).trim();
           if(!newName){setErr('Enter a department name.');return;}
-          if(newName!==person.dept&&orgDepts().some(d=>d.dept.toLowerCase()===newName.toLowerCase())){setErr('A department with that name already exists.');return;}
+          if(newName!==person.dept&&allDepartments().some(x=>x.toLowerCase()===newName.toLowerCase())){setErr('A department with that name already exists.');return;}
           setBusy(true);setErr('');
           try{
             const oldName=person.dept;
             const group=[person,...descendants(person.n)];
             for(const p of group){await updateStaffFields(p.id,{department:newName});p.dept=newName;}
+            // keep this head's head_departments in step with the rename (only reachable for a single-dept head)
+            if(Array.isArray(person.headDepartments)&&person.headDepartments.includes(oldName)){
+              const nh=person.headDepartments.map(x=>x===oldName?newName:x);
+              await updateStaffFields(person.id,{head_departments:nh});
+              person.headDepartments=nh;
+            }
             ctx.R();say(oldName===newName?'No change made':'Renamed "'+oldName+'" to "'+newName+'"');
             setBusy(false);close();
           }catch(e){setBusy(false);setErr(e.message);}
@@ -3281,11 +3394,78 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
       </div>
     </ModalShell>;
   }
+  if(step==='edit-head-depts'){
+    const {person}=oaCtx;
+    /* the full department vocabulary — every BUCKET plus any department currently headed by someone
+       (in case one drifted outside BUCKETS). "Management" (the admin/mgmt pseudo-dept) is excluded —
+       a Sr. Manager heads real staff departments, not the leadership tier. */
+    const opts=[...new Set([...Object.values(BUCKETS),...allDepartments()])].filter(d=>d!=='Management');
+    const currentSet=new Set(headDeptsOf(person));
+    const tick=f.tick||Object.fromEntries([...currentSet].map(d=>[d,true]));
+    const setTick=o=>setF({...f,tick:o});
+    const ticked=opts.filter(d=>tick[d]);
+    // departments being taken from another Sr. Manager by this save → the heads-up
+    const moving=ticked.filter(d=>{const h=headOfDept(d);return h&&h.id!==person.id;}).map(d=>({d,from:headOfDept(d).n}));
+    return <ModalShell close={close} err={err} title={'Departments '+person.n.split(' ')[0]+' heads'}
+      sub="Tick every department this Sr. Manager is in charge of. Staff in a ticked department report up to them; a department can have only one head, so ticking one held by someone else moves it here.">
+      <div className="mf">
+        <label>Departments</label>
+        <div className="org-checklist">
+          {opts.map(d=>{const h=headOfDept(d);const mine=h&&h.id===person.id;const on=!!tick[d];
+            // label reflects what THIS save will do, given the row's tick state
+            const who=mine?'current department'
+              :h?(on?'moving from '+h.n.split(' ')[0]:'headed by '+h.n.split(' ')[0])
+              :(on?'will head this':'no head yet');
+            const moves=h&&!mine&&on; // taking it from another Sr. Manager
+            return <label className="org-check-row" key={d} style={{display:'flex',alignItems:'center',gap:10}}>
+              <input type="checkbox" checked={on} onChange={e=>setTick({...tick,[d]:e.target.checked})}/>
+              <span style={{flex:1}}>{d}</span>
+              <span style={{fontSize:11,color:moves?'var(--amber,#9a6a10)':'var(--muted)'}}>{who}</span>
+            </label>;})}
+        </div>
+      </div>
+      {moving.length?<div className="org-info-box" style={{margin:'0 20px 12px'}}><b>Heads-up:</b> {moving.map(m=>m.d+' (from '+m.from.split(' ')[0]+')').join(', ')} will move to {person.n.split(' ')[0]} — their staff will report up to {person.n.split(' ')[0]}.</div>:null}
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={()=>setStep('person-detail')}>Cancel</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+          const added=ticked.filter(d=>!currentSet.has(d));
+          setBusy(true);setErr('');
+          try{
+            for(const d of added){
+              // (1) a department has exactly one head — strip it from whoever currently holds it
+              const other=headOfDept(d);
+              if(other&&other.id!==person.id){
+                const na=headDeptsOf(other).filter(x=>x!==d);
+                await updateStaffFields(other.id,{head_departments:na});
+                other.headDepartments=na;
+              }
+              // (2) reparent every non-Manager staff member OF that department onto this head,
+              //     flattening any team-lead layers (spec: everyone in a moved dept reports up to
+              //     the shared head). The old Sr. Manager is left in place (dept-less), not reparented.
+              const movers=STAFF.filter(p=>p.dept===d&&p.id!==person.id&&p.role!=='Manager');
+              for(const m of movers){await updateStaffFields(m.id,{boss_id:person.id});const local=byId(m.id);if(local){local.boss=person.n;local.bossId=person.id;}}
+            }
+            // (3) persist this manager's new set (added ∪ kept, minus unticked)
+            await updateStaffFields(person.id,{head_departments:ticked});
+            person.headDepartments=ticked;
+            ctx.R();
+            say(ticked.length?person.n+' now heads '+ticked.join(', '):person.n+' now heads no department');
+            setBusy(false);close();
+          }catch(e){setBusy(false);setErr(e.message);}
+        }}>{busy?'Saving…':'Save departments'}</button>
+      </div>
+    </ModalShell>;
+  }
   if(step==='person-detail'){
     const {person}=oaCtx;
-    return <ModalShell close={close} err={err} title={person.n} sub={(TIER_LABEL[person.role]||person.role)+(person.dept?' · '+person.dept:'')}>
+    const heads=person.role==='Manager'?headDeptsOf(person):null;
+    const subLine=person.role==='Manager'
+      ?(TIER_LABEL[person.role]||person.role)+' · '+(heads.length?heads.join(', '):'no department')
+      :(TIER_LABEL[person.role]||person.role)+(person.dept?' · '+person.dept:'');
+    return <ModalShell close={close} err={err} title={person.n} sub={subLine}>
       <div className="mf" style={{display:'flex',flexDirection:'column',gap:8}}>
         <button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('edit-name');}}>Edit name</button>
+        {person.role==='Manager'?<button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('edit-head-depts');}}><I n="grid" s={15}/>Manage departments</button>:null}
         {person.authId?<button className="btn soft" onClick={()=>{close();ctx.setResetTarget(person);}}><I n="key" s={15}/>Reset password</button>:null}
         {person.authId?<button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('change-login');}}><I n="redo" s={15}/>Change login</button>:null}
         {person.role==='Manager'?<button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('reassign-boss');}}><I n="redo" s={15}/>Change who they report to</button>:null}
@@ -3398,13 +3578,16 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
       const homeTeamIds=directReports(promoted.n).map(c=>c.id);
       const homeSnapshot={home_role:promoted.role,home_department:promoted.dept,home_boss_id:promoted.bossId,home_team_ids:homeTeamIds};
       const others=directReports(target.n).filter(c=>c.id!==promoted.id);
+      const carriedHeads=target.role==='Manager'?headDeptsOf(target):null; // dept-less here (see forced hand-over)
       const fields={role:target.role,department:target.dept,boss_id:target.bossId};
+      if(carriedHeads)fields.head_departments=carriedHeads;
       if(temporary){fields.temp_covering=true;fields.temp_cover_snapshot=homeSnapshot;}
       await updateStaffFields(promoted.id,fields);
       for(const o of others){await updateStaffFields(o.id,{boss_id:promoted.id});const local=byId(o.id);if(local){local.boss=promoted.n;local.bossId=promoted.id;}}
       await deleteStaffAccount(target.id,promoted.id);
       STAFF.splice(STAFF.indexOf(target),1);
       Object.assign(promoted,{role:target.role,dept:target.dept,boss:target.boss,bossId:target.bossId,
+        headDepartments:carriedHeads||promoted.headDepartments,
         tempCovering:temporary,tempSnap:temporary?homeSnapshot:null});
       ctx.R();
       say((promoted.n)+(temporary?' temporarily covering ':' promoted to ')+TIER_LABEL[target.role]+(target.dept?' ('+target.dept+')':''));

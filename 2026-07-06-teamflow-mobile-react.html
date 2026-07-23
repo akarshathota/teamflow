@@ -346,7 +346,9 @@ function supplyApproverIdM(q){
   if(q.approver_staff_id)return q.approver_staff_id;
   const req=findPerson(q.from);if(!req)return null;
   const cfg=supplyApproverIdForDept(req.department);if(cfg)return cfg;
-  const mgr=ALL_PEOPLE.find(p=>p.role==='Manager'&&p.department===req.department);
+  // multi-dept aware: the Sr. Manager who HEADS the requester's department (head_departments), else the legacy dept match
+  const mgr=ALL_PEOPLE.find(p=>p.role==='Manager'&&Array.isArray(p.headDepartments)&&p.headDepartments.includes(req.department))
+    ||ALL_PEOPLE.find(p=>p.role==='Manager'&&p.department===req.department);
   if(mgr&&mgr.s!==req.s)return mgr.id;
   const boss=req.boss?findPerson(req.boss):null;return boss?boss.id:null;}
 /* Reports this viewer may see & assign. admin/mgmt see all org-wide; otherwise the configured
@@ -453,6 +455,7 @@ async function loadAll(){
   clAbs.length=0;clAbs.push(...(clAbsRows||[]));
   const byId=Object.fromEntries((staffRows||[]).map(r=>[r.id,{name:r.name,short:r.short_name,initials:r.initials}]));
   ALL_PEOPLE.length=0;ALL_PEOPLE.push(...(staffRows||[]).map(r=>({n:r.name,s:r.short_name,id:r.id,authId:r.auth_user_id,role:r.role,department:r.department,
+    headDepartments:Array.isArray(r.head_departments)?r.head_departments:undefined, // Sr. Managers may head several departments
     boss:r.boss_id&&byId[r.boss_id]?byId[r.boss_id].short:null,bossId:r.boss_id||null})));
   MEMBERS.length=0;MEMBERS.push(...(staffRows||[]).map(r=>({
     n:r.short_name,i:r.initials,dept:r.department,role:JOB_TITLE[r.short_name]||r.role,
