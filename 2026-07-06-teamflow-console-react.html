@@ -438,6 +438,21 @@
     .calhead .spacer{flex-basis:100%;height:0}
     .calhead .fsel{flex:1;min-width:0}
   }
+  /* Phone (≤600px): the console is desktop-first, but keep it usable on a phone browser — the 66px
+     icon rail (from @1100) stays; below tidies the parts that still overflowed/crammed there. */
+  @media (max-width:600px){
+    html,body{overflow-x:hidden}
+    .sidebar>div:not([class]){display:none}   /* org name / rename box — spilled out of the 66px rail */
+    .roleSel,.side-lab{display:none}           /* Preview-as / Signed-in-as — unusable at 66px (desktop-only) */
+    .topbar{padding:10px 12px}
+    .topbar>.chip-s{display:none}              /* wide cron-status chip — admin diagnostic, not needed on a phone */
+    .tb-right{margin-left:0;flex:1 1 100%;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+    .tb-right .searchwrap:first-child{flex:1 1 100%}   /* search gets its own full-width row */
+    .search{width:100%}
+    .kpis{grid-template-columns:1fr}           /* one KPI card per row */
+    .view,.stripbar{padding-left:12px;padding-right:12px}
+    .attn{flex-wrap:wrap}
+  }
   /* ---- checklists ---- */
   .ktabs{display:flex;gap:4px;margin-bottom:18px;border-bottom:1px solid var(--line)}
   .ktab{border:none;background:none;padding:10px 14px;font-size:13.5px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2.5px solid transparent;margin-bottom:-1px}
