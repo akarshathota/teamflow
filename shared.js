@@ -85,6 +85,12 @@ function clDueOn(it,isoDate){const d=new Date(isoDate+'T00:00:00');
   if(it.freq==='weekly')return clDow(isoDate)===it.dow;
   if(it.freq==='monthly')return d.getDate()===Math.min(it.dom,clLastDom(d.getFullYear(),d.getMonth()+1));
   return (d.getMonth()+1)===it.y_mon && d.getDate()===Math.min(it.y_day,clLastDom(d.getFullYear(),it.y_mon));}
+/* First future date (strictly after fromIso, within a year) an item is next due — used to show a
+   "next …" hint on not-due items now that the tick view lists the whole recurring list. */
+function clNextDue(it,fromIso){const d=new Date(fromIso+'T00:00:00');for(let k=1;k<=366;k++){d.setDate(d.getDate()+1);if(clDueOn(it,iso(d)))return iso(d);}return null;}
+function clNextDueLabel(it,fromIso){const nd=clNextDue(it,fromIso);if(!nd)return '';const d=new Date(nd+'T00:00:00');
+  const sameYr=d.getFullYear()===new Date(fromIso+'T00:00:00').getFullYear();
+  return 'next '+(it.freq==='weekly'?CL_DOW[clDow(nd)]+' ':'')+d.getDate()+' '+CL_MON[d.getMonth()]+(sameYr?'':' '+d.getFullYear());}
 function clSchedLabel(it){
   if(it.freq==='daily')return 'Daily';
   if(it.freq==='weekly')return 'Every '+CL_DOW[it.dow];

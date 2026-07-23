@@ -1224,22 +1224,27 @@ async function clSnapshotPdf(staffId,mode,anchorISO){
 
 // grouped item rows for mobile (mode: 'tick' | 'roview' | 'edit')
 function clMobGroups({staffId,date,mode,ctx}){
-  // edit mode shows the whole recurring list; tick/roview show only what's due on `date`
+  // edit + tick show the whole recurring list; roview shows only what's due on `date`. In tick mode
+  // not-due items are shown muted & read-only, and only due-today items count — "due today" maths
+  // (progress, daily report) is unchanged, just the full list is visible.
   const all=clItemsFor(staffId),done=clDoneSet(staffId,date);
-  const items=mode==='edit'?all:all.filter(i=>clDueOn(i,date));
+  const items=(mode==='edit'||mode==='tick')?all:all.filter(i=>clDueOn(i,date));
   return CL_FREQORDER.map(f=>{const grp=items.filter(i=>i.freq===f);if(!grp.length)return null;
-    const dn=grp.filter(i=>done.has(i.id)).length;
+    const countSet=mode==='tick'?grp.filter(i=>clDueOn(i,date)):grp;
+    const dn=countSet.filter(i=>done.has(i.id)).length;
     return <div key={f}>
-      <div style={{fontSize:11,fontWeight:800,letterSpacing:'.6px',textTransform:'uppercase',color:'#9a938a',margin:'16px 0 2px'}}>{CL_FREQMETA[f].label} <span style={{color:'#b7b3a6'}}>{dn}/{grp.length}</span></div>
+      <div style={{fontSize:11,fontWeight:800,letterSpacing:'.6px',textTransform:'uppercase',color:'#9a938a',margin:'16px 0 2px'}}>{CL_FREQMETA[f].label} <span style={{color:'#b7b3a6'}}>{(mode==='tick'&&countSet.length===0)?'· none due today':dn+'/'+countSet.length}</span></div>
       {grp.map(it=>{const on=done.has(it.id);
         if(mode==='edit')return <div key={it.id} style={{display:'flex',alignItems:'center',gap:9,padding:'11px 2px',borderBottom:'1px solid #efece3'}}>
           <input defaultValue={it.body} onBlur={e=>{if(e.target.value.trim()&&e.target.value!==it.body)clPatch(it.id,{body:e.target.value.trim()},ctx.R);}} style={{flex:1,fontSize:14,fontFamily:'inherit',border:'1px solid #e7e5dc',borderRadius:7,padding:'8px 9px',outline:'none'}}/>
           <span onClick={()=>{const nf=clNextFreq[it.freq];clPatch(it.id,{freq:nf,dow:null,dom:null,y_day:null,y_mon:null,...clDefAnchor(nf)},ctx.R);}} style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',padding:'4px 7px',borderRadius:99,color:'#43494f',background:'#f6f5f0',border:'1px solid #e7e5dc',whiteSpace:'nowrap'}}>{clSchedLabel(it)}</span>
           <button onClick={()=>clArchive(it.id,ctx.R)} style={{border:'none',background:'none',color:'#c43a53',fontSize:16,padding:'4px 6px'}}>✕</button>
         </div>;
-        return <div key={it.id} onClick={()=>{if(mode==='tick')clTick(it,date,!on,ctx.R);}} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 2px',borderBottom:'1px solid #efece3',cursor:mode==='tick'?'pointer':'default'}}>
-          <div style={{width:26,height:26,borderRadius:7,flex:'0 0 auto',border:'2px solid '+(on?'#0e7a6f':'#cfccbf'),background:on?'#0e7a6f':'#fff',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:15}}>{on?'✓':''}</div>
-          <div style={{flex:1,fontSize:15,color:on?'#9a938a':'#1b1e21',textDecoration:on?'line-through':'none'}}>{it.body}</div>
+        const due=mode!=='tick'||clDueOn(it,date),tickable=mode==='tick'&&due;
+        return <div key={it.id} onClick={()=>{if(tickable)clTick(it,date,!on,ctx.R);}} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 2px',borderBottom:'1px solid #efece3',cursor:tickable?'pointer':'default'}}>
+          <div style={{width:26,height:26,borderRadius:7,flex:'0 0 auto',border:'2px solid '+(on?'#0e7a6f':due?'#cfccbf':'#e2e0d8'),background:on?'#0e7a6f':due?'#fff':'#f4f3ee',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:15}}>{on?'✓':''}</div>
+          <div style={{flex:1,fontSize:15,color:(on||!due)?'#9a938a':'#1b1e21',textDecoration:on?'line-through':'none'}}>{it.body}</div>
+          {due?null:<span style={{fontSize:11,color:'#9a938a',whiteSpace:'nowrap'}}>{clNextDueLabel(it,date)}</span>}
           <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',padding:'3px 8px',borderRadius:99,color:'#43494f',background:'#f6f5f0',border:'1px solid #e7e5dc',whiteSpace:'nowrap'}}>{clSchedLabel(it)}</span>
         </div>;})}
     </div>;});
@@ -1259,16 +1264,16 @@ function ChecklistMobile({ctx}){
 }
 function ClMineMobile({ctx,meP}){
   const today=iso(new Date());
-  const all=clItemsFor(meP.id).filter(it=>clDueOn(it,today)),done=clDoneSet(meP.id,today);
-  const n=all.length,d=all.filter(i=>done.has(i.id)).length,pct=n?Math.round(d/n*100):0;
+  const items=clItemsFor(meP.id),due=items.filter(it=>clDueOn(it,today)),done=clDoneSet(meP.id,today);
+  const n=items.length,dueN=due.length,d=due.filter(i=>done.has(i.id)).length,pct=dueN?Math.round(d/dueN*100):0;
   return <div>
     <div className="sec">My checklist <span className="free">TODAY</span></div>
-    {n===0?<div className="task" style={{textAlign:'center',color:'#71797f',padding:'28px 16px'}}>Nothing on your checklist today. A manager above you sets these — they refresh each morning.</div>
+    {n===0?<div className="task" style={{textAlign:'center',color:'#71797f',padding:'28px 16px'}}>No checklist yet. A manager above you sets these — they refresh each morning.</div>
     :<div className="task" style={{padding:16}}>
-      <div style={{fontSize:12,color:'#71797f',marginBottom:8}}>{fmtD(today)} · {d} of {n} done · {pct}%</div>
+      <div style={{fontSize:12,color:'#71797f',marginBottom:8}}>{fmtD(today)} · {dueN?d+' of '+dueN+' due today done · '+pct+'%':'nothing due today — full list below'}</div>
       <div style={{height:8,background:'#eeece4',borderRadius:99,overflow:'hidden',marginBottom:2}}><div style={{height:'100%',width:pct+'%',background:'#0e7a6f'}}/></div>
       {clMobGroups({staffId:meP.id,date:today,mode:'tick',ctx})}
-      <div style={{fontSize:11.5,color:'#71797f',marginTop:14,lineHeight:1.5}}>↻ Your list refreshes each morning; weekly / monthly / yearly items appear on their day.</div>
+      <div style={{fontSize:11.5,color:'#71797f',marginTop:14,lineHeight:1.5}}>↻ Your list refreshes each morning; weekly / monthly / yearly items appear on their day, and not-due items stay greyed with their next date.</div>
     </div>}
   </div>;
 }
