@@ -2502,7 +2502,12 @@ function Drawer({ctx,idx}){
   const [extReason,setExtReason]=useState('');
   const [editingLogId,setEditingLogId]=useState(null);
   const [editText,setEditText]=useState('');
-  useEffect(()=>{setNote('');setReassign(false);setReDate('');setReNote('');setPendingDone(tasks[idx]&&tasks[idx].status==='done');setExtDate('');setExtReason('');setEditingLogId(null);setEditText('');},[idx]);
+  /* Management/Administrator can edit the task's core details (title/due/type/department/priority)
+     inline. Assignee stays on the existing Reassign flow. Display-editing only — not while previewing. */
+  const [editing,setEditing]=useState(false);
+  const [edT,setEdT]=useState('');const [edDate,setEdDate]=useState('');const [edType,setEdType]=useState('work');
+  const [edBucket,setEdBucket]=useState('administration');const [edPrio,setEdPrio]=useState('med');
+  useEffect(()=>{setNote('');setReassign(false);setReDate('');setReNote('');setPendingDone(tasks[idx]&&tasks[idx].status==='done');setExtDate('');setExtReason('');setEditingLogId(null);setEditText('');setEditing(false);},[idx]);
   /* Issue 4: opening your own assigned task moves it open -> inprogress automatically. Gated on
      the REAL signed-in viewer (ctx.previewing false, not a Preview As simulation) genuinely being
      an assignee (hasWho, the same helper used everywhere else) — an admin/manager just reviewing
@@ -2518,6 +2523,18 @@ function Drawer({ctx,idx}){
   },[idx]);
   if(!t)return null;
   const p=byShort(t.who),od=isOverdue(t);
+  const canEdit=(ctx.role==='admin'||ctx.role==='mgmt')&&!ctx.previewing; // Management/Admin only
+  const startEdit=()=>{setEdT(t.t);setEdDate(t.date||'');setEdType(t.type||'work');setEdBucket(t.bucket||'administration');setEdPrio(t.prio||'med');setEditing(true);};
+  const saveEdit=()=>{
+    const nt=edT.trim();if(!nt){ctx.say('The task needs a title');return;}
+    t.t=nt;t.date=edDate||t.date;t.type=edType;t.bucket=edBucket;t.prio=edPrio;
+    saveTask(t).catch(console.error);
+    t.log=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
+    const entry={by:ctx.viewer.n,when:fmtDateTime(new Date()),text:'Edited the task details',createdAt:new Date().toISOString()};
+    t.log.push(entry);logTask(t,ctx.viewer.n,'Edited the task details').then(row=>{if(row)entry.id=row.id;ctx.R();}).catch(console.error);
+    notifyEvent(t.id,ctx.viewer.id,'edited the task details',concernedFor(t,ctx.viewer.s));
+    setEditing(false);ctx.R();ctx.say('Task updated');
+  };
   const tl=[{w:'Assigned to '+assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),d:fmtDate(t.date)+' due date set'}];
   if(t.status==='inprogress'||t.status==='partial')tl.push({w:'Marked '+ST[t.status].l.toLowerCase(),d:'from mobile'});
   const logs=t.log||(t.note?[{by:'Earlier',when:'',text:t.note}]:[]);
@@ -2527,7 +2544,9 @@ function Drawer({ctx,idx}){
   if(t.coWho&&t.coWho.length&&(t.doneBy||[]).length&&t.status!=='done')tl.push({w:'Done by '+(t.doneBy||[]).map(a=>(byShort(a)||{n:a}).n.split(' ')[0]).join(', '),d:'waiting on '+assignees(t).filter(a=>!(t.doneBy||[]).includes(a)).map(a=>(byShort(a)||{n:a}).n.split(' ')[0]).join(', ')});
   if(t.status==='done')tl.push({w:'Completed',d:t.doneOn?fmtDate(t.doneOn):'closed'});
   return <div className="drawer">
-    <div className="dr-head"><h3>{t.t}</h3>
+    <div className="dr-head">
+      {editing?<input className="fsel" style={{flex:1,fontSize:15.5,fontWeight:800,padding:'8px 10px'}} value={edT} onChange={e=>setEdT(e.target.value)} placeholder="Task title"/>:<h3>{t.t}</h3>}
+      {canEdit&&!editing?<button className="btn ghost" style={{padding:'6px 12px',minHeight:0,marginRight:6,flex:'0 0 auto'}} onClick={startEdit}>✎ Edit</button>:null}
       <button className="iconbtn" onClick={()=>ctx.setDrawerIdx(-1)}><I n="x"/></button></div>
     <div className="dr-body">
       <div className="dr-sec">Status</div>
@@ -2597,10 +2616,18 @@ function Drawer({ctx,idx}){
           <option value="">Choose a person…</option>
           {ctx.scope.map(x=><option key={x.s} value={x.s}>{x.n} · {x.dept}</option>)}
         </select></div></div>:null}
-      <div className="kv"><div className="k">Due</div><div className="v" style={{color:od?'var(--red)':undefined}}>{fmtDate(t.date)}{t.time?' · '+fmtTime(t.time):''}{od?' · '+overdueDays(t)+' days late':''}</div></div>
-      <div className="kv"><div className="k">Type</div><div className="v"><span className="tag gray">{TYPES[t.type||'work']}</span></div></div>
-      <div className="kv"><div className="k">Department</div><div className="v"><span className="tag blue">{BUCKETS[t.bucket]||'—'}</span></div></div>
-      <div className="kv"><div className="k">Priority</div><div className="v"><span className="prio" style={{background:PRIOS[t.prio||'med'].c}}/>{PRIOS[t.prio||'med'].l}</div></div>
+      <div className="kv"><div className="k">Due</div><div className="v" style={{flex:editing?1:undefined,color:!editing&&od?'var(--red)':undefined}}>
+        {editing?<input type="date" className="fsel" style={{width:'100%'}} value={edDate} onChange={e=>setEdDate(e.target.value)}/>
+          :<>{fmtDate(t.date)}{t.time?' · '+fmtTime(t.time):''}{od?' · '+overdueDays(t)+' days late':''}</>}</div></div>
+      <div className="kv"><div className="k">Type</div><div className="v" style={{flex:editing?1:undefined}}>
+        {editing?<select className="fsel" style={{width:'100%'}} value={edType} onChange={e=>setEdType(e.target.value)}>{Object.keys(TYPES).map(k=><option key={k} value={k}>{TYPES[k]}</option>)}</select>
+          :<span className="tag gray">{TYPES[t.type||'work']}</span>}</div></div>
+      <div className="kv"><div className="k">Department</div><div className="v" style={{flex:editing?1:undefined}}>
+        {editing?<select className="fsel" style={{width:'100%'}} value={edBucket} onChange={e=>setEdBucket(e.target.value)}>{Object.keys(BUCKETS).map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}</select>
+          :<span className="tag blue">{BUCKETS[t.bucket]||'—'}</span>}</div></div>
+      <div className="kv"><div className="k">Priority</div><div className="v" style={{flex:editing?1:undefined}}>
+        {editing?<select className="fsel" style={{width:'100%'}} value={edPrio} onChange={e=>setEdPrio(e.target.value)}>{Object.keys(PRIOS).map(k=><option key={k} value={k}>{PRIOS[k].l}</option>)}</select>
+          :<><span className="prio" style={{background:PRIOS[t.prio||'med'].c}}/>{PRIOS[t.prio||'med'].l}</>}</div></div>
       {t.recur?<div className="kv"><div className="k">Repeats</div><div className="v"><span className="tag teal">↻ {recurLabel(t.recur,t.recurOn)}</span><span style={{fontWeight:500,color:'var(--muted)',fontSize:12.5}}>next created on completion</span></div></div>:null}
       {t.selfAssigned?<div className="kv"><div className="k">Origin</div><div className="v"><span className="tag green">Self-logged</span>{t.instructedBy?' as per '+t.instructedBy:''}</div></div>:null}
       {t.extReq?<div className="kv"><div className="k">Extension</div><div className="v">asks {fmtDate(t.extReq.newDate)}{t.extReq.reason?' — “'+t.extReq.reason+'”':''}</div></div>:null}
@@ -2680,6 +2707,10 @@ function Drawer({ctx,idx}){
       })}</div>
     </div>
     <div className="dr-actions">
+      {editing?<>
+        <button className="btn ghost" style={{flex:1}} onClick={()=>setEditing(false)}>Cancel</button>
+        <button className="btn primary" style={{flex:2}} onClick={saveEdit}><I n="check"/>Save changes</button>
+      </>:<>
       <button className="btn ghost" style={{flex:1}} onClick={()=>ctx.remindPerson(t.who)}><I n="bell"/>Remind</button>
       <button className="btn ghost" style={{flex:1}} onClick={()=>setReassign(!reassign)}><I n="redo"/>Reassign</button>
       <button className="btn primary" style={{flex:1}} onClick={()=>{
@@ -2692,6 +2723,7 @@ function Drawer({ctx,idx}){
         }
         else ctx.setDrawerIdx(-1);
       }}><I n="check"/>OK</button>
+      </>}
     </div>
   </div>;
 }
