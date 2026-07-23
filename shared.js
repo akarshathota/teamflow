@@ -368,11 +368,44 @@ function donutPng(segs){
   x.fillStyle='#71797f';x.font='600 18px sans-serif';x.fillText('tasks',cx,cy+22);
   return c.toDataURL('image/png');
 }
-const pdfDate=d=>{if(!d)return '—';return new Date(d+'T00:00:00').toLocaleDateString('en',{day:'numeric',month:'short'});};
+/* PDF/print date format -> "22 Jul" (day + short month via MONTHS, so the order is always
+   day-first regardless of the viewer's locale). Accepts a plain YYYY-MM-DD date OR a full ISO
+   timestamptz (e.g. tasks.created_at, the snapshot "issued" field). CSV cells keep DD-MM-YYYY. */
+const pdfDate=d=>{if(!d)return '—';const x=String(d).includes('T')?new Date(d):new Date(d+'T00:00:00');
+  return isNaN(x)?'—':x.getDate()+' '+MONTHS[x.getMonth()];};
+/* Shared LANDSCAPE table PDF — a real file built with jsPDF + autoTable, which paginates the
+   table itself (so NO row is ever dropped at a page break, unlike the window.print path) and
+   repeats the column header on every page. Used by the "Download PDF" on every export surface.
+     fileLabel  -> the saved filename slug
+     meta       -> {orgName, title, subtitle, donutSegs?}  (donutSegs = [{l,v,c}] delivery summary)
+     columns    -> array of header strings
+     rows       -> array of row arrays (cells; '\n' inside a cell makes a second line, e.g. the
+                   overdue "N days late" note under a Due date) */
+async function downloadTablePdf(fileLabel,meta,columns,rows){
+  await ensurePdfLibs();
+  const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'pt',format:'a4'});
+  const M=40;let y=42;
+  if(meta.orgName){doc.setFont('helvetica','bold');doc.setFontSize(22);doc.setTextColor(10,92,84);doc.text(meta.orgName,M,y);y+=24;}
+  doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(27,30,33);doc.text(meta.title||'TeamFlow',M,y);y+=16;
+  if(meta.subtitle){doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(85,85,85);doc.text(meta.subtitle,M,y);y+=16;}
+  const segs=(meta.donutSegs||[]),total=segs.reduce((a,s)=>a+s.v,0);
+  if(segs.length&&total){
+    y+=6;doc.addImage(donutPng(segs),'PNG',M,y,72,72);
+    doc.setFontSize(9.5);doc.setFont('helvetica','normal');
+    segs.forEach((s,i)=>{const ly=y+15+i*15;
+      doc.setFillColor(s.c);doc.rect(M+86,ly-7,8,8,'F');
+      doc.setTextColor(27,30,33);doc.text(s.l+'   '+s.v+' · '+Math.round(s.v/total*100)+'%',M+100,ly);});
+    y+=84;
+  }else y+=8;
+  doc.autoTable({startY:y,margin:{left:M,right:M},styles:{fontSize:9,cellPadding:4,overflow:'linebreak'},
+    headStyles:{fillColor:[14,122,111],textColor:[255,255,255]},
+    head:[columns],body:rows});
+  doc.save(iso(new Date())+'-teamflow-'+String(fileLabel).toLowerCase().replace(/[^\w]+/g,'-').replace(/^-+|-+$/g,'')+'.pdf');
+}
 async function downloadDailyReportPdf(rows,label,viewerName){
   await ensurePdfLibs();
   const issuesByReport=await fetchIssuesByReport(rows);
-  const doc=new window.jspdf.jsPDF({unit:'pt',format:'a4'});
+  const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'pt',format:'a4'});
   let y=48;
   /* ORG_NAME is each app's script-global (loaded from org_settings in loadAll) — headline of the
      document in the accent ink, with the TeamFlow line demoted beneath it. */
@@ -383,7 +416,7 @@ async function downloadDailyReportPdf(rows,label,viewerName){
   doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(85,85,85);
   doc.text('Prepared for '+viewerName+' · '+new Date().toDateString()+' · '+rows.length+' report'+(rows.length!==1?'s':''),40,y);y+=26;
   rows.forEach(({row,p})=>{
-    if(y>640){doc.addPage();y=48;}
+    if(y>500){doc.addPage();y=48;}
     doc.setTextColor(27,30,33);doc.setFontSize(12);doc.setFont('helvetica','bold');
     doc.text((p?p.n:'—')+' · '+(p?p.dept:'')+' · '+pdfDate(row.report_date),40,y);y+=6;
     const issues=issuesByReport[row.id]||[];
@@ -394,7 +427,7 @@ async function downloadDailyReportPdf(rows,label,viewerName){
         body:issues.map(x=>[x.issue,x.priority,x.status==='resolved'?'Resolved':'Open',issueResolutionText(x)])});
       y=doc.lastAutoTable.finalY+18;
     }else y+=12;
-    if(y>640){doc.addPage();y=48;}
+    if(y>500){doc.addPage();y=48;}
     const pieSegs=[row.completed_count,row.overdue_count,row.pending_count].map((v,i)=>({...DR_SEGS[i],v}));
     doc.addImage(donutPng(pieSegs),'PNG',40,y,76,76);
     doc.setFontSize(9.5);doc.setFont('helvetica','normal');
@@ -412,12 +445,12 @@ async function downloadDailyReportPdf(rows,label,viewerName){
         body:snap.map(t=>{let st=snapStatusLabel(t.status);
           if(t.status==='overdue'&&t.due){const d=Math.round((new Date(row.report_date+'T00:00:00')-new Date(t.due+'T00:00:00'))/86400000);
             if(d>0)st='Overdue · '+d+'d late';}
-          return [t.title,t.assignee,t.department||'',dmyTs(t.issued),pdfDate(t.due),st];})});
+          return [t.title,t.assignee,t.department||'',pdfDate(t.issued),pdfDate(t.due),st];})});
       y=doc.lastAutoTable.finalY+24;
     }
     const clSnap=row.checklist_snapshot||[];
     if(clSnap.length){
-      if(y>560){doc.addPage();y=48;}
+      if(y>440){doc.addPage();y=48;}
       const cd=clSnap.filter(c=>c.done).length;
       doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(27,30,33);doc.text('Checklist — '+cd+' of '+clSnap.length+' done',40,y);
       doc.autoTable({startY:y+6,margin:{left:40,right:40},styles:{fontSize:8.5},headStyles:{fillColor:[14,122,111]},
