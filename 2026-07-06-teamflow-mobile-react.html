@@ -584,8 +584,6 @@ const perfMonLblM=m=>{const p=(''+m).split('-');return MONTHS[+p[1]-1]+' '+p[0];
 const perfDateM=d=>d?dmy((''+d).slice(0,10)):'';
 const perfOverM=t=>!t.done&&t.date&&t.date<iso(TODAY);
 const perfStatsM=list=>{const done=list.filter(t=>t.done).length;return {total:list.length,done,over:list.filter(perfOverM).length,rate:list.length?Math.round(done/list.length*100):0};};
-const perfByAssigneeM=list=>{const m={};list.forEach(t=>{const k=perfNameM(t.who);m[k]=m[k]||{n:k,total:0,done:0,over:0};m[k].total++;if(t.done)m[k].done++;if(perfOverM(t))m[k].over++;});
-  return Object.values(m).sort((a,b)=>a.n<b.n?-1:a.n>b.n?1:0).map(p=>({...p,rate:p.total?Math.round(p.done/p.total*100):0}));};
 const perfStatsLineM=list=>{const s=perfStatsM(list);return s.total+' tasks · '+s.done+' completed · '+s.over+' overdue · '+s.rate+'% done';};
 const perfRowsM=(list,byDept)=>byDept?list.slice().sort((a,b)=>{const an=perfNameM(a.who),bn=perfNameM(b.who);return an<bn?-1:an>bn?1:0;}):list;
 const perfCellsM=(t,fmt)=>[assigneesM(t).filter(Boolean).map(perfNameM).join(' + '),fmt((''+t.issued).slice(0,10)),t.instructedBy||'Self',PRIO_LBL_M[t.prio||'med'],t.t,
@@ -1716,7 +1714,7 @@ function PerfSectionM({ctx}){
   const months=perfMonthsOfM(byDeptStaff);
   const list=byDeptStaff.filter(t=>perfInMonthM(t,mon));
   const byDept=fw==='all';const cols=perfColsM(byDept);const rows=perfRowsM(list,byDept);
-  const s=perfStatsM(list);const per=byDept?perfByAssigneeM(list):null;
+  const s=perfStatsM(list);
   const scopePeople=[...new Set(ctx.scope)].map(sh=>({s:sh,n:perfNameM(sh)})).sort((a,b)=>a.n<b.n?-1:1);
   return <>
     <div className="sec" style={{marginTop:16}}>Performance analysis <span className="free">MGMT</span></div>
@@ -1730,10 +1728,6 @@ function PerfSectionM({ctx}){
         <div key={i}><div style={{fontSize:20,fontWeight:800,color:c,lineHeight:1.1}}>{v}</div><div className="rs">{l}</div></div>)}
     </div>
     {!rows.length?<div className="rs" style={{padding:'8px 2px'}}>No tasks match the current department, staff or month filter.</div>:<>
-      {per&&per.length>1?<div style={{overflowX:'auto',marginBottom:12}}>
-        <table className="perf-t"><thead><tr><th>Assignee</th><th>Tasks</th><th>Done</th><th>Overdue</th><th>%</th></tr></thead>
-        <tbody>{per.map(p=><tr key={p.n}><td><b>{p.n}</b></td><td>{p.total}</td><td style={{color:'var(--green,#1f9d63)'}}>{p.done}</td><td style={{color:p.over?'var(--red,#c43a53)':'inherit'}}>{p.over}</td><td><b>{p.rate}%</b></td></tr>)}</tbody></table>
-      </div>:null}
       <div style={{overflowX:'auto'}}>
         <table className="perf-t"><thead><tr>{cols.map(c=><th key={c}>{c}</th>)}</tr></thead>
         <tbody>{rows.map((t,i)=><tr key={t.id||i}>

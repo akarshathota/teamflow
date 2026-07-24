@@ -1737,10 +1737,9 @@ function Dashboard({ctx,open,over,today,done}){
   const pend=ctx.qReqs.length+ctx.qExts.length+ctx.qCompletions.length;
   const bTot=mine.length||1;
   const bRows=Object.keys(BUCKETS).map(k=>({k,c:mine.filter(t=>t.bucket===k).length})).filter(o=>o.c).sort((a,b)=>b.c-a.c);
-  const wStaff=ctx.scope.filter(p=>inDept(p,loadBucket));
-  const wCnt=p=>tasks.filter(t=>hasWho(t,p.s)&&t.status!=='done'&&(loadBucket==='all'||t.bucket===loadBucket)).length;
-  const wRows=wStaff.map(p=>({p,l:wCnt(p)})).sort((a,b)=>b.l-a.l);
-  const wMax=Math.max(1,...wRows.map(o=>o.l));
+  // Team-workload dataset for the by-assignee table (tasks with an in-scope assignee, dept-filtered).
+  const wScopeShorts=ctx.scope.map(p=>p.s);
+  const wList=tasks.filter(t=>(loadBucket==='all'||t.bucket===loadBucket)&&assignees(t).some(a=>wScopeShorts.includes(a)));
   const ods=tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,shorts)&&isOverdue(o.t)).sort((a,b)=>a.t.date<b.t.date?-1:1);
   /* Week-ahead digest — turns reactive overdue-chasing into a weekly habit. "At risk" = due in the next
      7 days AND assigned to someone already behind (has ≥1 overdue task), i.e. likely to slip. */
@@ -1803,11 +1802,7 @@ function Dashboard({ctx,open,over,today,done}){
               <option value="all">All departments</option>
               {realDeptKeys(ctx.scope).map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}
             </select></div>
-          <div className="scrollbox">
-            {wRows.map(o=>{const c=o.l>=3?'var(--red)':o.l===2?'var(--amber)':'var(--green)';
-              return <div className="barrow" key={o.p.s}><div className="k">{o.p.n}</div>
-                <div className="track"><i style={{width:(o.l?Math.max(4,o.l/wMax*100):0)+'%',background:c}}/></div><div className="v">{o.l}</div></div>;})}
-          </div>
+          <ByAssigneeTable list={wList}/>
         </div>
       </div>
       <div>
@@ -2370,24 +2365,29 @@ function printPerf(list,byDept,fw,fb,mon){
   window.print();
   setTimeout(()=>{pr.style.display='none';document.title=ot;},300);
 }
+/* Per-assignee workload table (Assignee / Tasks / Completed / Overdue / Completion%). This is the
+   "By assignee" design that now serves as the Team-workload widget on the Dashboard AND the Task-
+   analytics tab — it replaced the old open-tasks bar chart / open-tasks table there, and was removed
+   from Performance Analysis (per user request — that view is just summary cards + the per-task table). */
+function ByAssigneeTable({list}){
+  const per=perfByAssignee(list);
+  if(!per.length)return <Empty t="No tasks" s="No tasks match the current filter."/>;
+  return <div className="trk-tw"><table className="trk-t" style={{fontSize:12.5}}>
+    <thead><tr><th>Assignee</th><th>Tasks</th><th>Completed</th><th>Overdue</th><th>Completion</th></tr></thead>
+    <tbody>{per.map(p=><tr key={p.n}><td><b>{p.n}</b></td><td>{p.total}</td><td style={{color:'var(--green)'}}>{p.done}</td><td style={{color:p.over?'var(--red)':'inherit'}}>{p.over}</td><td><b>{p.rate}%</b></td></tr>)}</tbody>
+  </table></div>;
+}
 /* On-screen Performance Analysis table — trk-t styling, same rows/columns as the exports. */
 function PerfPanel({list,fw,fb,mon}){
   const byDept=fw==='all';const cols=perfCols(byDept);const rows=perfRows(list,byDept);
   if(!rows.length)return <Empty t="No tasks to analyse" s="No tasks match the current department, staff or month filter."/>;
-  const s=perfStats(list);const per=byDept?perfByAssignee(list):null;
+  const s=perfStats(list);
   const stat=(v,l,c)=><div style={{minWidth:78}}><div style={{fontSize:22,fontWeight:800,color:c||'var(--ink)',lineHeight:1.1}}>{v}</div><div style={{fontSize:11,color:'var(--muted)'}}>{l}</div></div>;
   return <div className="trk-panel">
     {/* summary: overall stats + (department-wise) a per-assignee breakdown */}
     <div style={{padding:'14px 16px',borderBottom:'1px solid var(--line)',display:'flex',gap:24,flexWrap:'wrap',alignItems:'center'}}>
       {stat(s.total,'Total tasks')}{stat(s.done,'Completed','var(--green)')}{stat(s.over,'Overdue','var(--red)')}{stat(s.rate+'%','Completion rate','var(--accent-ink)')}
     </div>
-    {per&&per.length>1?<div style={{padding:'10px 16px 2px'}}>
-      <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--muted)',margin:'0 0 6px'}}>By assignee</div>
-      <div className="trk-tw"><table className="trk-t" style={{fontSize:12.5}}>
-        <thead><tr><th>Assignee</th><th>Tasks</th><th>Completed</th><th>Overdue</th><th>Completion</th></tr></thead>
-        <tbody>{per.map(p=><tr key={p.n}><td><b>{p.n}</b></td><td>{p.total}</td><td style={{color:'var(--green)'}}>{p.done}</td><td style={{color:p.over?'var(--red)':'inherit'}}>{p.over}</td><td><b>{p.rate}%</b></td></tr>)}</tbody>
-      </table></div>
-    </div>:null}
     <div className="trk-tw">
       <table className="trk-t">
         <thead><tr>{cols.map(c=><th key={c}>{c}</th>)}</tr></thead>
@@ -4566,7 +4566,6 @@ function ReportsView({ctx}){
   const segs=deliveryStats(mine);const segTot=segs.reduce((a,x)=>a+x.v,0);
   const empOpts=ctx.scope.filter(p=>inDept(p,fb));
   const workers=ctx.scope.filter(p=>(fw==='all'||p.s===fw)&&inDept(p,fb));
-  const load=workloadMap();
   const byEmp=fw==='all'
     ?workers.map(p=>{const tt=mine.filter(t=>hasWho(t,p.s));return [p.n,tt.length?Math.round(tt.filter(t=>t.status==='done').length/tt.length*100):0];})
     :Object.keys(BUCKETS).map(k=>({k,tt:mine.filter(t=>t.bucket===k)})).filter(o=>o.tt.length)
@@ -4635,15 +4634,8 @@ function ReportsView({ctx}){
       <div className="panel"><h3>Tasks by type</h3>
         <Bars rows={Object.keys(TYPES).map(k=>[TYPES[k],mine.filter(t=>(t.type||'work')===k).length]).filter(r=>r[1]>0)}/></div>
     </div>
-    <div className="panel"><h3>Workload — open tasks per employee</h3>
-      <div style={{overflowX:'auto'}}>
-      <table><thead><tr><th>Employee</th><th>Department</th><th>Open</th><th>Overdue</th><th>Done</th></tr></thead>
-      <tbody>{workers.map(p=>{const tt=mine.filter(t=>hasWho(t,p.s));
-        return <tr key={p.s}><td><span className="avex" style={{marginRight:8,background:avColor(p.n),color:'#fff'}}>{p.av}</span>{p.n}</td>
-          <td>{p.dept}</td><td><b>{load[p.s]}</b></td>
-          <td style={{color:tt.filter(isOverdue).length?'var(--red)':undefined}}>{tt.filter(isOverdue).length}</td>
-          <td>{tt.filter(t=>t.status==='done').length}</td></tr>;})}</tbody></table>
-      </div>
+    <div className="panel"><h3>Team workload — by assignee</h3>
+      <ByAssigneeTable list={mine}/>
     </div>
     </>:emode==='reports'?<DailyReportsPanel ctx={ctx} fw={fw} fb={fb}/>:<PerfPanel list={perfList} fw={fw} fb={fb} mon={pmon}/>}
   </div>;
