@@ -4524,11 +4524,16 @@ function ReportsView({ctx}){
     ['Completed',dn,'var(--green)','var(--green-soft)','check',t=>t.status==='done'],
     ['Overdue',ov,'var(--red)','var(--red-soft)','alert',isOverdue],
     ['Completion rate',rate+'%','var(--blue)','var(--blue-soft)','chart',null]]; // derived stat — nothing to list
+  /* Performance Analysis is management-only (Management tier + Administrator), same gate as the
+     Reports & requests tracker. Uses the effective (Preview-As) role, so previewing down hides it;
+     emode falls the view back to Task analytics if perf was selected before the role dropped. */
+  const canPerf=ctx.role==='mgmt'||ctx.role==='admin';
+  const emode=(mode==='perf'&&!canPerf)?'tasks':mode;
   return <div className="view">
-    <div className="selfseg" style={{margin:'0 0 14px',maxWidth:520}}>
-      <button className={mode==='tasks'?'on':''} onClick={()=>setMode('tasks')}>Task analytics</button>
-      <button className={mode==='reports'?'on':''} onClick={()=>setMode('reports')}>Daily reports</button>
-      <button className={mode==='perf'?'on':''} onClick={()=>setMode('perf')}>Performance Analysis</button>
+    <div className="selfseg" style={{margin:'0 0 14px',maxWidth:canPerf?520:360}}>
+      <button className={emode==='tasks'?'on':''} onClick={()=>setMode('tasks')}>Task analytics</button>
+      <button className={emode==='reports'?'on':''} onClick={()=>setMode('reports')}>Daily reports</button>
+      {canPerf?<button className={emode==='perf'?'on':''} onClick={()=>setMode('perf')}>Performance Analysis</button>:null}
     </div>
     <div className="filters">
       <select className="fsel" value={fb} onChange={e=>{setFb(e.target.value);setFw('all');}}>
@@ -4537,11 +4542,11 @@ function ReportsView({ctx}){
       <select className="fsel" value={fw} onChange={e=>setFw(e.target.value)}>
         <option value="all">{fb==='all'?'All staff':'All in '+BUCKETS[fb]}</option>
         {empOpts.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}</select>
-      {mode==='perf'?<select className="fsel" value={pmon} onChange={e=>setPmon(e.target.value)} title="Filter by month of issue — pending tasks roll over into later months">
+      {emode==='perf'?<select className="fsel" value={pmon} onChange={e=>setPmon(e.target.value)} title="Filter by month of issue — pending tasks roll over into later months">
         <option value="all">All months</option>
         {perfMonths.map(m=><option key={m} value={m}>{perfMonLbl(m)}</option>)}</select>:null}
       <div className="spacer"/>
-      {mode==='tasks'?<>
+      {emode==='tasks'?<>
         <button className="btn soft" onClick={()=>setShowMismatch(true)}><I n="alert"/>Check dept mismatches</button>
         {/* primary trio = the tasks/team report; Workload CSV kept as a smaller separate link (different dataset) */}
         <div className="exp-group">
@@ -4551,14 +4556,14 @@ function ReportsView({ctx}){
         </div>
         <button className="linkbtn" onClick={()=>ctx.exportCSV('workload')}><I n="dl" s={13}/>Workload CSV</button>
       </>:null}
-      {mode==='perf'&&perfList.length?<div className="exp-group">
+      {emode==='perf'&&perfList.length?<div className="exp-group">
         <button className="exp-btn" onClick={()=>downloadPerfPdf(perfList,fw==='all',fw,fb,pmon)}><I n="dl" s={13}/>Download PDF</button>
         <button className="exp-btn" onClick={()=>exportPerf(perfList,fw==='all',fw,fb,pmon)}><I n="dl" s={13}/>Download CSV</button>
         <button className="exp-btn" onClick={()=>printPerf(perfList,fw==='all',fw,fb,pmon)}><I n="print" s={13}/>Print</button>
       </div>:null}
     </div>
     {showMismatch?<DeptMismatchModal ctx={ctx} close={()=>setShowMismatch(false)}/>:null}
-    {mode==='tasks'?<>
+    {emode==='tasks'?<>
     <div className="kpis">{KP.map(([l,n,c,cs,ic,pred])=><div className="kpi" key={l} style={pred?{cursor:'pointer'}:undefined}
       title={pred?'Review the tasks behind this number':undefined} onClick={pred?()=>setKpiPop({title:l,pred}):undefined}>
       <div className="top"><span className="l">{l}</span><span className="ic" style={{background:cs,color:c}}><I n={ic}/></span></div>
@@ -4587,7 +4592,7 @@ function ReportsView({ctx}){
           <td>{tt.filter(t=>t.status==='done').length}</td></tr>;})}</tbody></table>
       </div>
     </div>
-    </>:mode==='reports'?<DailyReportsPanel ctx={ctx} fw={fw} fb={fb}/>:<PerfPanel list={perfList} fw={fw} fb={fb} mon={pmon}/>}
+    </>:emode==='reports'?<DailyReportsPanel ctx={ctx} fw={fw} fb={fb}/>:<PerfPanel list={perfList} fw={fw} fb={fb} mon={pmon}/>}
   </div>;
 }
 
