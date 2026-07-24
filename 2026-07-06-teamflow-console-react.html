@@ -2325,6 +2325,15 @@ const perfMonthsOf=list=>[...new Set(list.map(perfIssMonth).filter(Boolean))].so
 const perfMonLbl=m=>{const p=(''+m).split('-');return MONTHS[+p[1]-1]+' '+p[0];};
 /* All Performance Analysis dates render DD-MM-YYYY (screen + PDF + CSV + Print), via shared dmy(). */
 const perfDate=d=>d?dmy((''+d).slice(0,10)):'';
+/* Summary stats for a perf list: overall {total,done,over,rate} + per-primary-assignee breakdown
+   (counted under t.who so the per-person totals sum to the task count, matching the flat table). */
+const perfStats=list=>{const done=list.filter(t=>t.status==='done').length,over=list.filter(isOverdue).length;
+  return {total:list.length,done,over,rate:list.length?Math.round(done/list.length*100):0};};
+const perfByAssignee=list=>{const m={};
+  list.forEach(t=>{const k=(byShort(t.who)||{n:t.who||'—'}).n;m[k]=m[k]||{n:k,total:0,done:0,over:0};
+    m[k].total++;if(t.status==='done')m[k].done++;if(isOverdue(t))m[k].over++;});
+  return Object.values(m).sort((a,b)=>a.n<b.n?-1:a.n>b.n?1:0).map(p=>({...p,rate:p.total?Math.round(p.done/p.total*100):0}));};
+const perfStatsLine=list=>{const s=perfStats(list);return s.total+' tasks · '+s.done+' completed · '+s.over+' overdue · '+s.rate+'% done';};
 const perfRows=(list,byDept)=>byDept?list.slice().sort((a,b)=>{const an=(byShort(a.who)||{n:a.who}).n,bn=(byShort(b.who)||{n:b.who}).n;return an<bn?-1:an>bn?1:0;}):list;
 /* full 8-cell row in PERF_COLS_FULL order; caller slices off cell 0 (Assignee) for staff-wise.
    fmt formats a date-only 'YYYY-MM-DD' string — fmtDate for PDF/print ("21 Jul"), a slice(0,10)
@@ -2334,7 +2343,7 @@ const perfCells=(t,fmt)=>[assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')
   fmt(t.date),(t.status==='done'&&t.doneOn)?fmt(t.doneOn):'',''];
 function downloadPerfPdf(list,byDept,fw,fb,mon){
   downloadTablePdf('performance-analysis',{orgName:orgName(),title:'TeamFlow — Performance Analysis',
-    subtitle:perfSubtitle(fw,fb,mon)+' · '+new Date().toDateString()+' · '+list.length+' tasks'},
+    subtitle:perfSubtitle(fw,fb,mon)+' · '+new Date().toDateString()+' · '+perfStatsLine(list)},
     perfCols(byDept),perfRows(list,byDept).map((t,i)=>{const c=perfCells(t,perfDate);return [String(i+1)].concat(byDept?c:c.slice(1));}))
     .catch(e=>console.error(e));
 }
@@ -2347,7 +2356,7 @@ function exportPerf(list,byDept,fw,fb,mon){
 function printPerf(list,byDept,fw,fb,mon){
   const cols=perfCols(byDept);
   let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — Performance Analysis</div>';
-  b+='<div style="color:#555;margin-bottom:18px">'+perfSubtitle(fw,fb,mon)+' · '+new Date().toDateString()+' · '+list.length+' tasks</div>';
+  b+='<div style="color:#555;margin-bottom:18px">'+perfSubtitle(fw,fb,mon)+' · '+new Date().toDateString()+' · '+perfStatsLine(list)+'</div>';
   b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:2px solid #333">'+cols.map(c=>'<th style="text-align:left;padding:6px">'+c+'</th>').join('')+'</tr></thead><tbody>';
   perfRows(list,byDept).forEach((t,i)=>{const c=perfCells(t,perfDate).map(x=>x||'');const cc=[String(i+1)].concat(byDept?c:c.slice(1));
     b+='<tr style="border-bottom:1px solid #ccc">'+cc.map(x=>'<td style="padding:6px">'+x+'</td>').join('')+'</tr>';});
@@ -2361,7 +2370,20 @@ function printPerf(list,byDept,fw,fb,mon){
 function PerfPanel({list,fw,fb,mon}){
   const byDept=fw==='all';const cols=perfCols(byDept);const rows=perfRows(list,byDept);
   if(!rows.length)return <Empty t="No tasks to analyse" s="No tasks match the current department, staff or month filter."/>;
+  const s=perfStats(list);const per=byDept?perfByAssignee(list):null;
+  const stat=(v,l,c)=><div style={{minWidth:78}}><div style={{fontSize:22,fontWeight:800,color:c||'var(--ink)',lineHeight:1.1}}>{v}</div><div style={{fontSize:11,color:'var(--muted)'}}>{l}</div></div>;
   return <div className="trk-panel">
+    {/* summary: overall stats + (department-wise) a per-assignee breakdown */}
+    <div style={{padding:'14px 16px',borderBottom:'1px solid var(--line)',display:'flex',gap:24,flexWrap:'wrap',alignItems:'center'}}>
+      {stat(s.total,'Total tasks')}{stat(s.done,'Completed','var(--green)')}{stat(s.over,'Overdue','var(--red)')}{stat(s.rate+'%','Completion rate','var(--accent-ink)')}
+    </div>
+    {per&&per.length>1?<div style={{padding:'10px 16px 2px'}}>
+      <div style={{fontSize:11,fontWeight:800,letterSpacing:'.5px',textTransform:'uppercase',color:'var(--muted)',margin:'0 0 6px'}}>By assignee</div>
+      <div className="trk-tw"><table className="trk-t" style={{fontSize:12.5}}>
+        <thead><tr><th>Assignee</th><th>Tasks</th><th>Completed</th><th>Overdue</th><th>Completion</th></tr></thead>
+        <tbody>{per.map(p=><tr key={p.n}><td><b>{p.n}</b></td><td>{p.total}</td><td style={{color:'var(--green)'}}>{p.done}</td><td style={{color:p.over?'var(--red)':'inherit'}}>{p.over}</td><td><b>{p.rate}%</b></td></tr>)}</tbody>
+      </table></div>
+    </div>:null}
     <div className="trk-tw">
       <table className="trk-t">
         <thead><tr>{cols.map(c=><th key={c}>{c}</th>)}</tr></thead>
