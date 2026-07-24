@@ -11,8 +11,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="./shared.js"></script>
-<link rel="stylesheet" href="./shared.css">
+<script src="./shared.js?v=156"></script>
+<link rel="stylesheet" href="./shared.css?v=156">
 <style>
   :root{
     --line2:#d9d6cb;
@@ -1039,7 +1039,7 @@ function donutSVG(segs,size,stroke){
     <text x="${cx}" y="${cy+17}" text-anchor="middle" font-size="10.5" font-weight="600" fill="#71797f">tasks</text></svg>`;
 }
 function csvDownload(name,rows){
-  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const q=v=>{let s=String(v==null?'':v);if(/^[=+\-@\t\r]/.test(s))s="'"+s;/* CSV formula-injection guard */return '"'+s.replace(/"/g,'""')+'"';};
   const all=orgCsvRows().concat(rows); // org name in A1 for every CSV/XLSX export
   saveBlob(new Blob([all.map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv'}),name);
 }
