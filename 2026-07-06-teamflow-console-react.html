@@ -11,8 +11,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" integrity="sha384-bm7MnzvK++ykSwVJ2tynSE5TRdN+xL418osEVF2DE/L/gfWHj91J2Sphe582B1Bh" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js" integrity="sha384-1qlE7MZPM2pHD/pBZCU/yB8UCP52RYL8bge/qNdfNBCWToySp8/M+JL2waXU4hjJ" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.8/dist/umd/supabase.js" integrity="sha384-M65KxMm/JqBppck6onbmAgPVMBHrmPCf1L17Q+71EcvI9/VVI8j5cqoxQf6lj6h2" crossorigin="anonymous"></script>
-<script src="./shared.js?v=164"></script>
-<link rel="stylesheet" href="./shared.css?v=164">
+<script src="./shared.js?v=166"></script>
+<link rel="stylesheet" href="./shared.css?v=166">
 <style>
   :root{
     --line2:#d9d6cb;
@@ -638,6 +638,7 @@ function rowsToStaff(rows){
   const byId=Object.fromEntries(rows.map(r=>[r.id,r]));
   return rows.map(r=>({n:r.name,s:r.short_name,role:r.role,dept:r.department,subDept:r.sub_dept||undefined,
     boss:r.boss_id?byId[r.boss_id].name:null,bossId:r.boss_id,av:r.initials,id:r.id,authId:r.auth_user_id,
+    phone:r.phone||undefined,waOptIn:!!r.wa_opt_in, // WhatsApp contact + consent (v166)
     /* head_departments: the jsonb array of departments a Sr. Manager fully heads (multi-dept). null
        only pre-migration → left undefined so deptChips()/head lookups fall back to [dept]; post-migration
        it's always a real array (possibly empty = a deliberately dept-less Sr. Manager). */
@@ -3975,10 +3976,42 @@ function OrgActionModal({ctx,step,setStep,oaCtx,setOaCtx,close}){
         {person.role==='Manager'?<button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('edit-head-depts');}}><I n="grid" s={15}/>Manage departments</button>:null}
         {person.authId?<button className="btn soft" onClick={()=>{close();ctx.setResetTarget(person);}}><I n="key" s={15}/>Reset password</button>:null}
         {person.authId?<button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('change-login');}}><I n="redo" s={15}/>Change login</button>:null}
+        <button className="btn soft" onClick={()=>{setF({phone:person.phone||'',waOptIn:!!person.waOptIn});setOaCtx({person});setStep('edit-whatsapp');}}>💬 WhatsApp notifications</button>
         {person.role==='Manager'?<button className="btn soft" onClick={()=>{setF({});setOaCtx({person});setStep('reassign-boss');}}><I n="redo" s={15}/>Change who they report to</button>:null}
         {person.tempCovering?<button className="btn soft" onClick={()=>{setOaCtx({person});setStep('revert-name');}}>Revert to their original role</button>:null}
       </div>
       <div className="qc-actions"><button className="btn soft" style={{flex:1}} onClick={close}>Close</button></div>
+    </ModalShell>;
+  }
+  if(step==='edit-whatsapp'){
+    const {person}=oaCtx;
+    const phone=f.phone!==undefined?f.phone:(person.phone||'');
+    const optIn=f.waOptIn!==undefined?f.waOptIn:!!person.waOptIn;
+    return <ModalShell close={close} err={err} title={'WhatsApp — '+person.n}
+      sub={"Their WhatsApp number and whether they've agreed to receive TeamFlow notifications there. Messages only send with consent."}>
+      <div className="mf">
+        <label>WhatsApp number (with country code)</label>
+        <input value={phone} onChange={e=>setF({...f,phone:e.target.value})} placeholder="+91 98765 43210" inputMode="tel"/>
+        <label style={{display:'flex',alignItems:'center',gap:9,marginTop:14,cursor:'pointer',fontWeight:600}}>
+          <input type="checkbox" checked={optIn} onChange={e=>setF({...f,waOptIn:e.target.checked})} style={{width:17,height:17}}/>
+          {person.n.split(' ')[0]} agreed to WhatsApp notifications
+        </label>
+        <div style={{marginTop:10,fontSize:12.5,color:'var(--ink2,#43494f)',lineHeight:1.5}}>Stored in E.164 (e.g. <b>+919876543210</b>). No message is ever sent without the checkbox ticked.</div>
+      </div>
+      <div className="qc-actions">
+        <button className="btn soft" style={{flex:1}} onClick={()=>setStep('person-detail')}>Back</button>
+        <button className="btn primary" style={{flex:2,justifyContent:'center'}} disabled={busy} onClick={async()=>{
+          const ph=(f.phone!==undefined?f.phone:(person.phone||'')).replace(/[^\d+]/g,'').trim()||null;
+          const oi=f.waOptIn!==undefined?f.waOptIn:!!person.waOptIn;
+          setBusy(true);setErr('');
+          try{
+            const {error}=await sb.from('staff').update({phone:ph,wa_opt_in:oi}).eq('id',person.id);
+            if(error)throw error;
+            person.phone=ph||undefined;person.waOptIn=oi; // local STAFF object updates everywhere
+            ctx.R();say('WhatsApp settings saved for '+person.n.split(' ')[0]);setBusy(false);close();
+          }catch(e){setBusy(false);setErr(e.message);}
+        }}>{busy?'Saving…':'Save'}</button>
+      </div>
     </ModalShell>;
   }
   if(step==='edit-title'){
@@ -4449,7 +4482,9 @@ function TrackerView({ctx}){
   // close/resolve an open request straight from the tracker (management only)
   const closeReq=r=>{if(ctx.previewing){ctx.say("You're previewing — switch back to close for real");return;}
     r.resolved_at=new Date().toISOString();r.resolved_by=ctx.viewer.id;setTick(t=>t+1);ctx.R();
-    resolveRequestRow(r).catch(console.error);ctx.say('Ticket #'+(r.ticket||'')+' closed');};
+    resolveRequestRow(r).catch(console.error);
+    const rq=byShort(r.from);if(rq)waEnqueue(rq.id,'ticket_closed',[rq.n.split(' ')[0],String(r.ticket||''),'the management team',r.t]);
+    ctx.say('Ticket #'+(r.ticket||'')+' closed');};
   const rows=[];
   // --- un-actioned items still living in `requests` (open) + anything declined -----------------------
   requests.forEach(r=>{

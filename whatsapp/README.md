@@ -4,11 +4,57 @@ Pre-approved WhatsApp Business templates for TeamFlow's notification events, plu
 Function to send them via the Meta **WhatsApp Cloud API**.
 
 - `templates.json` — 12 templates in Cloud API *creation* format, ready to submit for approval.
-- `../supabase/functions/send-whatsapp/index.ts` — sends an approved template to a recipient.
+- `../supabase/functions/send-whatsapp/index.ts` — ad-hoc sender (send one template to one number; for testing / one-offs).
+- `../supabase/functions/whatsapp-dispatch/index.ts` — **the cron dispatcher**: drains the `whatsapp_outbox` queue the app writes to, and sends each row. This is what the app actually uses.
+- migration `20260724000007_whatsapp_wiring.sql` — adds `staff.phone` + `staff.wa_opt_in`, the `whatsapp_outbox` queue, and the `whatsapp_log` audit table.
 
 > **Flow:** you (1) submit each template to Meta and wait for approval, (2) set the secrets, (3) deploy
-> the function, (4) call it from the app / a cron when an event fires. Templates **must be approved
-> before they can be sent.**
+> the functions, (4) schedule the dispatcher cron. Once that's done the app sends automatically —
+> see **“How it's wired into the app”** below. Templates **must be approved before they can be sent.**
+
+## How it's wired into the app (v166)
+
+The app never holds the WhatsApp token. Instead, when an event fires it **enqueues** a structured send
+and a server-side cron **dispatches** it:
+
+```
+app event ──► waEnqueue(recipientStaffId, template, [vars])   (shared.js — a plain RLS-gated INSERT)
+          └─► whatsapp_outbox row
+                        │  (every minute, or your chosen interval)
+   whatsapp-dispatch ◄──┘  reads unsent rows, looks up the recipient's phone + wa_opt_in,
+          └─► Meta Cloud API   sends only if they have a number AND opted in; marks the row done.
+```
+
+- **Consent + contact** live on `staff` (`phone`, `wa_opt_in`). Set them in the console: open a person
+  in **People & roles → 💬 WhatsApp notifications** (number + an opt-in checkbox). Nothing sends
+  without the checkbox ticked.
+- **Enqueue is best-effort** — `waEnqueue` never throws and never blocks the in-app notification, so
+  WhatsApp is purely additive.
+- **Events wired so far:** `ticket_closed` (console + mobile, when management closes a report/request).
+  The remaining templates are enqueued the same way at their notification points — see *Remaining
+  events* below.
+
+### Schedule the dispatcher
+
+Same pg_cron + pg_net pattern as `check-due-tasks`. Runs every minute; sends only when there's
+something queued:
+
+```sql
+select cron.schedule('whatsapp-dispatch', '* * * * *', $$
+  select net.http_post(
+    url    := 'https://<project-ref>.functions.supabase.co/whatsapp-dispatch',
+    headers:= jsonb_build_object('Content-Type','application/json','x-cron-secret','<CRON_SECRET>')
+  );
+$$);
+```
+
+### Remaining events (next slice)
+
+`task_assigned`, `task_reminder` (from the `check-due-tasks` cron), `report_received`,
+`report_assigned`, `supply_request_approved`, `completion_approval_needed`, `extension_requested`,
+`extension_decision`, `daily_report_reminder`, `escalation_notice`, `account_welcome` — each is one
+`waEnqueue(...)` call at the point the app already raises that in-app notification, using the variable
+order in the table below.
 
 ---
 
@@ -70,10 +116,15 @@ supabase secrets set \
 `WA_SEND_SECRET` gates the function so a leaked public anon key alone can't fire off messages —
 every caller must send it as the `x-wa-secret` header.
 
-## 3. Deploy the function
+## 3. Deploy the functions
 
-`supabase functions deploy send-whatsapp` — or paste `index.ts` into the Dashboard function editor
-(the way the other functions here are deployed; see `../supabase/OPERATIONS.md`).
+`supabase functions deploy whatsapp-dispatch` (the one the app uses) and, if you want the ad-hoc
+sender too, `supabase functions deploy send-whatsapp` — or paste each `index.ts` into the Dashboard
+function editor (the way the other functions here are deployed; see `../supabase/OPERATIONS.md`).
+The `staff.phone` / `wa_opt_in` columns and the `whatsapp_outbox` / `whatsapp_log` tables are already
+created by migration `20260724000007_whatsapp_wiring.sql`.
+
+Then schedule the dispatcher cron (see *How it's wired into the app → Schedule the dispatcher* above).
 
 ## 4. Send
 
@@ -95,21 +146,12 @@ column (E.164) to have someone to message.
 
 ---
 
-## Optional: log sends for auditing
+## Auditing
 
-The function best-effort-inserts into a `whatsapp_log` table if it exists (silently skips it if not):
-
-```sql
-create table if not exists whatsapp_log (
-  id uuid primary key default gen_random_uuid(),
-  "to" text not null,
-  template text not null,
-  wa_message_id text,
-  sent_at timestamptz not null default now()
-);
-alter table whatsapp_log enable row level security;
--- writes come only from the service_role inside the Edge Function; no client policy needed.
-```
+Every successful send is logged to `whatsapp_log` (`to`, `template`, `wa_message_id`, `sent_at`),
+created by the migration. The `whatsapp_outbox` row also keeps its own `sent_at` / `attempts` /
+`last_error` — a row with `last_error = 'not opted in'` / `'no phone'` was correctly skipped, not
+failed. Both tables are service-role-only (no client can read the queue back out).
 
 ---
 

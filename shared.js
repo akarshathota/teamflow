@@ -141,6 +141,19 @@ async function deleteTaskEverywhere(t){
   if(!data||!data.length)return {ok:false,blocked:true};
   return {ok:true};
 }
+/* Enqueue a WhatsApp notification (best-effort, fire-and-forget). Writes one whatsapp_outbox row; the
+   whatsapp-dispatch cron drains it → Meta Cloud API, resolving the recipient's phone + wa_opt_in at
+   send time (so no phone/opt-in check is needed here). NEVER throws and never awaits into the caller —
+   WhatsApp is additive to the in-app notification, so a failure must never break the triggering action.
+   `template` must match an approved template name (whatsapp/templates.json); `variables` is the ordered
+   {{1}}..{{n}} array. Skips silently when there's no recipient. */
+function waEnqueue(recipientStaffId,template,variables){
+  if(!recipientStaffId||!template)return;
+  try{
+    sb.from('whatsapp_outbox').insert({recipient_staff_id:recipientStaffId,template,variables:variables||[]})
+      .then(({error})=>{if(error)console.warn('waEnqueue:',error.message);},e=>console.warn('waEnqueue:',e));
+  }catch(e){console.warn('waEnqueue:',e);}
+}
 
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 /* YYYY-MM-DD -> DD-MM-YYYY, for CSV/XLSX cells only. On-screen dates keep their human forms

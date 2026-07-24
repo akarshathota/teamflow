@@ -11,8 +11,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" integrity="sha384-bm7MnzvK++ykSwVJ2tynSE5TRdN+xL418osEVF2DE/L/gfWHj91J2Sphe582B1Bh" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js" integrity="sha384-1qlE7MZPM2pHD/pBZCU/yB8UCP52RYL8bge/qNdfNBCWToySp8/M+JL2waXU4hjJ" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.8/dist/umd/supabase.js" integrity="sha384-M65KxMm/JqBppck6onbmAgPVMBHrmPCf1L17Q+71EcvI9/VVI8j5cqoxQf6lj6h2" crossorigin="anonymous"></script>
-<script src="./shared.js?v=164"></script>
-<link rel="stylesheet" href="./shared.css?v=164">
+<script src="./shared.js?v=166"></script>
+<link rel="stylesheet" href="./shared.css?v=166">
 <style>
   body{margin:0;font-family:'IBM Plex Sans',-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);
     background:var(--bg);-webkit-font-smoothing:antialiased}
@@ -990,7 +990,9 @@ function App(){
     /* Management closes a report/request without assigning it — stamps resolved_at/by (kept in the row,
        out of the queue). Works for both a supply request and a maintenance report (both are requests rows). */
     closeTicket:q=>{if(previewing){say("You're previewing — switch back to close for real");return;}
-      if(!q)return;q.resolved_at=new Date().toISOString();q.resolved_by=r.id;R();resolveRequestRow(q).catch(console.error);say('Ticket'+(q.ticket?' #'+q.ticket:'')+' closed');},
+      if(!q)return;q.resolved_at=new Date().toISOString();q.resolved_by=r.id;R();resolveRequestRow(q).catch(console.error);
+      const rq=ALL_PEOPLE.find(p=>p.s===q.from);if(rq)waEnqueue(rq.id,'ticket_closed',[rq.n.split(' ')[0],String(q.ticket||''),'the management team',q.t]);
+      say('Ticket'+(q.ticket?' #'+q.ticket:'')+' closed');},
     assignIssue:(qi,who)=>{if(previewing){say("You're previewing — switch back to assign for real");return;}
       const q=pendingIssues.splice(qi,1)[0];if(!q)return;const m=findMember(who);
       const nt={t:q.t,who:m.n,init:m.i,due:"Tomorrow · 9:00 AM",date:whenToDate("tomorrow"),ticket:q.ticket,requestedAt:q.date,
