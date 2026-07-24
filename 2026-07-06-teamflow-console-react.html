@@ -1573,6 +1573,13 @@ function Topbar({ctx,searchRef}){
   // never disagree.
   const queueN=ctx.qReqs.length+ctx.qExts.length+ctx.qCompletions.length;
   const badgeN=unread.length+queueN;
+  /* close the notifications dropdown when you click anywhere outside it (or the bell button) */
+  const bellRef=useRef();
+  useEffect(()=>{if(!bellOpen)return;
+    const onDown=e=>{if(bellRef.current&&!bellRef.current.contains(e.target))setBellOpen(false);};
+    document.addEventListener('mousedown',onDown);
+    return()=>document.removeEventListener('mousedown',onDown);
+  },[bellOpen]);
   const TITLES={dashboard:"Dashboard",tasks:"Tasks",calendar:"Team calendar",people:"People & roles",reports:"Reports",tracker:"Reports & requests"};
   const ql=q.trim().toLowerCase();
   const tHits=ql?tasks.map((t,i)=>({t,i})).filter(o=>inScope(o.t,ctx.shorts)&&(o.t.t.toLowerCase().includes(ql)||assignees(o.t).some(a=>byShort(a)&&byShort(a).n.toLowerCase().includes(ql)))).slice(0,5):[];
@@ -1630,7 +1637,7 @@ function Topbar({ctx,searchRef}){
           {!tHits.length&&!pHits.length?<div className="sd-empty">No matches for “{q}”</div>:null}
         </div>:null}
       </div>
-      <div className="searchwrap">
+      <div className="searchwrap" ref={bellRef}>
         <button className="btn ghost bell-btn" onClick={()=>setBellOpen(o=>!o)} aria-label="Notifications">
           <I n="bell"/>{badgeN?<span className="bell-badge">{badgeN>9?'9+':badgeN}</span>:null}
         </button>
