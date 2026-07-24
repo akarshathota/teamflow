@@ -1447,7 +1447,7 @@ function App(){
     const list=tasks.filter(t=>inScope(t,shorts)&&(repBucket==='all'||t.bucket===repBucket)&&(repWho==='all'||hasWho(t,repWho)));
     const segs=deliveryStats(list);const tot=segs.reduce((a,x)=>a+x.v,0)||1;
     let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — Team Report</div>';
-    b+='<div style="color:#555;margin-bottom:18px">Prepared for '+viewer.n+' ('+viewer.role+') · '+new Date().toDateString()+' · '+list.length+' tasks'+(repBucket==='all'?'':' · department: '+BUCKETS[repBucket])+(repWho==='all'?'':' · staff: '+(byShort(repWho)||{}).n)+'</div>';
+    b+='<div style="color:#555;margin-bottom:18px">Prepared for '+esc(viewer.n)+' ('+esc(viewer.role)+') · '+new Date().toDateString()+' · '+list.length+' tasks'+(repBucket==='all'?'':' · department: '+esc(BUCKETS[repBucket]))+(repWho==='all'?'':' · staff: '+esc((byShort(repWho)||{}).n))+'</div>';
     b+='<div style="display:flex;gap:34px;align-items:center;margin-bottom:24px">'+donutSVG(segs,140,24)
       +'<div style="flex:1">'+segs.map(x=>'<div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid #eee;font-size:13px"><span style="width:11px;height:11px;border-radius:3px;background:'+x.c+';display:inline-block"></span>'+x.l+'<b style="margin-left:auto">'+x.v+' · '+Math.round(x.v/tot*100)+'%</b></div>').join('')
       +'<div style="font-size:12px;color:#555;margin-top:8px"><b>'+Math.round(segs[0].v/tot*100)+'%</b> of tasks were completed on time.</div></div></div>';
@@ -2245,7 +2245,7 @@ function taskPdfRow(t){
     pdfDate(t.issued),pdfDate(t.date)+(isOverdue(t)?'\n'+lateNote(t):''),ST[t.status].l,''];
 }
 function taskPrintRow(t){
-  return '<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+t.t+'</td><td style="padding:6px">'+assignees(t).map(a=>(byShort(a)||{n:a}).n).join('<br>')+'</td><td style="padding:6px">'+(t.instructedBy||(t.selfAssigned?'Self':'—'))+'</td><td style="padding:6px">'+((byShort(t.who)||{}).dept||'—')+'</td><td style="padding:6px;white-space:nowrap">'+pdfDate(t.issued)+'</td><td style="padding:6px'+(isOverdue(t)?';color:#c0392b':'')+'"><span style="white-space:nowrap">'+pdfDate(t.date)+'</span>'+(isOverdue(t)?'<br><span style="font-size:11px">'+lateNote(t)+'</span>':'')+'</td><td style="padding:6px">'+ST[t.status].l+'</td><td style="padding:6px"></td></tr>';
+  return '<tr style="border-bottom:1px solid #ccc"><td style="padding:6px">'+esc(t.t)+'</td><td style="padding:6px">'+assignees(t).map(a=>esc((byShort(a)||{n:a}).n)).join('<br>')+'</td><td style="padding:6px">'+esc(t.instructedBy||(t.selfAssigned?'Self':'—'))+'</td><td style="padding:6px">'+esc((byShort(t.who)||{}).dept||'—')+'</td><td style="padding:6px;white-space:nowrap">'+pdfDate(t.issued)+'</td><td style="padding:6px'+(isOverdue(t)?';color:#c0392b':'')+'"><span style="white-space:nowrap">'+pdfDate(t.date)+'</span>'+(isOverdue(t)?'<br><span style="font-size:11px">'+esc(lateNote(t))+'</span>':'')+'</td><td style="padding:6px">'+esc(ST[t.status].l)+'</td><td style="padding:6px"></td></tr>';
 }
 /* Download PDF for an arbitrary task row set ({t,i} objects) — used by the Tasks columns and the
    pending-task / KPI popup. */
@@ -2264,8 +2264,8 @@ function exportRows(rows,label){
   csvDownload(iso(new Date())+'-teamflow-'+label.toLowerCase().replace(/\s+/g,'-')+'.csv',csvRows);
 }
 function printRows(rows,label,viewerName){
-  let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — '+label+'</div>';
-  b+='<div style="color:#555;margin-bottom:18px">Prepared for '+viewerName+' · '+new Date().toDateString()+' · '+rows.length+' tasks</div>';
+  let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — '+esc(label)+'</div>';
+  b+='<div style="color:#555;margin-bottom:18px">Prepared for '+esc(viewerName)+' · '+new Date().toDateString()+' · '+rows.length+' tasks</div>';
   b+='<table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">'+TASK_PRINT_COLGROUP+TASK_PRINT_HEAD+'<tbody>';
   rows.forEach(({t})=>{b+=taskPrintRow(t);});
   b+='</tbody></table>';
@@ -2284,7 +2284,7 @@ function printTracker(rows,tab,mon){
   let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — Reports &amp; requests</div>';
   b+='<div style="color:#555;margin-bottom:18px">'+trackerScopeLabel(tab)+trackerMonTxt(mon)+' · '+new Date().toDateString()+' · '+rows.length+' items</div>';
   b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Ticket</th><th style="text-align:left;padding:6px">Item</th><th style="text-align:left;padding:6px">Type</th><th style="text-align:left;padding:6px">Requested</th><th style="text-align:left;padding:6px">Reported by</th><th style="text-align:left;padding:6px">Assigned to</th><th style="text-align:left;padding:6px">Status</th></tr></thead><tbody>';
-  rows.forEach(r=>{b+='<tr style="border-bottom:1px solid #ccc"><td style="padding:6px;font-weight:700">'+(r.ticket?'#'+r.ticket:'—')+'</td><td style="padding:6px">'+r.item+'</td><td style="padding:6px">'+r.typeLabel+'</td><td style="padding:6px">'+(r.requested?fmtDate(r.requested):'—')+'</td><td style="padding:6px">'+(r.reporter?r.reporter.n:(r.reporterFallback||'—'))+'</td><td style="padding:6px">'+(r.assignee?r.assignee.n:'—')+'</td><td style="padding:6px">'+r.status.text+'</td></tr>';});
+  rows.forEach(r=>{b+='<tr style="border-bottom:1px solid #ccc"><td style="padding:6px;font-weight:700">'+(r.ticket?'#'+r.ticket:'—')+'</td><td style="padding:6px">'+esc(r.item)+'</td><td style="padding:6px">'+esc(r.typeLabel)+'</td><td style="padding:6px">'+(r.requested?fmtDate(r.requested):'—')+'</td><td style="padding:6px">'+esc(r.reporter?r.reporter.n:(r.reporterFallback||'—'))+'</td><td style="padding:6px">'+esc(r.assignee?r.assignee.n:'—')+'</td><td style="padding:6px">'+esc(r.status.text)+'</td></tr>';});
   b+='</tbody></table>';
   const pr=document.getElementById('print-report');pr.innerHTML=b;pr.style.display='block';
   const ot=document.title;document.title=iso(new Date())+'-teamflow-reports-requests';
@@ -2360,10 +2360,10 @@ function exportPerf(list,byDept,fw,fb,mon){
 function printPerf(list,byDept,fw,fb,mon){
   const cols=perfCols(byDept);
   let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — Performance Analysis</div>';
-  b+='<div style="color:#555;margin-bottom:18px">'+perfSubtitle(fw,fb,mon)+' · '+new Date().toDateString()+' · '+perfStatsLine(list)+'</div>';
-  b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:2px solid #333">'+cols.map(c=>'<th style="text-align:left;padding:6px">'+c+'</th>').join('')+'</tr></thead><tbody>';
+  b+='<div style="color:#555;margin-bottom:18px">'+esc(perfSubtitle(fw,fb,mon))+' · '+new Date().toDateString()+' · '+esc(perfStatsLine(list))+'</div>';
+  b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:2px solid #333">'+cols.map(c=>'<th style="text-align:left;padding:6px">'+esc(c)+'</th>').join('')+'</tr></thead><tbody>';
   perfRows(list,byDept).forEach((t,i)=>{const c=perfCells(t,perfDate).map(x=>x||'');const cc=[String(i+1)].concat(byDept?c:c.slice(1));
-    b+='<tr style="border-bottom:1px solid #ccc">'+cc.map(x=>'<td style="padding:6px">'+x+'</td>').join('')+'</tr>';});
+    b+='<tr style="border-bottom:1px solid #ccc">'+cc.map(x=>'<td style="padding:6px">'+esc(x)+'</td>').join('')+'</tr>';});
   b+='</tbody></table>';
   const pr=document.getElementById('print-report');pr.innerHTML=b;pr.style.display='block';
   const ot=document.title;document.title=iso(new Date())+'-teamflow-performance-analysis';
@@ -4377,15 +4377,15 @@ async function exportDailyReports(rows,label){
 }
 async function printDailyReports(rows,label,viewerName){
   const issuesByReport=await fetchIssuesByReport(rows);
-  let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — '+label+'</div>';
-  b+='<div style="color:#555;margin-bottom:18px">Prepared for '+viewerName+' · '+new Date().toDateString()+' · '+rows.length+' report'+(rows.length!==1?'s':'')+'</div>';
+  let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — '+esc(label)+'</div>';
+  b+='<div style="color:#555;margin-bottom:18px">Prepared for '+esc(viewerName)+' · '+new Date().toDateString()+' · '+rows.length+' report'+(rows.length!==1?'s':'')+'</div>';
   rows.forEach(({row,p})=>{
-    b+='<div style="margin:14px 0 6px"><b style="font-size:14px">'+(p?p.n:'—')+'</b> · '+(p?p.dept:'')+' · '+fmtDate(row.report_date)+'</div>';
+    b+='<div style="margin:14px 0 6px"><b style="font-size:14px">'+esc(p?p.n:'—')+'</b> · '+esc(p?p.dept:'')+' · '+fmtDate(row.report_date)+'</div>';
     const issues=issuesByReport[row.id]||[];
     if(issues.length){
       b+='<div style="font-size:12px;font-weight:700;margin:8px 0 4px">Issues / incidents raised</div>';
       b+='<table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px"><thead><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:5px">Issue</th><th style="text-align:left;padding:5px">Priority</th><th style="text-align:left;padding:5px">Status</th><th style="text-align:left;padding:5px">Resolution</th></tr></thead><tbody>';
-      issues.forEach(x=>{b+='<tr style="border-bottom:1px solid #eee"><td style="padding:5px">'+x.issue+'</td><td style="padding:5px">'+x.priority+'</td><td style="padding:5px">'+(x.status==='resolved'?'Resolved':'Open')+'</td><td style="padding:5px">'+issueResolutionText(x)+'</td></tr>';});
+      issues.forEach(x=>{b+='<tr style="border-bottom:1px solid #eee"><td style="padding:5px">'+esc(x.issue)+'</td><td style="padding:5px">'+esc(x.priority)+'</td><td style="padding:5px">'+(x.status==='resolved'?'Resolved':'Open')+'</td><td style="padding:5px">'+esc(issueResolutionText(x))+'</td></tr>';});
       b+='</tbody></table>';
     }
     const pieSegs=[row.completed_count,row.overdue_count,row.pending_count].map((v,i)=>({...DR_SEGS[i],v}));
@@ -4397,7 +4397,7 @@ async function printDailyReports(rows,label,viewerName){
     if(snap.length){
       b+='<div style="font-size:12px;font-weight:700;margin:8px 0 4px">Tasks this period</div>';
       b+='<table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px"><thead><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:5px">Task</th><th style="text-align:left;padding:5px">Assignee</th><th style="text-align:left;padding:5px">Department</th><th style="text-align:left;padding:5px">Issued</th><th style="text-align:left;padding:5px">Due</th><th style="text-align:left;padding:5px">Status</th></tr></thead><tbody>';
-      snap.forEach(t=>{b+='<tr style="border-bottom:1px solid #eee"><td style="padding:5px">'+t.title+'</td><td style="padding:5px">'+t.assignee+'</td><td style="padding:5px">'+(t.department||'')+'</td><td style="padding:5px">'+pdfDate(t.issued)+'</td><td style="padding:5px">'+pdfDate(t.due)+'</td><td style="padding:5px">'+snapStatusLabel(t.status)+'</td></tr>';});
+      snap.forEach(t=>{b+='<tr style="border-bottom:1px solid #eee"><td style="padding:5px">'+esc(t.title)+'</td><td style="padding:5px">'+esc(t.assignee)+'</td><td style="padding:5px">'+esc(t.department||'')+'</td><td style="padding:5px">'+pdfDate(t.issued)+'</td><td style="padding:5px">'+pdfDate(t.due)+'</td><td style="padding:5px">'+esc(snapStatusLabel(t.status))+'</td></tr>';});
       b+='</tbody></table>';
     }
     const clSnap=row.checklist_snapshot||[];
@@ -4405,7 +4405,7 @@ async function printDailyReports(rows,label,viewerName){
       const cd=clSnap.filter(c=>c.done).length;
       b+='<div style="font-size:12px;font-weight:700;margin:8px 0 4px">Checklist — '+cd+' of '+clSnap.length+' done</div>';
       b+='<table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px"><thead><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:5px">Checklist item</th><th style="text-align:left;padding:5px">Schedule</th><th style="text-align:left;padding:5px">Done</th></tr></thead><tbody>';
-      clSnap.forEach(c=>{b+='<tr style="border-bottom:1px solid #eee"><td style="padding:5px">'+c.body+'</td><td style="padding:5px">'+c.sched+'</td><td style="padding:5px;color:'+(c.done?'#1a7a48':'#c43a53')+'">'+(c.done?'✓ Done':'○ Not done')+'</td></tr>';});
+      clSnap.forEach(c=>{b+='<tr style="border-bottom:1px solid #eee"><td style="padding:5px">'+esc(c.body)+'</td><td style="padding:5px">'+esc(c.sched)+'</td><td style="padding:5px;color:'+(c.done?'#1a7a48':'#c43a53')+'">'+(c.done?'✓ Done':'○ Not done')+'</td></tr>';});
       b+='</tbody></table>';
     }
   });

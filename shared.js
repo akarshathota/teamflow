@@ -146,6 +146,11 @@ const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+Stri
 /* YYYY-MM-DD -> DD-MM-YYYY, for CSV/XLSX cells only. On-screen dates keep their human forms
    (fmtDate "Jul 7", ord "31st") — this is just so raw ISO strings don't land in a spreadsheet. */
 const dmy=s=>{if(!s)return '';const p=String(s).split('-');return p.length===3?p[2]+'-'+p[1]+'-'+p[0]:s;};
+/* HTML-escape any value interpolated into a print-HTML string (assigned to #print-report.innerHTML).
+   Stops stored XSS from user-authored task/request titles, notes, names, and org-configured department
+   labels — e.g. a task titled `<img src=x onerror=...>` would otherwise run in the printing user's
+   browser. Use for every non-constant, non-numeric value in the print/PDF-HTML builders. */
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 /* timestamptz (e.g. tasks.created_at, the "issued"/assigned date) -> DD-MM-YYYY in local time.
    Blank for missing (old daily-report snapshots that predate the issued column). */
 const dmyTs=ts=>ts?dmy(iso(new Date(ts))):'';
@@ -183,7 +188,7 @@ const clAbsOn=(id,date)=>(typeof clAbs!=='undefined'?clAbs:[]).some(a=>a.staff_i
    TeamFlow line. Both no-op if ORG_NAME isn't set yet. */
 const orgName=()=>(typeof ORG_NAME!=='undefined'&&ORG_NAME)?ORG_NAME:'';
 const orgCsvRows=()=>orgName()?[[orgName()],[]]:[];
-const orgHeadHtml=()=>orgName()?'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:800;font-size:23px;color:#0a5c54;margin:0 0 2px">'+orgName()+'</div>':'';
+const orgHeadHtml=()=>orgName()?'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:800;font-size:23px;color:#0a5c54;margin:0 0 2px">'+esc(orgName())+'</div>':'';
 const fmtTime=t=>{if(!t)return '';const p=t.split(':'),h=+p[0],ap=h>=12?'PM':'AM';return (h%12||12)+':'+p[1]+' '+ap;};
 /* full ISO timestamptz (e.g. a task_log row's created_at) -> "14 Jul · 2:45 PM" in the viewer's
    local timezone. Distinct from fmtDate/fmtD, which only ever take a plain YYYY-MM-DD string and
