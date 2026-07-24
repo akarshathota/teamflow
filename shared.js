@@ -452,10 +452,11 @@ async function fetchIssuesByReport(rows){
 let pdfLibsP=null;
 function ensurePdfLibs(){
   if(pdfLibsP)return pdfLibsP;
-  const load=src=>new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;
+  const load=(src,integrity)=>new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;
+    if(integrity){s.integrity=integrity;s.crossOrigin='anonymous';} // SRI on the lazy-loaded PDF libs, same as the head scripts
     s.onload=res;s.onerror=()=>rej(new Error('Could not load '+src));document.head.appendChild(s);});
-  pdfLibsP=load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
-    .then(()=>load('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'))
+  pdfLibsP=load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js','sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk')
+    .then(()=>load('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js','sha384-fCAW/rDWORTbQXSiB7mOg0QtQ5c+r0f544y6XoKjuVva0nMBlCpNUjiFeG5iMdS3'))
     .catch(e=>{pdfLibsP=null;throw e;}); // reset so a transient network failure can be retried
   return pdfLibsP;
 }
