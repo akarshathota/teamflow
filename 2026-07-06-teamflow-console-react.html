@@ -4548,13 +4548,13 @@ function ReportsView({ctx}){
       <div className="spacer"/>
       {emode==='tasks'?<>
         <button className="btn soft" onClick={()=>setShowMismatch(true)}><I n="alert"/>Check dept mismatches</button>
-        {/* primary trio = the tasks/team report; Workload CSV kept as a smaller separate link (different dataset) */}
+        {/* the tasks/team report exports + Workload CSV (a different dataset) — all matching .exp-btn buttons */}
         <div className="exp-group">
           <button className="exp-btn" onClick={()=>ctx.reportPdf(fw,fb)}><I n="dl" s={13}/>Download PDF</button>
           <button className="exp-btn" onClick={()=>ctx.exportCSV('tasks')}><I n="dl" s={13}/>Download CSV</button>
           <button className="exp-btn" onClick={()=>ctx.printReport(fw,fb)}><I n="print" s={13}/>Print</button>
+          <button className="exp-btn" onClick={()=>ctx.exportCSV('workload')}><I n="dl" s={13}/>Workload CSV</button>
         </div>
-        <button className="linkbtn" onClick={()=>ctx.exportCSV('workload')}><I n="dl" s={13}/>Workload CSV</button>
       </>:null}
       {emode==='perf'&&perfList.length?<div className="exp-group">
         <button className="exp-btn" onClick={()=>downloadPerfPdf(perfList,fw==='all',fw,fb,pmon)}><I n="dl" s={13}/>Download PDF</button>
