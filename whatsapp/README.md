@@ -44,8 +44,8 @@ app event ──► waEnqueue(recipientStaffId, template, [vars])   (shared.js �
   - `extension_decision` — extension approved/rejected (console + mobile) → the assignee
   - `escalation_notice` — daily-report issue escalated (console + mobile) → the escalator's boss
   - `account_welcome` — `create-staff-account` edge fn → the new staff (fires only if consent was captured)
-  - **Not wired:** `daily_report_reminder` — there is no daily-report reminder cron in the app yet; add
-    one (like `check-due-tasks`) that enqueues this template to whoever hasn't submitted today.
+  - `daily_report_reminder` — the `daily-report-reminder` cron → everyone with a login (non-admin) who
+    hasn't filed today's report by evening
 
 ### Schedule the dispatcher
 
@@ -126,9 +126,13 @@ every caller must send it as the `x-wa-secret` header.
 
 ## 3. Deploy the functions
 
-`supabase functions deploy whatsapp-dispatch` (the one the app uses) and, if you want the ad-hoc
-sender too, `supabase functions deploy send-whatsapp` — or paste each `index.ts` into the Dashboard
-function editor (the way the other functions here are deployed; see `../supabase/OPERATIONS.md`).
+`supabase functions deploy whatsapp-dispatch` (the one the app uses), `supabase functions deploy
+daily-report-reminder` (the evening nudge cron), and, if you want the ad-hoc sender too,
+`supabase functions deploy send-whatsapp` — or paste each `index.ts` into the Dashboard function
+editor (the way the other functions here are deployed; see `../supabase/OPERATIONS.md`). Also redeploy
+`check-due-tasks` and `create-staff-account` (they now enqueue `task_reminder` / `account_welcome`).
+Schedule the `daily-report-reminder` cron too — see
+`../supabase/migrations/20260724000008_daily_report_reminder_cron.sql`.
 The `staff.phone` / `wa_opt_in` columns and the `whatsapp_outbox` / `whatsapp_log` tables are already
 created by migration `20260724000007_whatsapp_wiring.sql`.
 
