@@ -680,6 +680,7 @@ function rowToRequest(row){
     routing_rule_id:row.routing_rule_id||null,target_staff_id:row.target_staff_id||null,stage:row.stage||null,
     approver_staff_id:row.approver_staff_id||null,
     declined_at:row.declined_at||null,declined_by:row.declined_by||null,
+    resolved_at:row.resolved_at||null,resolved_by:row.resolved_by||null,
     note:row.note||"",files:row.files&&row.files.length?row.files:undefined};
 }
 const rowToRule=r=>({id:r.id,kind:r.kind,label:r.label,icon:r.icon||'',staff_id:r.target_staff_id||null,sort_order:r.sort_order||0,created_at:r.created_at});
@@ -806,6 +807,9 @@ async function deleteRequestRow(r){if(r.id)await sb.from('requests').delete().eq
    instead of hard-deleting. viewerSeesReq excludes declined rows so they never re-appear as an
    actionable queue item. */
 async function declineRequestRow(r){if(r.id)await sb.from('requests').update({declined_at:r.declined_at,declined_by:r.declined_by}).eq('id',r.id);}
+/* mark a report/request Closed/Resolved (management, from the tracker) — like decline, keeps the row for
+   the record but removes it from the live action queue (viewerSeesReq excludes it). */
+async function resolveRequestRow(r){if(r.id)await sb.from('requests').update({resolved_at:r.resolved_at,resolved_by:r.resolved_by}).eq('id',r.id);}
 /* routing_rules writes — Administrator-only, enforced by RLS. Reassign a recipient, add/remove a
    maintenance category, rename or reorder. */
 async function saveRuleRecipient(id,staffId){await sb.from('routing_rules').update({target_staff_id:staffId||null}).eq('id',id);}
@@ -1292,7 +1296,7 @@ function App(){
     if(mgr&&mgr.s!==req.s)return mgr.id;
     const boss=req.boss?byName(req.boss):null;return boss?boss.id:null;};
   const viewerSeesReq=r=>{
-    if(r.declined_at)return false; // declined items live only in the Reports & requests tracker, never the action queue
+    if(r.declined_at||r.resolved_at)return false; // declined/closed items live only in the tracker, never the action queue
     if(role==='admin'||role==='mgmt')return true;
     if(r.kind==='issue')return viewerIsRecipient(r);
     return r.stage==='approved'?r.target_staff_id===viewer.id:supplyApproverId(r)===viewer.id;};
@@ -4421,6 +4425,14 @@ async function printDailyReports(rows,label,viewerName){
 function TrackerView({ctx}){
   const [tab,setTab]=useState('all');   // all | maint | supply | open
   const [mon,setMon]=useState('all');   // 'all' | 'YYYY-MM'
+  const canManage=ctx.role==='mgmt'||ctx.role==='admin';
+  const [,setTick]=useState(0);
+  // days a ticket has been open: from the request date to its resolution (done/closed/declined) or today
+  const daysOpen=(from,to)=>{if(!from)return null;const a=new Date((''+from).slice(0,10)),b=to?new Date((''+to).slice(0,10)):TODAY;return Math.max(0,Math.round((b-a)/864e5));};
+  // close/resolve an open request straight from the tracker (management only)
+  const closeReq=r=>{if(ctx.previewing){ctx.say("You're previewing — switch back to close for real");return;}
+    r.resolved_at=new Date().toISOString();r.resolved_by=ctx.viewer.id;setTick(t=>t+1);ctx.R();
+    resolveRequestRow(r).catch(console.error);ctx.say('Ticket #'+(r.ticket||'')+' closed');};
   const rows=[];
   // --- un-actioned items still living in `requests` (open) + anything declined -----------------------
   requests.forEach(r=>{
@@ -4428,7 +4440,10 @@ function TrackerView({ctx}){
     const cat=isIssue&&r.routing_rule_id?catById(r.routing_rule_id):null;
     const rep=byShort(r.from);
     let status,placeholder;
-    if(r.declined_at){
+    if(r.resolved_at){
+      status={cls:'done',dot:'var(--green)',text:'Closed'+(r.resolved_by?' by '+((byId2Name(r.resolved_by)||'management').split(' ')[0]):'')+' · '+fmtDate((''+r.resolved_at).slice(0,10))};
+      placeholder='—';
+    }else if(r.declined_at){
       status={cls:'rep',dot:'#9a938a',text:'Declined by '+((byId2Name(r.declined_by)||'a manager').split(' ')[0])};
       placeholder='—';
     }else if(isIssue){
@@ -4443,13 +4458,16 @@ function TrackerView({ctx}){
       status={cls:'wait',dot:'var(--amber)',text:'Awaiting approval'+(apName?' · '+apName.split(' ')[0]:'')};
       placeholder='awaiting approval';
     }
+    const open=!r.declined_at&&!r.resolved_at;
     rows.push({
       item:r.t,sub:'Reported '+fmtDate(r.date),date:r.date,ticket:r.ticket,requested:r.date,files:r.files,
+      age:daysOpen(r.date,r.resolved_at||r.declined_at),ageOpen:open,
+      req:open?r:null, // open requests can be closed from the tracker
       typeKind:isIssue?'m':'s',
       typeIcon:isIssue?((cat&&cat.icon)||'🔧'):'📦',
       typeLabel:isIssue?((cat&&cat.label)||'Maintenance'):'Supply',
       reporter:rep?{n:rep.n,av:rep.av,c:avColor(rep.n)}:{n:r.from||'—',av:(r.from||'?')[0],c:'#888'},
-      assignee:null,placeholder,status,isOpen:!r.declined_at});
+      assignee:null,placeholder,status,isOpen:open});
   });
   // --- items that became real tasks (assigned) ------------------------------------------------------
   tasks.forEach(t=>{
@@ -4467,8 +4485,10 @@ function TrackerView({ctx}){
     }else{
       status={cls:'prog',dot:'var(--blue)',text:'Assigned · '+ST[t.status].l};
     }
+    const reqDate=t.requestedAt||(t.issued?(''+t.issued).slice(0,10):t.date);
     rows.push({
-      item:t.t,sub:isIssue?'Maintenance report':'Supply request',date:t.issued||t.date,ticket:t.ticket,requested:t.requestedAt||(t.issued?(''+t.issued).slice(0,10):t.date),files:t.files,
+      item:t.t,sub:isIssue?'Maintenance report':'Supply request',date:t.issued||t.date,ticket:t.ticket,requested:reqDate,files:t.files,
+      age:daysOpen(reqDate,t.status==='done'?t.doneOn:null),ageOpen:t.status!=='done',
       typeKind:isIssue?'m':'s',
       typeIcon:isIssue?'🔧':'📦',
       typeLabel:isIssue?'Maintenance':'Supply',
@@ -4518,7 +4538,9 @@ function TrackerView({ctx}){
                 :<span className="trk-none">{r.reporterFallback||'—'}</span>}</td>
               <td>{r.assignee?<span className="trk-who"><span className="trk-av" style={{background:r.assignee.c}}>{r.assignee.av}</span>{r.assignee.n.split(' ')[0]}</span>
                 :<span className="trk-none">— {r.placeholder}</span>}</td>
-              <td><span className={'trk-st '+r.status.cls}><span className="trk-dot" style={{background:r.status.dot}}></span>{r.status.text}</span></td>
+              <td><span className={'trk-st '+r.status.cls}><span className="trk-dot" style={{background:r.status.dot}}></span>{r.status.text}</span>
+                {r.age!=null?<div className="trk-sub" style={{marginTop:3,color:r.ageOpen&&r.age>7?'var(--red)':'var(--muted)'}}>{r.ageOpen?r.age+' day'+(r.age!==1?'s':'')+' open':'closed in '+r.age+' day'+(r.age!==1?'s':'')}</div>:null}
+                {r.req&&canManage&&!ctx.previewing?<button className="linkbtn" style={{fontSize:11.5,padding:'2px 6px',marginTop:2}} onClick={()=>closeReq(r.req)}>Close ticket</button>:null}</td>
             </tr>)}
             {!shown.length?<tr><td colSpan="7"><div className="trk-empty">Nothing to show in this filter.</div></td></tr>:null}
           </tbody>
