@@ -2323,6 +2323,8 @@ const perfIssMonth=t=>t.issued?(''+t.issued).slice(0,7):'';
 const perfInMonth=(t,mon)=>{if(mon==='all')return true;const m=perfIssMonth(t);return m===mon||(!!m&&m<mon&&t.status!=='done');};
 const perfMonthsOf=list=>[...new Set(list.map(perfIssMonth).filter(Boolean))].sort().reverse();
 const perfMonLbl=m=>{const p=(''+m).split('-');return MONTHS[+p[1]-1]+' '+p[0];};
+/* All Performance Analysis dates render DD-MM-YYYY (screen + PDF + CSV + Print), via shared dmy(). */
+const perfDate=d=>d?dmy((''+d).slice(0,10)):'';
 const perfRows=(list,byDept)=>byDept?list.slice().sort((a,b)=>{const an=(byShort(a.who)||{n:a.who}).n,bn=(byShort(b.who)||{n:b.who}).n;return an<bn?-1:an>bn?1:0;}):list;
 /* full 8-cell row in PERF_COLS_FULL order; caller slices off cell 0 (Assignee) for staff-wise.
    fmt formats a date-only 'YYYY-MM-DD' string — fmtDate for PDF/print ("21 Jul"), a slice(0,10)
@@ -2333,13 +2335,13 @@ const perfCells=(t,fmt)=>[assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')
 function downloadPerfPdf(list,byDept,fw,fb,mon){
   downloadTablePdf('performance-analysis',{orgName:orgName(),title:'TeamFlow — Performance Analysis',
     subtitle:perfSubtitle(fw,fb,mon)+' · '+new Date().toDateString()+' · '+list.length+' tasks'},
-    perfCols(byDept),perfRows(list,byDept).map((t,i)=>{const c=perfCells(t,fmtDate);return [String(i+1)].concat(byDept?c:c.slice(1));}))
+    perfCols(byDept),perfRows(list,byDept).map((t,i)=>{const c=perfCells(t,perfDate);return [String(i+1)].concat(byDept?c:c.slice(1));}))
     .catch(e=>console.error(e));
 }
 function exportPerf(list,byDept,fw,fb,mon){
   const rows=[perfCols(byDept)];
   /* CSV dates in DD-MM-YYYY (dmy) per request — sliced to date-only first so a full timestamp is safe. */
-  perfRows(list,byDept).forEach((t,i)=>{const c=perfCells(t,d=>d?dmy((''+d).slice(0,10)):'');rows.push([String(i+1)].concat(byDept?c:c.slice(1)));});
+  perfRows(list,byDept).forEach((t,i)=>{const c=perfCells(t,perfDate);rows.push([String(i+1)].concat(byDept?c:c.slice(1)));});
   csvDownload(iso(new Date())+'-teamflow-performance-analysis.csv',rows);
 }
 function printPerf(list,byDept,fw,fb,mon){
@@ -2347,7 +2349,7 @@ function printPerf(list,byDept,fw,fb,mon){
   let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — Performance Analysis</div>';
   b+='<div style="color:#555;margin-bottom:18px">'+perfSubtitle(fw,fb,mon)+' · '+new Date().toDateString()+' · '+list.length+' tasks</div>';
   b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:2px solid #333">'+cols.map(c=>'<th style="text-align:left;padding:6px">'+c+'</th>').join('')+'</tr></thead><tbody>';
-  perfRows(list,byDept).forEach((t,i)=>{const c=perfCells(t,fmtDate).map(x=>x||'');const cc=[String(i+1)].concat(byDept?c:c.slice(1));
+  perfRows(list,byDept).forEach((t,i)=>{const c=perfCells(t,perfDate).map(x=>x||'');const cc=[String(i+1)].concat(byDept?c:c.slice(1));
     b+='<tr style="border-bottom:1px solid #ccc">'+cc.map(x=>'<td style="padding:6px">'+x+'</td>').join('')+'</tr>';});
   b+='</tbody></table>';
   const pr=document.getElementById('print-report');pr.innerHTML=b;pr.style.display='block';
@@ -2366,12 +2368,12 @@ function PerfPanel({list,fw,fb,mon}){
         <tbody>{rows.map((t,i)=><tr key={t.id||i}>
           <td><span className="trk-sub" style={{fontWeight:700}}>{i+1}</span></td>
           {byDept?<td><div className="trk-item">{assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')}</div></td>:null}
-          <td><span className="trk-sub" style={{whiteSpace:'nowrap'}}>{fmtDate((''+t.issued).slice(0,10))}</span></td>
+          <td><span className="trk-sub" style={{whiteSpace:'nowrap'}}>{perfDate(t.issued)}</span></td>
           <td>{t.instructedBy||'Self'}</td>
           <td><span className="priolabel" style={{color:PRIOS[t.prio||'med'].c}}><span className="prio" style={{background:PRIOS[t.prio||'med'].c}}/>{PRIOS[t.prio||'med'].l}</span></td>
           <td><div className="trk-item" style={{fontWeight:600}}>{t.t}</div></td>
-          <td><span style={{whiteSpace:'nowrap'}}>{fmtDate(t.date)}</span></td>
-          <td><span style={{whiteSpace:'nowrap'}}>{(t.status==='done'&&t.doneOn)?fmtDate(t.doneOn):'—'}</span></td>
+          <td><span style={{whiteSpace:'nowrap'}}>{perfDate(t.date)}</span></td>
+          <td><span style={{whiteSpace:'nowrap'}}>{(t.status==='done'&&t.doneOn)?perfDate(t.doneOn):'—'}</span></td>
           <td></td>
         </tr>)}</tbody>
       </table>
