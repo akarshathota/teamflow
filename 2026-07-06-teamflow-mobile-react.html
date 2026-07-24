@@ -1730,7 +1730,10 @@ function PerfSectionM({ctx}){
     {!rows.length?<div className="rs" style={{padding:'8px 2px'}}>No tasks match the current department, staff or month filter.</div>:<>
       <div style={{overflowX:'auto'}}>
         <table className="perf-t"><thead><tr>{cols.map(c=><th key={c}>{c}</th>)}</tr></thead>
-        <tbody>{rows.map((t,i)=><tr key={t.id||i}>
+        <tbody>{rows.map((t,i)=>{
+          const over=perfOverM(t); // not done & past due → whole row tinted red
+          const late=t.done&&t.doneOn&&t.date&&(''+t.doneOn).slice(0,10)>(''+t.date).slice(0,10); // completed after due → completion cell red
+          return <tr key={t.id||i} style={over?{background:'rgba(196,58,83,.09)'}:undefined}>
           <td>{i+1}</td>
           {byDept?<td style={{whiteSpace:'nowrap'}}>{assigneesM(t).filter(Boolean).map(perfNameM).join(' + ')}</td>:null}
           <td style={{whiteSpace:'nowrap'}}>{perfDateM(t.issued)}</td>
@@ -1738,9 +1741,9 @@ function PerfSectionM({ctx}){
           <td style={{whiteSpace:'nowrap'}}><span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:PRIO_COL_M[t.prio||'med'],marginRight:5}}/>{PRIO_LBL_M[t.prio||'med']}</td>
           <td style={{fontWeight:600,minWidth:150}}>{t.t}</td>
           <td style={{whiteSpace:'nowrap'}}>{perfDateM(t.date)}</td>
-          <td style={{whiteSpace:'nowrap'}}>{(t.done&&t.doneOn)?perfDateM(t.doneOn):'—'}</td>
+          <td style={{whiteSpace:'nowrap',color:late?'var(--red,#c43a53)':undefined,fontWeight:late?700:undefined}}>{(t.done&&t.doneOn)?perfDateM(t.doneOn):'—'}</td>
           <td></td>
-        </tr>)}</tbody></table>
+        </tr>;})}</tbody></table>
       </div>
       <div className="rs" style={{margin:'8px 0'}}><b>{rows.length}</b> task{rows.length!==1?'s':''} · {perfSubtitleM(fw,fb,mon)}.{mon!=='all'?' Includes still-pending tasks carried over from earlier months.':''} Remarks left blank for handwritten notes on a printout.</div>
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>

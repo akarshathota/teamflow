@@ -2393,7 +2393,10 @@ function PerfPanel({list,fw,fb,mon}){
     <div className="trk-tw">
       <table className="trk-t">
         <thead><tr>{cols.map(c=><th key={c}>{c}</th>)}</tr></thead>
-        <tbody>{rows.map((t,i)=><tr key={t.id||i}>
+        <tbody>{rows.map((t,i)=>{
+          const over=isOverdue(t); // not done & past due → whole row tinted red
+          const late=t.status==='done'&&t.doneOn&&t.date&&(''+t.doneOn).slice(0,10)>(''+t.date).slice(0,10); // completed after due → completion cell red
+          return <tr key={t.id||i} style={over?{background:'rgba(196,58,83,.09)'}:undefined}>
           <td><span className="trk-sub" style={{fontWeight:700}}>{i+1}</span></td>
           {byDept?<td><div className="trk-item">{assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')}</div></td>:null}
           <td><span className="trk-sub" style={{whiteSpace:'nowrap'}}>{perfDate(t.issued)}</span></td>
@@ -2401,9 +2404,9 @@ function PerfPanel({list,fw,fb,mon}){
           <td><span className="priolabel" style={{color:PRIOS[t.prio||'med'].c}}><span className="prio" style={{background:PRIOS[t.prio||'med'].c}}/>{PRIOS[t.prio||'med'].l}</span></td>
           <td><div className="trk-item" style={{fontWeight:600}}>{t.t}</div></td>
           <td><span style={{whiteSpace:'nowrap'}}>{perfDate(t.date)}</span></td>
-          <td><span style={{whiteSpace:'nowrap'}}>{(t.status==='done'&&t.doneOn)?perfDate(t.doneOn):'—'}</span></td>
+          <td><span style={{whiteSpace:'nowrap',color:late?'var(--red)':undefined,fontWeight:late?700:undefined}}>{(t.status==='done'&&t.doneOn)?perfDate(t.doneOn):'—'}</span></td>
           <td></td>
-        </tr>)}</tbody>
+        </tr>;})}</tbody>
       </table>
     </div>
     <div className="trk-foot"><b>{rows.length}</b> task{rows.length!==1?'s':''} · {perfSubtitle(fw,fb,mon)}. {mon&&mon!=='all'?'Tasks issued in '+perfMonLbl(mon)+', plus still-pending tasks carried over from earlier months. ':''}The Remarks column is left blank for handwritten notes on a printout.</div>
