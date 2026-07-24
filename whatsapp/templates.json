@@ -1,0 +1,176 @@
+[
+  {
+    "name": "task_assigned",
+    "language": "en_US",
+    "category": "UTILITY",
+    "components": [
+      { "type": "HEADER", "format": "TEXT", "text": "New task assigned" },
+      {
+        "type": "BODY",
+        "text": "Hi {{1}}, {{2}} has assigned you a task:\n\n📋 {{3}}\n🏷 Priority: {{4}}\n📅 Due: {{5}}\n\nTap below to open TeamFlow and update its status.",
+        "example": { "body_text": [["Ravi", "Chandu", "Fix the 2nd-floor projector", "High", "25 Jul 2026"]] }
+      },
+      { "type": "FOOTER", "text": "TeamFlow" },
+      { "type": "BUTTONS", "buttons": [{ "type": "URL", "text": "Open task", "url": "https://athota.work/jhps" }] }
+    ]
+  },
+  {
+    "name": "task_reminder",
+    "language": "en_US",
+    "category": "UTILITY",
+    "components": [
+      { "type": "HEADER", "format": "TEXT", "text": "Task reminder" },
+      {
+        "type": "BODY",
+        "text": "Hi {{1}}, this is a reminder about a task that is {{2}}:\n\n📋 {{3}}\n📅 Due: {{4}}\n\nPlease update its status in TeamFlow.",
+        "example": { "body_text": [["Ravi", "overdue", "Terrace waterproofing", "20 Jul 2026"]] }
+      },
+      { "type": "FOOTER", "text": "TeamFlow" },
+      { "type": "BUTTONS", "buttons": [{ "type": "URL", "text": "Open task", "url": "https://athota.work/jhps" }] }
+    ]
+  },
+  {
+    "name": "report_received",
+    "language": "en_US",
+    "category": "UTILITY",
+    "components": [
+      { "type": "HEADER", "format": "TEXT", "text": "We received your request" },
+      {
+        "type": "BODY",
+        "text": "Hi {{1}}, your {{2}} has been logged as ticket #{{3}}:\n\n\"{{4}}\"\n\nYou'll be notified when it is assigned and again when it is resolved.",
+        "example": { "body_text": [["Ravi", "maintenance report", "42", "Broken chair in Lab 10B"]] }
+      },
+      { "type": "FOOTER", "text": "TeamFlow" }
+    ]
+  },
+  {
+    "name": "report_assigned",
+    "language": "en_US",
+    "category": "UTILITY",
+    "components": [
+      { "type": "HEADER", "format": "TEXT", "text": "New assignment" },
+      {
+        "type": "BODY",
+        "text": "Hi {{1}}, you've been assigned ticket #{{2}} ({{3}}):\n\n\"{{4}}\"\n📅 Target: {{5}}\n\nOpen TeamFlow for the details.",
+        "example": { "body_text": [["Chandu", "42", "maintenance", "Broken chair in Lab 10B", "26 Jul 2026"]] }
+      },
+      { "type": "FOOTER", "text": "TeamFlow" },
+      { "type": "BUTTONS", "buttons": [{ "type": "URL", "text": "Open ticket", "url": "https://athota.work/jhps" }] }
+    ]
+  },
+  {
+    "name": "ticket_closed",
+    "language": "en_US",
+    "category": "UTILITY",
+    "components": [
+      { "type": "HEADER", "format": "TEXT", "text": "Ticket resolved" },
+      {
+        "type": "BODY",
+        "text": "Hi {{1}}, your ticket #{{2}} has been closed by {{3}}:\n\n\"{{4}}\"\n\nThanks for reporting it. Raise a new one anytime in TeamFlow.",
+        "example": { "body_text": [["Ravi", "42", "the management team", "Broken chair in Lab 10B"]] }
+      },
+      { "type": "FOOTER", "text": "TeamFlow" }
+    ]
+  },
+  {
+    "name": "supply_request_approved",
+    "language": "en_US",
+    "category": "UTILITY",
+    "components": [
+      { "type": "HEADER", "format": "TEXT", "text": "Request approved" },
+      {
+        "type": "BODY",
+        "text": "Hi {{1}}, your supply request #{{2}} has been approved and sent for procurement:\n\n\"{{3}}\"",
+        "example": { "body_text": [["Ravi", "51", "20 whiteboard markers"]] }
+      },
+      { "type": "FOOTER", "text": "TeamFlow" }
+    ]
+  },
+  {
+    "name": "completion_approval_needed",
+    "language": "en_US",
+    "category": "UTILITY",
+    "components": [
+      { "type": "HEADER", "format": "TEXT", "text": "Approval needed" },
+      {
+        "type": "BODY",
+        "text": "Hi {{1}}, {{2}} has marked a task complete and it needs your approval:\n\n📋 {{3}}\n\nReview and approve it in TeamFlow.",
+        "example": { "body_text": [["Chandu", "Ravi", "Fix the 2nd-floor projector"]] }
+      },
+      { "type": "FOOTER", "text": "TeamFlow" },
+      { "type": "BUTTONS", "buttons": [{ "type": "URL", "text": "Review", "url": "https://athota.work/jhps" }] }
+    ]
+  },
+  {
+    "name": "extension_requested",
+    "language": "en_US",
+    "category": "UTILITY",
+    "components": [
+      { "type": "HEADER", "format": "TEXT", "text": "Extension requested" },
+      {
+        "type": "BODY",
+        "text": "Hi {{1}}, {{2}} has requested a due-date extension:\n\n📋 {{3}}\n📅 New date: {{4}}\n💬 Reason: {{5}}\n\nApprove or reject it in TeamFlow.",
+        "example": { "body_text": [["Chandu", "Ravi", "Terrace waterproofing", "30 Jul 2026", "Material delivery delayed"]] }
+      },
+      { "type": "FOOTER", "text": "TeamFlow" }
+    ]
+  },
+  {
+    "name": "extension_decision",
+    "language": "en_US",
+    "category": "UTILITY",
+    "components": [
+      { "type": "HEADER", "format": "TEXT", "text": "Extension update" },
+      {
+        "type": "BODY",
+        "text": "Hi {{1}}, your extension request for \"{{2}}\" was {{3}}.\n📅 Due date: {{4}}",
+        "example": { "body_text": [["Ravi", "Terrace waterproofing", "approved", "30 Jul 2026"]] }
+      },
+      { "type": "FOOTER", "text": "TeamFlow" }
+    ]
+  },
+  {
+    "name": "daily_report_reminder",
+    "language": "en_US",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Hi {{1}}, please submit your daily report for {{2}} in TeamFlow before the end of the day.",
+        "example": { "body_text": [["Ravi", "24 Jul 2026"]] }
+      },
+      { "type": "FOOTER", "text": "TeamFlow" },
+      { "type": "BUTTONS", "buttons": [{ "type": "URL", "text": "Submit report", "url": "https://athota.work/jhps" }] }
+    ]
+  },
+  {
+    "name": "escalation_notice",
+    "language": "en_US",
+    "category": "UTILITY",
+    "components": [
+      { "type": "HEADER", "format": "TEXT", "text": "Escalation" },
+      {
+        "type": "BODY",
+        "text": "Hi {{1}}, {{2}} has escalated an issue that needs your attention:\n\n📋 {{3}}\n🏷 Priority: {{4}}\n\nOpen TeamFlow to review.",
+        "example": { "body_text": [["Sparsha", "Chandu (Maintenance)", "Repeated AC failure in Block B", "High"]] }
+      },
+      { "type": "FOOTER", "text": "TeamFlow" },
+      { "type": "BUTTONS", "buttons": [{ "type": "URL", "text": "Review", "url": "https://athota.work/jhps" }] }
+    ]
+  },
+  {
+    "name": "account_welcome",
+    "language": "en_US",
+    "category": "UTILITY",
+    "components": [
+      { "type": "HEADER", "format": "TEXT", "text": "Welcome to TeamFlow" },
+      {
+        "type": "BODY",
+        "text": "Hi {{1}}, a TeamFlow account has been created for you at {{2}}.\n\n👤 Username: {{3}}\n\nOpen the app and use \"Forgot password\" to set your own password. For security, we never send passwords over chat.",
+        "example": { "body_text": [["Ravi", "JHPS", "ravi.kumar"]] }
+      },
+      { "type": "FOOTER", "text": "TeamFlow" },
+      { "type": "BUTTONS", "buttons": [{ "type": "URL", "text": "Open TeamFlow", "url": "https://athota.work/jhps" }] }
+    ]
+  }
+]
