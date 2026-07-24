@@ -2324,13 +2324,15 @@ const perfMonthsOf=list=>[...new Set(list.map(perfIssMonth).filter(Boolean))].so
 const perfMonLbl=m=>{const p=(''+m).split('-');return MONTHS[+p[1]-1]+' '+p[0];};
 /* All Performance Analysis dates render DD-MM-YYYY (screen + PDF + CSV + Print), via shared dmy(). */
 const perfDate=d=>d?dmy((''+d).slice(0,10)):'';
-/* Summary stats for a perf list: overall {total,done,over,rate} + per-primary-assignee breakdown
-   (counted under t.who so the per-person totals sum to the task count, matching the flat table). */
+/* Overall summary stats for a perf list: {total,done,over,rate} — one row per task (the summary cards). */
 const perfStats=list=>{const done=list.filter(t=>t.status==='done').length,over=list.filter(isOverdue).length;
   return {total:list.length,done,over,rate:list.length?Math.round(done/list.length*100):0};};
+/* Per-assignee workload: a joint task counts under EVERY participant (all of assignees(t), primary +
+   co-assignees), so a person's row reflects all work they're on. Per-person totals therefore sum to
+   MORE than the task count when tasks are shared — that's intended for a workload view. */
 const perfByAssignee=list=>{const m={};
-  list.forEach(t=>{const k=(byShort(t.who)||{n:t.who||'—'}).n;m[k]=m[k]||{n:k,total:0,done:0,over:0};
-    m[k].total++;if(t.status==='done')m[k].done++;if(isOverdue(t))m[k].over++;});
+  list.forEach(t=>assignees(t).filter(Boolean).forEach(a=>{const k=(byShort(a)||{n:a}).n;m[k]=m[k]||{n:k,total:0,done:0,over:0};
+    m[k].total++;if(t.status==='done')m[k].done++;if(isOverdue(t))m[k].over++;}));
   return Object.values(m).sort((a,b)=>a.n<b.n?-1:a.n>b.n?1:0).map(p=>({...p,rate:p.total?Math.round(p.done/p.total*100):0}));};
 const perfStatsLine=list=>{const s=perfStats(list);return s.total+' tasks · '+s.done+' completed · '+s.over+' overdue · '+s.rate+'% done';};
 const perfRows=(list,byDept)=>byDept?list.slice().sort((a,b)=>{const an=(byShort(a.who)||{n:a.who}).n,bn=(byShort(b.who)||{n:b.who}).n;return an<bn?-1:an>bn?1:0;}):list;
