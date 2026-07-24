@@ -376,9 +376,9 @@ function supplyApproverIdM(q){
    recipient sees ONLY the reports routed to them (identity-based — surfaces reports filed by someone
    ABOVE them too, the original above-scope-reporter bug). */
 function issuesForViewer(role,self){
-  if(role==='admin'||role==='mgmt')return pendingIssues;
+  if(role==='admin'||role==='mgmt')return pendingIssues.filter(q=>!q.resolved_at);
   const me=findPerson(self);if(!me)return [];
-  return pendingIssues.filter(q=>{const id=issueRecipientId(q);return id&&id===me.id;});
+  return pendingIssues.filter(q=>!q.resolved_at&&(()=>{const id=issueRecipientId(q);return id&&id===me.id;})());
 }
 /* single source of truth for "items needing this viewer's approval/assignment". reqs = supply
    requests awaiting the requester's Sr. Manager approval; fulfil = approved supply requests routed
@@ -389,8 +389,8 @@ function approvalQueue(role,self,name){
   return {
     completions:tasks.map((t,i)=>({t,i})).filter(o=>o.t.completionPending&&canApproveFrom(role,o.t.who,self,o.t,name)),
     exts:tasks.map((t,i)=>({t,i})).filter(o=>o.t.extReq&&canApproveFrom(role,o.t.who,self,o.t,name)),
-    reqs:pendingReqs.map((q,qi)=>({q,qi})).filter(o=>!o.q.declined_at&&o.q.stage!=='approved'&&(all||supplyApproverIdM(o.q)===meId)),
-    fulfil:pendingReqs.map((q,qi)=>({q,qi})).filter(o=>o.q.stage==='approved'&&(all||o.q.target_staff_id===meId)),
+    reqs:pendingReqs.map((q,qi)=>({q,qi})).filter(o=>!o.q.declined_at&&!o.q.resolved_at&&o.q.stage!=='approved'&&(all||supplyApproverIdM(o.q)===meId)),
+    fulfil:pendingReqs.map((q,qi)=>({q,qi})).filter(o=>!o.q.resolved_at&&o.q.stage==='approved'&&(all||o.q.target_staff_id===meId)),
     issues:issuesForViewer(role,self)
   };
 }
@@ -493,9 +493,9 @@ async function loadAll(){
   tasks.length=0;tasks.push(...(taskRows||[]).map(r=>rowToMobileTask(r,assignRows||[],byId,logRows||[]))
     .sort((a,b)=>(a.date||'')<(b.date||'')?-1:1));
   pendingReqs.length=0;pendingReqs.push(...(reqRows||[]).filter(r=>r.kind==='request').map(r=>
-    ({id:r.id,t:r.title,ticket:r.ticket_no||undefined,date:r.created_at?r.created_at.slice(0,10):undefined,note:r.note||'',from:r.from_short,av:r.from_init,files:r.files&&r.files.length?r.files:undefined,stage:r.stage||null,target_staff_id:r.target_staff_id||null,approver_staff_id:r.approver_staff_id||null,declined_at:r.declined_at||null,declined_by:r.declined_by||null})));
+    ({id:r.id,t:r.title,ticket:r.ticket_no||undefined,date:r.created_at?r.created_at.slice(0,10):undefined,note:r.note||'',from:r.from_short,av:r.from_init,files:r.files&&r.files.length?r.files:undefined,stage:r.stage||null,target_staff_id:r.target_staff_id||null,approver_staff_id:r.approver_staff_id||null,declined_at:r.declined_at||null,declined_by:r.declined_by||null,resolved_at:r.resolved_at||null,resolved_by:r.resolved_by||null})));
   pendingIssues.length=0;pendingIssues.push(...(reqRows||[]).filter(r=>r.kind==='issue').map(r=>
-    ({id:r.id,t:r.title,ticket:r.ticket_no||undefined,date:r.created_at?r.created_at.slice(0,10):undefined,from:r.from_short,av:r.from_init,routing_rule_id:r.routing_rule_id||null,target_staff_id:r.target_staff_id||null,files:r.files&&r.files.length?r.files:undefined})));
+    ({id:r.id,t:r.title,ticket:r.ticket_no||undefined,date:r.created_at?r.created_at.slice(0,10):undefined,from:r.from_short,av:r.from_init,routing_rule_id:r.routing_rule_id||null,target_staff_id:r.target_staff_id||null,files:r.files&&r.files.length?r.files:undefined,resolved_at:r.resolved_at||null,resolved_by:r.resolved_by||null})));
   notices.length=0;notices.push(...(noticeRows||[]).map(r=>({id:r.id,t:r.title,b:r.body||'',d:fmtD(r.created_at.slice(0,10))})));
   notifs.length=0;notifs.push(...(notifRows||[]));
 }
@@ -558,6 +558,11 @@ async function deleteRequestRow(q){if(q.id)await sb.from('requests').delete().eq
    declined_at/by instead of hard-deleting. The approval queue filters declined rows out (see
    approvalQueue.reqs) so they never re-surface as an actionable item. */
 async function declineRequestRow(q){if(q.id)await sb.from('requests').update({declined_at:q.declined_at,declined_by:q.declined_by}).eq('id',q.id);}
+/* Close a ticket WITHOUT assigning it (management) — stamps resolved_at/by, keeps the row (like decline)
+   but out of the action queue. Same requests.resolved_at columns the console tracker uses (v153). */
+async function resolveRequestRow(q){if(q.id)await sb.from('requests').update({resolved_at:q.resolved_at,resolved_by:q.resolved_by}).eq('id',q.id);}
+/* days from a ticket's raise date to its resolution (or today if still open) — the "N days open" aging. */
+const daysOpenM=(from,to)=>{if(!from)return null;const a=new Date((''+from).slice(0,10)),b=to?new Date((''+to).slice(0,10)):TODAY;return Math.max(0,Math.round((b-a)/864e5));};
 async function postNotice(n){await sb.from('notices').insert({title:n.t,body:n.b});}
 
 /* ============ helpers ============ */
@@ -982,6 +987,10 @@ function App(){
       say('Marked for procurement 📦 · added to '+s.n+'’s list');},
     declineReq:qi=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
       const q=pendingReqs[qi];if(q){q.declined_at=new Date().toISOString();q.declined_by=r.id;R();declineRequestRow(q).catch(console.error);say('Request declined — '+q.from.split(' ')[0]+' will be notified');}},
+    /* Management closes a report/request without assigning it — stamps resolved_at/by (kept in the row,
+       out of the queue). Works for both a supply request and a maintenance report (both are requests rows). */
+    closeTicket:q=>{if(previewing){say("You're previewing — switch back to close for real");return;}
+      if(!q)return;q.resolved_at=new Date().toISOString();q.resolved_by=r.id;R();resolveRequestRow(q).catch(console.error);say('Ticket'+(q.ticket?' #'+q.ticket:'')+' closed');},
     assignIssue:(qi,who)=>{if(previewing){say("You're previewing — switch back to assign for real");return;}
       const q=pendingIssues.splice(qi,1)[0];if(!q)return;const m=findMember(who);
       const nt={t:q.t,who:m.n,init:m.i,due:"Tomorrow · 9:00 AM",date:whenToDate("tomorrow"),ticket:q.ticket,requestedAt:q.date,
@@ -1192,7 +1201,8 @@ function Home({ctx,acts}){
               {pool.length?pool.map(m=>
                 <button key={m.n} className={'pickchip'+(sug&&m.n===sug.n?' cur':'')} onClick={()=>acts.assignIssue(qi,m.n)}>{m.n} · {roleLabelM(m)}</button>)
                 :<span className="meta">No {poolDept} staff to assign yet</span>}
-            </div></div>;})}</>:null}
+            </div>
+            <TicketFoot q={q} ctx={ctx} acts={acts}/></div>;})}</>:null}
       {reqs.length?<><div className="sec">Supply requests — approve</div>
         {reqs.map(o=><div className="task" key={'q'+o.qi}>
           <span className="pill today">📦 Supply request</span>
@@ -1202,7 +1212,8 @@ function Home({ctx,acts}){
           <div className="cardbtns">
             <button className="btn primary" onClick={()=>acts.approveReq(o.qi)}>Approve ✓</button>
             <button className="btn ghost" onClick={()=>acts.declineReq(o.qi)}><I n="x" s={16}/></button>
-          </div></div>)}</>:null}
+          </div>
+          <TicketFoot q={o.q} ctx={ctx} acts={acts}/></div>)}</>:null}
       {fulfil&&fulfil.length?<><div className="sec">Approved supplies — fulfil</div>
         {fulfil.map(o=><div className="task" key={'f'+o.qi}>
           <span className="pill today">📦 Approved — procure</span>
@@ -1211,12 +1222,20 @@ function Home({ctx,acts}){
           <div className="cardbtns">
             <button className="btn primary" onClick={()=>acts.fulfilReq(o.qi)}>Mark for procurement ✓</button>
             <button className="btn ghost" onClick={()=>acts.declineReq(o.qi)}><I n="x" s={16}/></button>
-          </div></div>)}</>:null}
+          </div>
+          <TicketFoot q={o.q} ctx={ctx} acts={acts}/></div>)}</>:null}
     </>:null}
     <MyRequests ctx={ctx}/>
     <div className="sec">Today</div>
     {ctx.mine.length?ctx.mine.map(o=><TaskCard key={o.i} o={o} ctx={ctx} acts={acts}/>):<MobileEmpty icon="✅" t="Nothing due today" s="New tasks assigned to you will show up here."/>}
   </div>;
+}
+/* Footer for an open report/request card: "N days open" (red past 7d) + a management "Close ticket"
+   button (resolves it without assigning — v153 parity from the console tracker). */
+function TicketFoot({q,ctx,acts}){
+  const age=daysOpenM(q.date);const canClose=ctx.role==='admin'||ctx.role==='mgmt';
+  return <>{age!=null?<div className="meta" style={{marginTop:6,color:age>7?'var(--red,#c43a53)':'var(--muted)'}}>{age} day{age!==1?'s':''} open</div>:null}
+    {canClose&&!ctx.previewing?<button className="chipbtn" style={{marginTop:6}} onClick={()=>acts.closeTicket(q)}>Close ticket</button>:null}</>;
 }
 function reporterFromNoteM(note){if(!note)return null;let m=note.match(/Reported by (.+?)(?: — |$)/);if(m)return m[1].trim();m=note.match(/request from (.+?)(?: — |$)/);if(m)return m[1].trim();return null;}
 /* "Your reports & requests" — every ticket the signed-in person raised, with live status, for ALL
@@ -1231,18 +1250,18 @@ function MyRequests({ctx}){
   const tkt=n=>n?<b style={{color:'var(--accent-ink,#0a5c54)'}}>#{n} </b>:null;
   const overdue=t=>!t.done&&t.date&&t.date<iso(TODAY);
   return <><div className="sec">Your reports &amp; requests</div>
-    {myI.map((q,ix)=>{const rec=issueRecipientM(q),hn=rec?rec.n.split(' ')[0]:'the recipient';
+    {myI.map((q,ix)=>{const rec=issueRecipientM(q),hn=rec?rec.n.split(' ')[0]:'the recipient';const closed=!!q.resolved_at,cd=daysOpenM(q.date,q.resolved_at);
       return <div className="task" key={'oi'+ix}>
-      <span className="pill today">🔧 Reported · with {hn}</span>
+      <span className={'pill '+(closed?'done':'today')}>{closed?'✓ Closed':'🔧 Reported · with '+hn}</span>
       <div className="tt">{tkt(q.ticket)}{q.t}</div>
-      <div className="meta">{hn} will assign it to the right person</div>
+      <div className="meta">{closed?'Closed by management'+(cd!=null?' · closed in '+cd+' day'+(cd!==1?'s':''):''):hn+' will assign it to the right person'}</div>
       {q.files&&q.files.length?<div className="attrow">{q.files.map((f,fx)=><FileChip key={fx} f={f}/>)}</div>:null}
     </div>;})}
-    {myR.map((q,ix)=>{const rec=q.stage==='approved'&&q.target_staff_id?ALL_PEOPLE.find(p=>p.id===q.target_staff_id):null;
+    {myR.map((q,ix)=>{const rec=q.stage==='approved'&&q.target_staff_id?ALL_PEOPLE.find(p=>p.id===q.target_staff_id):null;const closed=!!q.resolved_at,cd=daysOpenM(q.date,q.resolved_at);
       return <div className="task" key={'or'+ix}>
-      <span className="pill today">{q.stage==='approved'?'📦 Approved — with '+(rec?rec.n.split(' ')[0]:'procurement'):'⏳ Awaiting approval'}</span>
+      <span className={'pill '+(closed?'done':'today')}>{closed?'✓ Closed':(q.stage==='approved'?'📦 Approved — with '+(rec?rec.n.split(' ')[0]:'procurement'):'⏳ Awaiting approval')}</span>
       <div className="tt">{tkt(q.ticket)}📦 {q.t}</div>
-      <div className="meta">{q.stage==='approved'?'Approved — '+(rec?rec.n.split(' ')[0]+' will procure':'being procured'):'Sent to your department’s Sr. Manager'}{q.note?' · “'+q.note+'”':''}</div>
+      <div className="meta">{closed?'Closed by management'+(cd!=null?' · closed in '+cd+' day'+(cd!==1?'s':''):''):(q.stage==='approved'?'Approved — '+(rec?rec.n.split(' ')[0]+' will procure':'being procured'):'Sent to your department’s Sr. Manager')}{!closed&&q.note?' · “'+q.note+'”':''}</div>
       {q.files&&q.files.length?<div className="attrow">{q.files.map((f,fx)=><FileChip key={fx} f={f}/>)}</div>:null}
     </div>;})}
     {myA.map((t,ix)=>{const isI=t.origin==='issue';const late=overdue(t);
