@@ -26,6 +26,18 @@ const digits = (s: string) => String(s || "").replace(/[^\d]/g, "");
 const MAX_ATTEMPTS = 5;
 const BATCH = 50;
 
+// Only ever send templates we actually defined (whatsapp/templates.json). Defence-in-depth on top of
+// the outbox's enqueued_by attribution: even a row with an arbitrary template name can't be used to
+// probe Meta with something unapproved.
+const APPROVED = new Set([
+  "task_assigned", "task_reminder", "report_received", "report_assigned", "ticket_closed",
+  "supply_request_approved", "completion_approval_needed", "extension_requested", "extension_decision",
+  "daily_report_reminder", "escalation_notice", "account_welcome",
+]);
+// Meta rejects template body params containing newlines/tabs or 4+ consecutive spaces — collapse
+// whitespace so a multi-line task title doesn't silently fail the send.
+const cleanParam = (v: unknown) => String(v).replace(/\s+/g, " ").trim();
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
@@ -62,12 +74,11 @@ Deno.serve(async (req) => {
     const who = row.recipient_staff_id ? byId[row.recipient_staff_id] : null;
     const to = digits(who?.phone || "");
 
-    // No phone or no consent → drop from the queue (won't ever be sendable) with a reason.
-    if (!who || !who.wa_opt_in || !to) {
-      await admin.from("whatsapp_outbox").update({
-        sent_at: new Date().toISOString(),
-        last_error: !who ? "recipient not found" : !who.wa_opt_in ? "not opted in" : "no phone",
-      }).eq("id", row.id);
+    // No phone / no consent / unknown template → drop from the queue with a reason (never sendable).
+    const reason = !who ? "recipient not found" : !who.wa_opt_in ? "not opted in" : !to ? "no phone"
+      : !APPROVED.has(row.template) ? "unknown template" : null;
+    if (reason) {
+      await admin.from("whatsapp_outbox").update({ sent_at: new Date().toISOString(), last_error: reason }).eq("id", row.id);
       skipped++;
       continue;
     }
@@ -82,7 +93,7 @@ Deno.serve(async (req) => {
         name: row.template,
         language: { code: "en_US" },
         ...(vars.length
-          ? { components: [{ type: "body", parameters: vars.map((v) => ({ type: "text", text: String(v) })) }] }
+          ? { components: [{ type: "body", parameters: vars.map((v) => ({ type: "text", text: cleanParam(v) })) }] }
           : {}),
       },
     };
