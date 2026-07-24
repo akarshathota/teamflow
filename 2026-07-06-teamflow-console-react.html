@@ -2309,7 +2309,14 @@ function ExportTrio({label,rows,viewerName}){
    t.issued is a full created_at timestamp so it's sliced to date-only before fmtDate. */
 const PERF_COLS_FULL=['Assignee','Date of issue','Assigned by','Priority','Task Description','Due Date','Date of Completion','Remarks'];
 const perfCols=byDept=>byDept?PERF_COLS_FULL:PERF_COLS_FULL.slice(1);
-const perfSubtitle=(fw,fb)=>(fb==='all'?'All departments':'Department: '+BUCKETS[fb])+' · '+(fw==='all'?'all staff':'Staff: '+(byShort(fw)||{n:fw}).n);
+const perfSubtitle=(fw,fb,mon)=>(fb==='all'?'All departments':'Department: '+BUCKETS[fb])+' · '+(fw==='all'?'all staff':'Staff: '+(byShort(fw)||{n:fw}).n)+((mon&&mon!=='all')?' · '+perfMonLbl(mon):'');
+/* Month filter for Performance Analysis (by DATE OF ISSUE). A task belongs to month `mon` (YYYY-MM) if
+   it was issued that month OR it was issued in an earlier month and is still pending (not done) — pending
+   work rolls forward into the current month until it's completed. 'all' = every month, no rollover. */
+const perfIssMonth=t=>t.issued?(''+t.issued).slice(0,7):'';
+const perfInMonth=(t,mon)=>{if(mon==='all')return true;const m=perfIssMonth(t);return m===mon||(!!m&&m<mon&&t.status!=='done');};
+const perfMonthsOf=list=>[...new Set(list.map(perfIssMonth).filter(Boolean))].sort().reverse();
+const perfMonLbl=m=>{const p=(''+m).split('-');return MONTHS[+p[1]-1]+' '+p[0];};
 const perfRows=(list,byDept)=>byDept?list.slice().sort((a,b)=>{const an=(byShort(a.who)||{n:a.who}).n,bn=(byShort(b.who)||{n:b.who}).n;return an<bn?-1:an>bn?1:0;}):list;
 /* full 8-cell row in PERF_COLS_FULL order; caller slices off cell 0 (Assignee) for staff-wise.
    fmt formats a date-only 'YYYY-MM-DD' string — fmtDate for PDF/print ("21 Jul"), a slice(0,10)
@@ -2317,21 +2324,21 @@ const perfRows=(list,byDept)=>byDept?list.slice().sort((a,b)=>{const an=(byShort
 const perfCells=(t,fmt)=>[assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),
   fmt((''+t.issued).slice(0,10)),t.instructedBy||'Self',PRIOS[t.prio||'med'].l,t.t,
   fmt(t.date),(t.status==='done'&&t.doneOn)?fmt(t.doneOn):'',''];
-function downloadPerfPdf(list,byDept,fw,fb){
+function downloadPerfPdf(list,byDept,fw,fb,mon){
   downloadTablePdf('performance-analysis',{orgName:orgName(),title:'TeamFlow — Performance Analysis',
-    subtitle:perfSubtitle(fw,fb)+' · '+new Date().toDateString()+' · '+list.length+' tasks'},
+    subtitle:perfSubtitle(fw,fb,mon)+' · '+new Date().toDateString()+' · '+list.length+' tasks'},
     perfCols(byDept),perfRows(list,byDept).map(t=>{const c=perfCells(t,fmtDate);return byDept?c:c.slice(1);}))
     .catch(e=>console.error(e));
 }
-function exportPerf(list,byDept,fw,fb){
+function exportPerf(list,byDept,fw,fb,mon){
   const rows=[perfCols(byDept)];
   perfRows(list,byDept).forEach(t=>{const c=perfCells(t,d=>d?(''+d).slice(0,10):'');rows.push(byDept?c:c.slice(1));});
   csvDownload(iso(new Date())+'-teamflow-performance-analysis.csv',rows);
 }
-function printPerf(list,byDept,fw,fb){
+function printPerf(list,byDept,fw,fb,mon){
   const cols=perfCols(byDept);
   let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — Performance Analysis</div>';
-  b+='<div style="color:#555;margin-bottom:18px">'+perfSubtitle(fw,fb)+' · '+new Date().toDateString()+' · '+list.length+' tasks</div>';
+  b+='<div style="color:#555;margin-bottom:18px">'+perfSubtitle(fw,fb,mon)+' · '+new Date().toDateString()+' · '+list.length+' tasks</div>';
   b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:2px solid #333">'+cols.map(c=>'<th style="text-align:left;padding:6px">'+c+'</th>').join('')+'</tr></thead><tbody>';
   perfRows(list,byDept).forEach(t=>{const c=perfCells(t,fmtDate).map(x=>x||'');const cc=byDept?c:c.slice(1);
     b+='<tr style="border-bottom:1px solid #ccc">'+cc.map(x=>'<td style="padding:6px">'+x+'</td>').join('')+'</tr>';});
@@ -2342,9 +2349,9 @@ function printPerf(list,byDept,fw,fb){
   setTimeout(()=>{pr.style.display='none';document.title=ot;},300);
 }
 /* On-screen Performance Analysis table — trk-t styling, same rows/columns as the exports. */
-function PerfPanel({list,fw,fb}){
+function PerfPanel({list,fw,fb,mon}){
   const byDept=fw==='all';const cols=perfCols(byDept);const rows=perfRows(list,byDept);
-  if(!rows.length)return <Empty t="No tasks to analyse" s="No tasks match the current department or staff filter."/>;
+  if(!rows.length)return <Empty t="No tasks to analyse" s="No tasks match the current department, staff or month filter."/>;
   return <div className="trk-panel">
     <div className="trk-tw">
       <table className="trk-t">
@@ -2361,7 +2368,7 @@ function PerfPanel({list,fw,fb}){
         </tr>)}</tbody>
       </table>
     </div>
-    <div className="trk-foot"><b>{rows.length}</b> task{rows.length!==1?'s':''} · {perfSubtitle(fw,fb)}. The Remarks column is left blank for handwritten notes on a printout.</div>
+    <div className="trk-foot"><b>{rows.length}</b> task{rows.length!==1?'s':''} · {perfSubtitle(fw,fb,mon)}. {mon&&mon!=='all'?'Tasks issued in '+perfMonLbl(mon)+', plus still-pending tasks carried over from earlier months. ':''}The Remarks column is left blank for handwritten notes on a printout.</div>
   </div>;
 }
 /* KPI drill-down: clicking a stat card opens this list of exactly the tasks behind the number.
@@ -4493,8 +4500,13 @@ function ReportsView({ctx}){
   const [mode,setMode]=useState('tasks');
   const [fw,setFw]=useState('all');
   const [fb,setFb]=useState('all');
+  const [pmon,setPmon]=useState('all'); // Performance Analysis month filter (by date of issue, with rollover)
   const [showMismatch,setShowMismatch]=useState(false);
   const mine=tasks.filter(t=>inScope(t,ctx.shorts)&&(fb==='all'||t.bucket===fb)&&(fw==='all'||hasWho(t,fw)));
+  // Performance Analysis list: `mine` narrowed to the chosen month, where a still-pending task issued in
+  // an earlier month rolls forward into the current month (perfInMonth). Month options from issue dates.
+  const perfMonths=perfMonthsOf(mine);
+  const perfList=mine.filter(t=>perfInMonth(t,pmon));
   const dn=mine.filter(t=>t.status==='done').length,ov=mine.filter(isOverdue).length;
   const rate=mine.length?Math.round(dn/mine.length*100):0;
   const segs=deliveryStats(mine);const segTot=segs.reduce((a,x)=>a+x.v,0);
@@ -4524,6 +4536,9 @@ function ReportsView({ctx}){
       <select className="fsel" value={fw} onChange={e=>setFw(e.target.value)}>
         <option value="all">{fb==='all'?'All staff':'All in '+BUCKETS[fb]}</option>
         {empOpts.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}</select>
+      {mode==='perf'?<select className="fsel" value={pmon} onChange={e=>setPmon(e.target.value)} title="Filter by month of issue — pending tasks roll over into later months">
+        <option value="all">All months</option>
+        {perfMonths.map(m=><option key={m} value={m}>{perfMonLbl(m)}</option>)}</select>:null}
       <div className="spacer"/>
       {mode==='tasks'?<>
         <button className="btn soft" onClick={()=>setShowMismatch(true)}><I n="alert"/>Check dept mismatches</button>
@@ -4535,10 +4550,10 @@ function ReportsView({ctx}){
         </div>
         <button className="linkbtn" onClick={()=>ctx.exportCSV('workload')}><I n="dl" s={13}/>Workload CSV</button>
       </>:null}
-      {mode==='perf'&&mine.length?<div className="exp-group">
-        <button className="exp-btn" onClick={()=>downloadPerfPdf(mine,fw==='all',fw,fb)}><I n="dl" s={13}/>Download PDF</button>
-        <button className="exp-btn" onClick={()=>exportPerf(mine,fw==='all',fw,fb)}><I n="dl" s={13}/>Download CSV</button>
-        <button className="exp-btn" onClick={()=>printPerf(mine,fw==='all',fw,fb)}><I n="print" s={13}/>Print</button>
+      {mode==='perf'&&perfList.length?<div className="exp-group">
+        <button className="exp-btn" onClick={()=>downloadPerfPdf(perfList,fw==='all',fw,fb,pmon)}><I n="dl" s={13}/>Download PDF</button>
+        <button className="exp-btn" onClick={()=>exportPerf(perfList,fw==='all',fw,fb,pmon)}><I n="dl" s={13}/>Download CSV</button>
+        <button className="exp-btn" onClick={()=>printPerf(perfList,fw==='all',fw,fb,pmon)}><I n="print" s={13}/>Print</button>
       </div>:null}
     </div>
     {showMismatch?<DeptMismatchModal ctx={ctx} close={()=>setShowMismatch(false)}/>:null}
@@ -4571,7 +4586,7 @@ function ReportsView({ctx}){
           <td>{tt.filter(t=>t.status==='done').length}</td></tr>;})}</tbody></table>
       </div>
     </div>
-    </>:mode==='reports'?<DailyReportsPanel ctx={ctx} fw={fw} fb={fb}/>:<PerfPanel list={mine} fw={fw} fb={fb}/>}
+    </>:mode==='reports'?<DailyReportsPanel ctx={ctx} fw={fw} fb={fb}/>:<PerfPanel list={perfList} fw={fw} fb={fb} mon={pmon}/>}
   </div>;
 }
 
