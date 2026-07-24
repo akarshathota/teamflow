@@ -1660,17 +1660,14 @@ function Topbar({ctx,searchRef}){
           {ctx.qReqs.map(o=>queueItem('qr'+o.i,o.r.kind==='issue'?'var(--amber)':'var(--accent)',
             (o.r.kind==='issue'?'Maintenance issue: ':'Supply request: ')+o.r.t,
             'From '+(byShort(o.r.from)||{n:o.r.from}).n))}
-          {ctx.notifs.length?(()=>{
-            const list=ctx.notifs.slice(0,20);
-            const attn=list.filter(n=>n.source!=='activity');
-            const act=list.filter(n=>n.source==='activity');
-            return <>
-              {attn.length?<div className="sd-head">Needs attention</div>:null}
-              {attn.map(notifItem)}
-              {act.length?<div className="sd-head">Activity</div>:null}
-              {act.map(notifItem)}
-            </>;
-          })():(queueN?null:<div className="sd-empty">No notifications</div>)}
+          {/* One list, newest-triggered first — sorted by created_at (the moment the notification fired),
+              with for_date as a tie-break/fallback. Was split into "Needs attention" + "Activity" groups,
+              which broke a pure time order (an old overdue notice could sit above a fresh activity one). */}
+          {ctx.notifs.length?<>
+            <div className="sd-head">Recent</div>
+            {[...ctx.notifs].sort((a,b)=>{const at=a.created_at||a.for_date||'',bt=b.created_at||b.for_date||'';
+              return at<bt?1:at>bt?-1:((a.for_date||'')<(b.for_date||'')?1:-1);}).slice(0,20).map(notifItem)}
+          </>:(queueN?null:<div className="sd-empty">No notifications</div>)}
         </div>:null}
       </div>
       <button className="btn ghost" onClick={()=>ctx.setDailyReport(true)}><I n="chart"/>Daily report</button>
