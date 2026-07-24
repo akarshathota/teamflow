@@ -156,6 +156,9 @@
   .field .k{font-size:12px;color:var(--muted);width:76px;flex:0 0 auto;padding-top:3px}
   .field .v{font-size:14px;font-weight:600;flex:1}
   .chipbtn{display:inline-flex;align-items:center;gap:5px;background:var(--card);border:1.5px dashed #b6d3cd;border-radius:7px;padding:4px 10px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink)}
+  .perf-t{border-collapse:collapse;font-size:12px;width:100%}
+  .perf-t th{text-align:left;padding:6px 8px;border-bottom:2px solid var(--line,#e7e5dc);white-space:nowrap;color:var(--muted);font-weight:700}
+  .perf-t td{padding:6px 8px;border-bottom:1px solid var(--line,#efeee7);vertical-align:top}
   .aibadge{font-size:11px;color:var(--accent-ink);font-weight:700;background:var(--accent-soft);padding:3px 9px;border-radius:6px}
   .reason{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.35}
   .reason b{color:var(--accent-ink)}
@@ -562,6 +565,42 @@ const sameDay=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMont
 const findMember=n=>MEMBERS.find(m=>m.n.toLowerCase()===String(n).toLowerCase());
 const assigneesM=t=>[t.who].concat(t.coWho||[]);
 const hasWhoM=(t,n)=>assigneesM(t).includes(n);
+/* ===== Performance Analysis (mobile port of console's Reports→Performance Analysis, v160) =====
+   Same 8-col per-task table + running S.No., month filter with pending-rollover, dept/staff filters,
+   summary stats + per-assignee breakdown, PDF/CSV export. Adapted to mobile's data model: assigneesM
+   returns SHORT-name tokens (t.who/coWho are shorts), ALL_PEOPLE resolves short->display name, and
+   mobile tasks carry t.done (bool) + t.doneOn, not console's t.status. No Print button — mobile has no
+   window.print() precedent (same reason DailyReportsSection is CSV-only). PDF via the shared
+   downloadTablePdf, CSV via mobile csvDownload. Mirrors console perf* helpers exactly. */
+const PERF_COLS_FULL_M=['Assignee','Date of issue','Assigned by','Priority','Task Description','Due Date','Date of Completion','Remarks'];
+const perfColsM=byDept=>['S.No.'].concat(byDept?PERF_COLS_FULL_M:PERF_COLS_FULL_M.slice(1));
+const PRIO_LBL_M={high:'High',med:'Medium',low:'Low'};
+const PRIO_COL_M={high:'#c43a53',med:'#c98a1a',low:'#6b7280'};
+const perfNameM=short=>{const p=ALL_PEOPLE.find(x=>x.s===short);return p?p.n:(short||'—');};
+const perfIssMonthM=t=>t.issued?(''+t.issued).slice(0,7):'';
+const perfInMonthM=(t,mon)=>{if(mon==='all')return true;const m=perfIssMonthM(t);return m===mon||(!!m&&m<mon&&!t.done);};
+const perfMonthsOfM=list=>[...new Set(list.map(perfIssMonthM).filter(Boolean))].sort().reverse();
+const perfMonLblM=m=>{const p=(''+m).split('-');return MONTHS[+p[1]-1]+' '+p[0];};
+const perfDateM=d=>d?dmy((''+d).slice(0,10)):'';
+const perfOverM=t=>!t.done&&t.date&&t.date<iso(TODAY);
+const perfStatsM=list=>{const done=list.filter(t=>t.done).length;return {total:list.length,done,over:list.filter(perfOverM).length,rate:list.length?Math.round(done/list.length*100):0};};
+const perfByAssigneeM=list=>{const m={};list.forEach(t=>{const k=perfNameM(t.who);m[k]=m[k]||{n:k,total:0,done:0,over:0};m[k].total++;if(t.done)m[k].done++;if(perfOverM(t))m[k].over++;});
+  return Object.values(m).sort((a,b)=>a.n<b.n?-1:a.n>b.n?1:0).map(p=>({...p,rate:p.total?Math.round(p.done/p.total*100):0}));};
+const perfStatsLineM=list=>{const s=perfStatsM(list);return s.total+' tasks · '+s.done+' completed · '+s.over+' overdue · '+s.rate+'% done';};
+const perfRowsM=(list,byDept)=>byDept?list.slice().sort((a,b)=>{const an=perfNameM(a.who),bn=perfNameM(b.who);return an<bn?-1:an>bn?1:0;}):list;
+const perfCellsM=(t,fmt)=>[assigneesM(t).filter(Boolean).map(perfNameM).join(' + '),fmt((''+t.issued).slice(0,10)),t.instructedBy||'Self',PRIO_LBL_M[t.prio||'med'],t.t,
+  fmt(t.date),(t.done&&t.doneOn)?fmt(t.doneOn):'',''];
+const perfSubtitleM=(fw,fb,mon)=>(fb==='all'?'All departments':'Department: '+(BUCKETS[fb]||fb))+' · '+(fw==='all'?'all staff':'Staff: '+perfNameM(fw))+((mon&&mon!=='all')?' · '+perfMonLblM(mon):'');
+function downloadPerfPdfM(list,byDept,fw,fb,mon){
+  downloadTablePdf('performance-analysis',{orgName:orgName(),title:'TeamFlow — Performance Analysis',
+    subtitle:perfSubtitleM(fw,fb,mon)+' · '+new Date().toDateString()+' · '+perfStatsLineM(list)},
+    perfColsM(byDept),perfRowsM(list,byDept).map((t,i)=>{const c=perfCellsM(t,perfDateM);return [String(i+1)].concat(byDept?c:c.slice(1));})).catch(e=>console.error(e));
+}
+function exportPerfM(list,byDept,fw,fb,mon){
+  const rows=[perfColsM(byDept)];
+  perfRowsM(list,byDept).forEach((t,i)=>{const c=perfCellsM(t,perfDateM);rows.push([String(i+1)].concat(byDept?c:c.slice(1)));});
+  csvDownload(iso(new Date())+'-teamflow-performance-analysis.csv',rows);
+}
 const gist=t=>{const w=t.split(' ');return w.length<=3?t:w.slice(0,3).join(' ')+'…';};
 const fmtD=d=>new Date(d+'T00:00:00').toLocaleDateString('en',{day:'numeric',month:'short'});
 const labelToTime=l=>{const m=(l||'').match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);if(!m)return '';let h=+m[1]%12;if(m[3].toUpperCase()==='PM')h+=12;return String(h).padStart(2,'0')+':'+m[2];};
@@ -1667,6 +1706,56 @@ function exportDailyReportsM(scoped){
   csvDownload(iso(new Date())+'-teamflow-daily-reports.csv',rows);
 }
 
+/* Management-only Performance Analysis section inside Insights. Dept + staff + month filters (with
+   pending-rollover); dept-wise (fw==='all') adds the Assignee column + per-assignee breakdown, staff-
+   wise drops it. Reads the module-global `tasks`, scoped to the viewer's span via ctx.scope. */
+function PerfSectionM({ctx}){
+  const [fb,setFb]=useState('all');const [fw,setFw]=useState('all');const [mon,setMon]=useState('all');
+  const inScope=tasks.filter(t=>t.id&&assigneesM(t).some(a=>ctx.scope.includes(a)));
+  const byDeptStaff=inScope.filter(t=>(fb==='all'||t.bucket===fb)&&(fw==='all'||assigneesM(t).includes(fw)));
+  const months=perfMonthsOfM(byDeptStaff);
+  const list=byDeptStaff.filter(t=>perfInMonthM(t,mon));
+  const byDept=fw==='all';const cols=perfColsM(byDept);const rows=perfRowsM(list,byDept);
+  const s=perfStatsM(list);const per=byDept?perfByAssigneeM(list):null;
+  const scopePeople=[...new Set(ctx.scope)].map(sh=>({s:sh,n:perfNameM(sh)})).sort((a,b)=>a.n<b.n?-1:1);
+  return <>
+    <div className="sec" style={{marginTop:16}}>Performance analysis <span className="free">MGMT</span></div>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+      <select className="selsel" value={fb} onChange={e=>{setFb(e.target.value);setMon('all');}}><option value="all">All departments</option>{Object.keys(BUCKETS).map(k=><option key={k} value={k}>{BUCKETS[k]}</option>)}</select>
+      <select className="selsel" value={fw} onChange={e=>{setFw(e.target.value);setMon('all');}}><option value="all">All staff</option>{scopePeople.map(p=><option key={p.s} value={p.s}>{p.n}</option>)}</select>
+      <select className="selsel" value={mon} onChange={e=>setMon(e.target.value)}><option value="all">All months</option>{months.map(m=><option key={m} value={m}>{perfMonLblM(m)}</option>)}</select>
+    </div>
+    <div style={{display:'flex',gap:16,flexWrap:'wrap',marginBottom:10}}>
+      {[[s.total,'Total','var(--ink)'],[s.done,'Completed','var(--green,#1f9d63)'],[s.over,'Overdue','var(--red,#c43a53)'],[s.rate+'%','Done','var(--accent-ink,#0e7a6f)']].map(([v,l,c],i)=>
+        <div key={i}><div style={{fontSize:20,fontWeight:800,color:c,lineHeight:1.1}}>{v}</div><div className="rs">{l}</div></div>)}
+    </div>
+    {!rows.length?<div className="rs" style={{padding:'8px 2px'}}>No tasks match the current department, staff or month filter.</div>:<>
+      {per&&per.length>1?<div style={{overflowX:'auto',marginBottom:12}}>
+        <table className="perf-t"><thead><tr><th>Assignee</th><th>Tasks</th><th>Done</th><th>Overdue</th><th>%</th></tr></thead>
+        <tbody>{per.map(p=><tr key={p.n}><td><b>{p.n}</b></td><td>{p.total}</td><td style={{color:'var(--green,#1f9d63)'}}>{p.done}</td><td style={{color:p.over?'var(--red,#c43a53)':'inherit'}}>{p.over}</td><td><b>{p.rate}%</b></td></tr>)}</tbody></table>
+      </div>:null}
+      <div style={{overflowX:'auto'}}>
+        <table className="perf-t"><thead><tr>{cols.map(c=><th key={c}>{c}</th>)}</tr></thead>
+        <tbody>{rows.map((t,i)=><tr key={t.id||i}>
+          <td>{i+1}</td>
+          {byDept?<td style={{whiteSpace:'nowrap'}}>{assigneesM(t).filter(Boolean).map(perfNameM).join(' + ')}</td>:null}
+          <td style={{whiteSpace:'nowrap'}}>{perfDateM(t.issued)}</td>
+          <td style={{whiteSpace:'nowrap'}}>{t.instructedBy||'Self'}</td>
+          <td style={{whiteSpace:'nowrap'}}><span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:PRIO_COL_M[t.prio||'med'],marginRight:5}}/>{PRIO_LBL_M[t.prio||'med']}</td>
+          <td style={{fontWeight:600,minWidth:150}}>{t.t}</td>
+          <td style={{whiteSpace:'nowrap'}}>{perfDateM(t.date)}</td>
+          <td style={{whiteSpace:'nowrap'}}>{(t.done&&t.doneOn)?perfDateM(t.doneOn):'—'}</td>
+          <td></td>
+        </tr>)}</tbody></table>
+      </div>
+      <div className="rs" style={{margin:'8px 0'}}><b>{rows.length}</b> task{rows.length!==1?'s':''} · {perfSubtitleM(fw,fb,mon)}.{mon!=='all'?' Includes still-pending tasks carried over from earlier months.':''} Remarks left blank for handwritten notes on a printout.</div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        <button className="chipbtn" onClick={()=>downloadPerfPdfM(list,byDept,fw,fb,mon)}>⬇ PDF</button>
+        <button className="chipbtn" onClick={()=>exportPerfM(list,byDept,fw,fb,mon)}>⬇ CSV</button>
+      </div>
+    </>}
+  </>;
+}
 /* ============ insights ============ */
 function Insights({ctx,acts}){
   const overdueN=tasks.filter(t=>t.id&&!t.done&&t.date&&t.date<iso(TODAY)&&assigneesM(t).some(a=>ctx.scope.includes(a))).length;
@@ -1685,6 +1774,7 @@ function Insights({ctx,acts}){
         <div><div className="nm" style={{cursor:'pointer'}} onClick={()=>ctx.setSheet({kind:'day',title:x.m.n+' — pending tasks',events:tasks.map((t,i)=>({t,i})).filter(o=>!o.t.done&&hasWhoM(o.t,x.m.n))})}>{x.m.n}</div><div className="rs">{x.reason}</div></div></div>)
         :<div className="rs" style={{padding:'8px 2px'}}>Everyone's on track.</div>;})()}
     <DailyReportsSection ctx={ctx}/>
+    {(ctx.role==='mgmt'||ctx.role==='admin')?<PerfSectionM ctx={ctx}/>:null}
     <div className="sec" style={{marginTop:16}}>Ask anything</div>
     <div className="task" style={{display:'flex',alignItems:'center',gap:10}}>
       <I n="mic" c="var(--accent-ink)"/>
