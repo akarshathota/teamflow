@@ -2308,7 +2308,9 @@ function ExportTrio({label,rows,viewerName}){
    always a blank trailing column, for handwritten notes on a printout — same idea as TASK_PDF_COLS.
    t.issued is a full created_at timestamp so it's sliced to date-only before fmtDate. */
 const PERF_COLS_FULL=['Assignee','Date of issue','Assigned by','Priority','Task Description','Due Date','Date of Completion','Remarks'];
-const perfCols=byDept=>byDept?PERF_COLS_FULL:PERF_COLS_FULL.slice(1);
+/* 'S.No.' is a running row number, always the first column (both dept-wise and staff-wise). It's added
+   at row/column assembly time, so perfCells still returns just the 8 data cells (Assignee…Remarks). */
+const perfCols=byDept=>['S.No.'].concat(byDept?PERF_COLS_FULL:PERF_COLS_FULL.slice(1));
 const perfSubtitle=(fw,fb,mon)=>(fb==='all'?'All departments':'Department: '+BUCKETS[fb])+' · '+(fw==='all'?'all staff':'Staff: '+(byShort(fw)||{n:fw}).n)+((mon&&mon!=='all')?' · '+perfMonLbl(mon):'');
 /* Month filter for Performance Analysis (by DATE OF ISSUE). A task belongs to month `mon` (YYYY-MM) if
    it was issued that month OR it was issued in an earlier month and is still pending (not done) — pending
@@ -2327,13 +2329,13 @@ const perfCells=(t,fmt)=>[assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')
 function downloadPerfPdf(list,byDept,fw,fb,mon){
   downloadTablePdf('performance-analysis',{orgName:orgName(),title:'TeamFlow — Performance Analysis',
     subtitle:perfSubtitle(fw,fb,mon)+' · '+new Date().toDateString()+' · '+list.length+' tasks'},
-    perfCols(byDept),perfRows(list,byDept).map(t=>{const c=perfCells(t,fmtDate);return byDept?c:c.slice(1);}))
+    perfCols(byDept),perfRows(list,byDept).map((t,i)=>{const c=perfCells(t,fmtDate);return [String(i+1)].concat(byDept?c:c.slice(1));}))
     .catch(e=>console.error(e));
 }
 function exportPerf(list,byDept,fw,fb,mon){
   const rows=[perfCols(byDept)];
   /* CSV dates in DD-MM-YYYY (dmy) per request — sliced to date-only first so a full timestamp is safe. */
-  perfRows(list,byDept).forEach(t=>{const c=perfCells(t,d=>d?dmy((''+d).slice(0,10)):'');rows.push(byDept?c:c.slice(1));});
+  perfRows(list,byDept).forEach((t,i)=>{const c=perfCells(t,d=>d?dmy((''+d).slice(0,10)):'');rows.push([String(i+1)].concat(byDept?c:c.slice(1)));});
   csvDownload(iso(new Date())+'-teamflow-performance-analysis.csv',rows);
 }
 function printPerf(list,byDept,fw,fb,mon){
@@ -2341,7 +2343,7 @@ function printPerf(list,byDept,fw,fb,mon){
   let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — Performance Analysis</div>';
   b+='<div style="color:#555;margin-bottom:18px">'+perfSubtitle(fw,fb,mon)+' · '+new Date().toDateString()+' · '+list.length+' tasks</div>';
   b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:2px solid #333">'+cols.map(c=>'<th style="text-align:left;padding:6px">'+c+'</th>').join('')+'</tr></thead><tbody>';
-  perfRows(list,byDept).forEach(t=>{const c=perfCells(t,fmtDate).map(x=>x||'');const cc=byDept?c:c.slice(1);
+  perfRows(list,byDept).forEach((t,i)=>{const c=perfCells(t,fmtDate).map(x=>x||'');const cc=[String(i+1)].concat(byDept?c:c.slice(1));
     b+='<tr style="border-bottom:1px solid #ccc">'+cc.map(x=>'<td style="padding:6px">'+x+'</td>').join('')+'</tr>';});
   b+='</tbody></table>';
   const pr=document.getElementById('print-report');pr.innerHTML=b;pr.style.display='block';
@@ -2358,6 +2360,7 @@ function PerfPanel({list,fw,fb,mon}){
       <table className="trk-t">
         <thead><tr>{cols.map(c=><th key={c}>{c}</th>)}</tr></thead>
         <tbody>{rows.map((t,i)=><tr key={t.id||i}>
+          <td><span className="trk-sub" style={{fontWeight:700}}>{i+1}</span></td>
           {byDept?<td><div className="trk-item">{assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')}</div></td>:null}
           <td><span className="trk-sub" style={{whiteSpace:'nowrap'}}>{fmtDate((''+t.issued).slice(0,10))}</span></td>
           <td>{t.instructedBy||'Self'}</td>
