@@ -169,6 +169,17 @@ Deno.serve(async (req) => {
       return json({ error: "Could not create staff record: " + staffErr.message }, 500);
     }
 
+    // Best-effort WhatsApp welcome. whatsapp-dispatch only sends it if the new person has a phone AND
+    // wa_opt_in — so it fires only when consent was captured (opt-in is off by default, per migration).
+    try {
+      const { data: org } = await admin.from("org_settings").select("name").eq("id", true).maybeSingle();
+      await admin.from("whatsapp_outbox").insert({
+        recipient_staff_id: staffRow.id,
+        template: "account_welcome",
+        variables: [String(name).split(" ")[0], org?.name || "TeamFlow", username || loginEmail],
+      });
+    } catch (_e) { /* welcome is optional — never fail account creation over it */ }
+
     // Best-effort audit trail — a logging failure shouldn't turn a successful account creation
     // into an error response for the admin who just did it.
     const { error: logErr } = await admin.from("admin_activity_log").insert({

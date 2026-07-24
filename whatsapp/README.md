@@ -30,9 +30,22 @@ app event ──► waEnqueue(recipientStaffId, template, [vars])   (shared.js �
   without the checkbox ticked.
 - **Enqueue is best-effort** — `waEnqueue` never throws and never blocks the in-app notification, so
   WhatsApp is purely additive.
-- **Events wired so far:** `ticket_closed` (console + mobile, when management closes a report/request).
-  The remaining templates are enqueued the same way at their notification points — see *Remaining
-  events* below.
+- **Events wired (v166–v167):** all 11 templates fire from the app now, via `waNotify(person, template,
+  restVars)` (shared.js) — every template's `{{1}}` is the recipient's own first name, so callers pass
+  only `{{2}}…`:
+  - `task_assigned` — task created/reassigned (console + mobile) → each assignee
+  - `task_reminder` — the `check-due-tasks` cron → each overdue/due-today assignee
+  - `report_received` — report/supply submitted (console + mobile) → the requester
+  - `report_assigned` — maintenance report assigned (console + mobile) → the fixer
+  - `supply_request_approved` — supply approved (console + mobile) → the requester
+  - `ticket_closed` — management closes a ticket (console + mobile) → the requester
+  - `completion_approval_needed` — task submitted for approval (console + mobile) → the approver (`approverOf` = instructor, else assignee's boss)
+  - `extension_requested` — extension requested (console + mobile) → the approver
+  - `extension_decision` — extension approved/rejected (console + mobile) → the assignee
+  - `escalation_notice` — daily-report issue escalated (console + mobile) → the escalator's boss
+  - `account_welcome` — `create-staff-account` edge fn → the new staff (fires only if consent was captured)
+  - **Not wired:** `daily_report_reminder` — there is no daily-report reminder cron in the app yet; add
+    one (like `check-due-tasks`) that enqueues this template to whoever hasn't submitted today.
 
 ### Schedule the dispatcher
 
@@ -48,13 +61,8 @@ select cron.schedule('whatsapp-dispatch', '* * * * *', $$
 $$);
 ```
 
-### Remaining events (next slice)
-
-`task_assigned`, `task_reminder` (from the `check-due-tasks` cron), `report_received`,
-`report_assigned`, `supply_request_approved`, `completion_approval_needed`, `extension_requested`,
-`extension_decision`, `daily_report_reminder`, `escalation_notice`, `account_welcome` — each is one
-`waEnqueue(...)` call at the point the app already raises that in-app notification, using the variable
-order in the table below.
+Adding a new event later is one `waNotify(recipientPerson, template, restVars)` call at the point the
+app raises the matching in-app notification — the variable order is in the template table below.
 
 ---
 

@@ -154,6 +154,12 @@ function waEnqueue(recipientStaffId,template,variables){
       .then(({error})=>{if(error)console.warn('waEnqueue:',error.message);},e=>console.warn('waEnqueue:',e));
   }catch(e){console.warn('waEnqueue:',e);}
 }
+/* Convenience over waEnqueue for the notification templates: takes a resolved person object ({id,n})
+   and the REST of the template variables. EVERY template's {{1}} is the recipient's own first name, so
+   callers pass only {{2}}… and this prepends the name. Best-effort/no-op when there's no person. */
+function waNotify(person,template,rest){
+  if(person&&person.id&&template)waEnqueue(person.id,template,[String(person.n||'').split(' ')[0]].concat(rest||[]));
+}
 
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 /* YYYY-MM-DD -> DD-MM-YYYY, for CSV/XLSX cells only. On-screen dates keep their human forms

@@ -11,8 +11,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" integrity="sha384-bm7MnzvK++ykSwVJ2tynSE5TRdN+xL418osEVF2DE/L/gfWHj91J2Sphe582B1Bh" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js" integrity="sha384-1qlE7MZPM2pHD/pBZCU/yB8UCP52RYL8bge/qNdfNBCWToySp8/M+JL2waXU4hjJ" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.8/dist/umd/supabase.js" integrity="sha384-M65KxMm/JqBppck6onbmAgPVMBHrmPCf1L17Q+71EcvI9/VVI8j5cqoxQf6lj6h2" crossorigin="anonymous"></script>
-<script src="./shared.js?v=166"></script>
-<link rel="stylesheet" href="./shared.css?v=166">
+<script src="./shared.js?v=167"></script>
+<link rel="stylesheet" href="./shared.css?v=167">
 <style>
   :root{
     --line2:#d9d6cb;
@@ -784,6 +784,9 @@ function concernedFor(t,excludeShort){
   if(excludeShort)names.delete(excludeShort);
   return [...names].map(byShort).filter(Boolean).map(p=>p.id);
 }
+/* Who approves a task's extension / completion — the instructor if named, else the assignee's boss.
+   Used to target the WhatsApp for extension_requested / completion_approval_needed at the right person. */
+function approverOf(t){return t.instructedBy?byName(t.instructedBy):((byShort(t.who)||{}).boss?byName((byShort(t.who)||{}).boss):null);}
 async function logTask(t,authorName,text){
   if(!t.id)return;
   const author=byName(authorName);
@@ -1365,6 +1368,7 @@ function App(){
     const rid=supplyRecipientId();const rec=rid?byId(rid):null;
     r.stage='approved';r.target_staff_id=rid||null;R();
     updateRequestRow(r).catch(console.error);
+    waNotify(byShort(r.from),'supply_request_approved',[String(r.ticket||''),r.t]);
     say('Request approved · routed to '+(rec?rec.n:'the supply recipient')+' to fulfil');};
   /* Stage 2: the configured supply recipient fulfils — turns it into a procurement task on their own
      list and clears the request. */
@@ -1391,6 +1395,7 @@ function App(){
     tasks.unshift(nt);
     requests.splice(i,1);R();
     saveTask(nt).catch(console.error);deleteRequestRow(r).catch(console.error);
+    waNotify(byShort(who),'report_assigned',[String(r.ticket||''),'maintenance',r.t,fmtDate(nt.date)]);
     say('Report assigned to '+byShort(who).n+' · notified in TeamFlow');};
   const approveExt=i=>{if(previewing){say("You're previewing — switch back to approve for real");return;}
     const t=tasks[i];if(!t||!t.extReq)return;
@@ -1398,6 +1403,7 @@ function App(){
     t.date=t.extReq.newDate;delete t.extReq;R();
     saveTask(t).catch(console.error);
     notifyEvent(t.id,viewer.id,'approved the extension — new due '+fmtDate(t.date),concernedFor(t,viewer.s));
+    waNotify(byShort(t.who),'extension_decision',[t.t,'approved',fmtDate(t.date)]);
     say('Extension approved — new due date '+fmtDate(t.date)+' · assignee notified');};
   const rejectExt=i=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
     const t=tasks[i];if(!t||!t.extReq)return;
@@ -1405,6 +1411,7 @@ function App(){
     delete t.extReq;R();
     saveTask(t).catch(console.error);
     notifyEvent(t.id,viewer.id,'rejected the extension request',concernedFor(t,viewer.s));
+    waNotify(byShort(t.who),'extension_decision',[t.t,'rejected',fmtDate(t.date)]);
     say('Extension rejected — original due date stands');};
   const approveCompletion=i=>{if(previewing){say("You're previewing — switch back to approve for real");return;}
     const t=tasks[i];if(!t||!t.completionPending)return;
@@ -2927,6 +2934,7 @@ function Drawer({ctx,idx}){
                 if(assignees(t).every(x=>(t.doneBy||[]).includes(x))){
                   const r=submitOrComplete(t);persistComplete(t,r.nd);
                   notifyEvent(t.id,ctx.viewer.id,r.pending?'submitted for completion approval':'completed the task',concernedFor(t,ctx.viewer.s));
+                  if(r.pending)waNotify(approverOf(t),'completion_approval_needed',[(ctx.viewer.n||'A team member'),t.t]);
                   ctx.say(r.pending?'All confirmed — waiting for approval':(r.nd?'All done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(r.nd):'All members done — task completed'));
                 }
                 else{if(t.status==='done'){t.status='open';delete t.doneOn;}setPendingDone(false);saveTask(t).catch(console.error);}
@@ -2971,6 +2979,7 @@ function Drawer({ctx,idx}){
           const recipients=new Set(concernedFor(t,ctx.viewer.s));
           if(oldP&&oldP.s!==ctx.viewer.s)recipients.add(oldP.id);
           notifyEvent(t.id,ctx.viewer.id,'reassigned to '+(newP?newP.n:e.target.value),[...recipients]);
+          if(newP&&newP.s!==ctx.viewer.s)waNotify(newP,'task_assigned',[(ctx.viewer.n||'A manager'),t.t,PRIOS[t.prio||'med'].l,fmtDate(t.date)]);
           ctx.R();ctx.say('Reassigned to '+byShort(e.target.value).n);setReassign(false);}}>
           <option value="">Choose a person…</option>
           {ctx.scope.map(x=><option key={x.s} value={x.s}>{x.n} · {x.dept}</option>)}
@@ -3013,6 +3022,7 @@ function Drawer({ctx,idx}){
           t.extReq={newDate:extDate,reason:extReason.trim()};
           saveTask(t).catch(console.error);
           notifyEvent(t.id,ctx.viewer.id,'requested an extension to '+fmtDate(extDate),concernedFor(t,ctx.viewer.s));
+          waNotify(approverOf(t),'extension_requested',[(ctx.viewer.n||'A team member'),t.t,fmtDate(extDate),extReason.trim()||'—']);
           setExtDate('');setExtReason('');
           ctx.R();ctx.say('Extension request sent — waiting for approval ⏳');}}>
           <I n="clock"/>Request extension</button>
@@ -3097,6 +3107,7 @@ function Drawer({ctx,idx}){
         if(pendingDone&&t.status!=='done'){
           const r=submitOrComplete(t);persistComplete(t,r.nd);
           notifyEvent(t.id,ctx.viewer.id,r.pending?'submitted for completion approval':'completed the task',concernedFor(t,ctx.viewer.s));
+          if(r.pending)waNotify(approverOf(t),'completion_approval_needed',[(ctx.viewer.n||'A team member'),t.t]);
           ctx.R();ctx.setDrawerIdx(-1);
           ctx.say(r.pending?'Marked complete — waiting for approval':(r.nd?'Done · next '+RECURS[t.recur].toLowerCase()+' occurrence '+fmtDate(r.nd):'Task marked done'));
         }
@@ -4748,6 +4759,7 @@ function DailyReportsPanel({ctx,fw,fb}){
       issue:escText.trim(),remarks:'Raised while reviewing '+(p?p.n:'someone')+"’s "+fmtDate(row.report_date)+' daily report',
       priority:escPrio,files:[]});
     if(error){console.error(error);ctx.say('Could not escalate — try again');setEscBusy(false);return;}
+    waNotify(ctx.viewer.boss?byName(ctx.viewer.boss):null,'escalation_notice',[(ctx.viewer.n||'A team member')+(ctx.viewer.dept?' ('+ctx.viewer.dept+')':''),escText.trim(),escPrio]);
     setEscBusy(false);setEscId(null);setEscText('');setEscPrio('Medium');
     ctx.say('Escalated'+(ctx.viewer.boss?' to '+escalateTargetLabel(ctx.viewer):''));
   }
@@ -5172,7 +5184,8 @@ function QuickCapture({ctx,close}){
       close();ctx.R();
       const dest=kind==='issue'?(issueRec?issueRec.n.split(' ')[0]+' ('+selCat.label+')':'the recipient'):((appId&&byId(appId))?byId(appId).n.split(' ')[0]:'your approver')+' for approval';
       // ticket_no is DB-assigned on insert — announce it once saveRequest reads it back
-      saveRequest(nr).then(()=>{ctx.R();ctx.say((kind==='issue'?'Report':'Request')+(nr.ticket?' #'+nr.ticket:'')+' sent to '+dest);})
+      saveRequest(nr).then(()=>{ctx.R();ctx.say((kind==='issue'?'Report':'Request')+(nr.ticket?' #'+nr.ticket:'')+' sent to '+dest);
+        waNotify(ctx.viewer,'report_received',[kind==='issue'?'maintenance report':'supply request',String(nr.ticket||''),nr.t]);})
         .catch(e=>{console.error(e);ctx.say((kind==='issue'?'Report':'Request')+' sent to '+dest);});
       return;
     }
@@ -5190,6 +5203,7 @@ function QuickCapture({ctx,close}){
     tasks.unshift(nt);
     close();ctx.R();
     saveTask(nt).catch(console.error);
+    if(mode!=='self')list.forEach(a=>{const p=byShort(a);if(p&&p.s!==ctx.viewer.s)waNotify(p,'task_assigned',[(ctx.viewer.n||'A manager'),nt.t,PRIOS[nt.prio||'med'].l,fmtDate(nt.date)]);});
     const names=list.map(a=>(byShort(a)||{n:a}).n).join(' + ');
     ctx.say((mode==='self'?'Added to your list':'Assigned '+(list.length>1?'jointly to ':'to ')+names+' · notified in TeamFlow')+(recur?' · '+recurLabel(recur,recurOn):'')+(boss?' · as per '+boss:''));
   }

@@ -73,6 +73,28 @@ Deno.serve(async (req) => {
       if (upErr) return json({ error: upErr.message }, 500);
       notified = rows.length;
     }
+
+    // Also enqueue a WhatsApp `task_reminder` per flagged assignee (whatsapp-dispatch resolves phone +
+    // opt-in and skips anyone without them). Needs the recipient's first name for {{1}}.
+    const staffIds = [...new Set(rows.map((r) => r.staff_id))];
+    if (staffIds.length) {
+      const { data: staff } = await admin.from("staff").select("id, name").in("id", staffIds);
+      const firstName: Record<string, string> = {};
+      for (const s of staff || []) firstName[s.id] = String(s.name || "").split(" ")[0];
+      const titleById: Record<string, string> = {};
+      const dueById: Record<string, string> = {};
+      for (const f of flagged) {
+        titleById[f.t.id] = f.t.title;
+        dueById[f.t.id] = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(f.t.due_date));
+      }
+      const waRows = rows.map((r) => ({
+        recipient_staff_id: r.staff_id,
+        template: "task_reminder",
+        variables: [firstName[r.staff_id] || "there", r.kind === "overdue" ? "overdue" : "due today", titleById[r.task_id], dueById[r.task_id]],
+      }));
+      const { error: waErr } = await admin.from("whatsapp_outbox").insert(waRows);
+      if (waErr) console.error("[check-due-tasks] whatsapp_outbox insert failed:", waErr.message);
+    }
   }
 
   // Health signal for console's "last cron run" indicator (see the cron_runs migration for why a

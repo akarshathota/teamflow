@@ -11,8 +11,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" integrity="sha384-bm7MnzvK++ykSwVJ2tynSE5TRdN+xL418osEVF2DE/L/gfWHj91J2Sphe582B1Bh" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js" integrity="sha384-1qlE7MZPM2pHD/pBZCU/yB8UCP52RYL8bge/qNdfNBCWToySp8/M+JL2waXU4hjJ" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.8/dist/umd/supabase.js" integrity="sha384-M65KxMm/JqBppck6onbmAgPVMBHrmPCf1L17Q+71EcvI9/VVI8j5cqoxQf6lj6h2" crossorigin="anonymous"></script>
-<script src="./shared.js?v=166"></script>
-<link rel="stylesheet" href="./shared.css?v=166">
+<script src="./shared.js?v=167"></script>
+<link rel="stylesheet" href="./shared.css?v=167">
 <style>
   body{margin:0;font-family:'IBM Plex Sans',-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);
     background:var(--bg);-webkit-font-smoothing:antialiased}
@@ -535,6 +535,12 @@ function concernedForM(t,excludeShort){
   if(excludeShort)shorts.delete(excludeShort);
   return [...shorts].map(findPerson).filter(Boolean).map(p=>p.id);
 }
+/* Who approves a task's extension/completion — instructor if named, else the assignee's boss. Returns
+   a full ALL_PEOPLE object (for waNotify). Mirrors console approverOf. */
+function approverOfM(t){
+  const ib=t.instructedBy?ALL_PEOPLE.find(p=>p.n===t.instructedBy||p.s===t.instructedBy):null;if(ib)return ib;
+  const as=ALL_PEOPLE.find(p=>p.s===t.who);return as&&as.bossId?ALL_PEOPLE.find(p=>p.id===as.bossId):null;
+}
 async function logTask(t,authorName,text){
   if(!t.id)return;
   const p=findPerson(authorName);
@@ -971,6 +977,7 @@ function App(){
       const rid=supplyRecipientId();const rec=rid?ALL_PEOPLE.find(p=>p.id===rid):null;
       q.stage='approved';q.target_staff_id=rid||null;R();
       updateRequestRow(q).catch(console.error);
+      {const rq=ALL_PEOPLE.find(p=>p.s===q.from);if(rq)waNotify(rq,'supply_request_approved',[String(q.ticket||''),q.t]);}
       say('Approved · routed to '+(rec?rec.n.split(' ')[0]:'the supply recipient')+' to fulfil 📦');},
     /* Supply stage 2: the configured recipient fulfils — turns it into a procurement task on their
        own list and clears the request. */
@@ -1000,17 +1007,20 @@ function App(){
       tasks.unshift(nt);
       R();
       saveTask(nt).catch(console.error);deleteRequestRow(q).catch(console.error);
+      {const fx=ALL_PEOPLE.find(p=>p.s===who||p.n===who);if(fx)waNotify(fx,'report_assigned',[String(q.ticket||''),'maintenance',q.t,fmtD(nt.date)]);}
       say('Assigned to '+who+' 🔧 · notified in TeamFlow');},
     approveExt:i=>{if(previewing){say("You're previewing — switch back to approve for real");return;}
       const t=tasks[i];if(!t||!t.extReq)return;
       t.date=t.extReq.newDate;t.due='Due '+fmtD(t.extReq.newDate);delete t.extReq;R();
       saveTask(t).catch(console.error);
       notifyEvent(t.id,r.id,'approved the extension — new due '+fmtD(t.date),concernedForM(t,r.self));
+      {const as=ALL_PEOPLE.find(p=>p.s===t.who);if(as)waNotify(as,'extension_decision',[t.t,'approved',fmtD(t.date)]);}
       say('Extension approved ⏳ · assignee notified');},
     rejectExt:i=>{if(previewing){say("You're previewing — switch back to decide for real");return;}
       const t=tasks[i];if(!t||!t.extReq)return;delete t.extReq;R();
       saveTask(t).catch(console.error);
       notifyEvent(t.id,r.id,'rejected the extension request',concernedForM(t,r.self));
+      {const as=ALL_PEOPLE.find(p=>p.s===t.who);if(as)waNotify(as,'extension_decision',[t.t,'rejected',fmtD(t.date)]);}
       say('Extension rejected — original due date stands');},
     /* completion-approval actions — same shape as approveExt/rejectExt above, just for the
        completionPending marker instead of extReq. Approving is the only place that actually runs
@@ -1670,6 +1680,8 @@ function DailyReportsSection({ctx}){
       issue:escText.trim(),remarks:'Raised while reviewing '+(p?p.n:'someone')+"’s "+fmtD(row.report_date)+' daily report',
       priority:escPrio,files:[]});
     if(error){console.error(error);ctx.say('Could not escalate — try again');setEscBusy(false);return;}
+    {const me=ALL_PEOPLE.find(x=>x.s===ctx.r.self);const boss=me&&me.bossId?ALL_PEOPLE.find(x=>x.id===me.bossId):null;
+     waNotify(boss,'escalation_notice',[ctx.r.name+(me&&me.department?' ('+me.department+')':''),escText.trim(),escPrio]);}
     setEscBusy(false);setEscId(null);setEscText('');setEscPrio('Medium');
     ctx.say('Escalated'+(ctx.r.boss?' to '+escalateTargetLabel(ctx.r.boss):''));
   }
@@ -2150,6 +2162,7 @@ function TaskSheet({ctx,close}){
     tasks.unshift(nt);
     close();ctx.R();
     saveTask(nt).catch(console.error);
+    if(!self)list.forEach(sh=>{const p=ALL_PEOPLE.find(x=>x.s===sh);if(p&&p.s!==ctx.r.self)waNotify(p,'task_assigned',[ctx.r.name,nt.t,PRIO_LBL_M[nt.prio||'med'],fmtD(nt.date)]);});
     const tail=(cur.recur?' · '+recurLabel(cur.recur,cur.recurOn).toLowerCase():'')+(instruct?' · as per '+instruct:'');
     ctx.say(self?'Added to your list'+tail:'Assigned '+(list.length>1?'jointly to ':'to ')+list.join(' + ')+tail+' · notified in TeamFlow');
   }
@@ -2305,7 +2318,7 @@ function IssueSheet({ctx,close}){
     pendingIssues.unshift(nq);
     close();ctx.R();
     const dest=issueRec?issueRec.n.split(' ')[0]+(selCat?' ('+selCat.label+')':''):'the recipient';
-    saveRequestRow(nq,'issue').then(()=>{ctx.R();ctx.say('Report'+(nq.ticket?' #'+nq.ticket:'')+' sent to '+dest+' 🔧');})
+    saveRequestRow(nq,'issue').then(()=>{ctx.R();ctx.say('Report'+(nq.ticket?' #'+nq.ticket:'')+' sent to '+dest+' 🔧');waNotify({id:ctx.r.id,n:ctx.r.name},'report_received',['maintenance report',String(nq.ticket||''),nq.t]);})
       .catch(e=>{console.error(e);ctx.say('Report sent to '+dest+' 🔧');});};
   return <>
     <h3>Request for repairs and maintenance</h3>
@@ -2582,7 +2595,7 @@ function RequestSheet({ctx,close}){
     pendingReqs.unshift(nq);
     close();ctx.R();
     const app=appId?ALL_PEOPLE.find(p=>p.id===appId):null;const dest=(app?app.n.split(' ')[0]:'your approver')+' for approval';
-    saveRequestRow(nq,'request').then(()=>{ctx.R();ctx.say('Request'+(nq.ticket?' #'+nq.ticket:'')+' sent to '+dest+' 📦');})
+    saveRequestRow(nq,'request').then(()=>{ctx.R();ctx.say('Request'+(nq.ticket?' #'+nq.ticket:'')+' sent to '+dest+' 📦');waNotify({id:ctx.r.id,n:ctx.r.name},'report_received',['supply request',String(nq.ticket||''),nq.t]);})
       .catch(e=>{console.error(e);ctx.say('Request sent to '+dest+' 📦');});};
   return <>
     <h3>Request supplies</h3>
@@ -2698,12 +2711,12 @@ function UpdateSheet({ctx,idx,close}){
              else waits for approval instead — spawnNextRecur only runs once approveCompletion
              actually approves it (acts.approveCompletion), so a rejected completion never leaves
              an already-spawned next occurrence behind. */
-          if(!t.selfAssigned){t.progress='inprogress';t.completionPending=true;saveTask(t).catch(console.error);notifyEvent(t.id,ctx.r.id,'submitted for completion approval',concernedForM(t,ctx.r.self));close();ctx.R();ctx.say('Everyone confirmed — waiting for approval');return;}
+          if(!t.selfAssigned){t.progress='inprogress';t.completionPending=true;saveTask(t).catch(console.error);notifyEvent(t.id,ctx.r.id,'submitted for completion approval',concernedForM(t,ctx.r.self));waNotify(approverOfM(t),'completion_approval_needed',[ctx.r.name,t.t]);close();ctx.R();ctx.say('Everyone confirmed — waiting for approval');return;}
           t.done=true;t.doneWhen='just now';delete t.extReq;const nd=spawnNextRecur(t);persistComplete(t,nd);notifyEvent(t.id,ctx.r.id,'completed the task',concernedForM(t,ctx.r.self));close();ctx.R();ctx.say(nd?'Everyone finished ✓ · next '+RECURS[t.recur].toLowerCase()+' on '+fmtD(nd):'Everyone finished — task completed ✓');return;}
         t.done=false;saveTask(t).catch(console.error);notifyEvent(t.id,ctx.r.id,'completed their part — waiting on '+pending.join(', '),concernedForM(t,ctx.r.self));close();ctx.R();ctx.say('Your part done ✓ — pending with '+pending.join(', '));return;
       }
       if(t.coWho&&t.coWho.length)t.doneBy=assigneesM(t).slice();
-      if(!t.selfAssigned){t.progress='inprogress';t.completionPending=true;saveTask(t).catch(console.error);notifyEvent(t.id,ctx.r.id,'submitted for completion approval',concernedForM(t,ctx.r.self));close();ctx.R();ctx.say('Marked complete — waiting for approval');return;}
+      if(!t.selfAssigned){t.progress='inprogress';t.completionPending=true;saveTask(t).catch(console.error);notifyEvent(t.id,ctx.r.id,'submitted for completion approval',concernedForM(t,ctx.r.self));waNotify(approverOfM(t),'completion_approval_needed',[ctx.r.name,t.t]);close();ctx.R();ctx.say('Marked complete — waiting for approval');return;}
       t.done=true;t.doneWhen='just now';delete t.extReq;
       const nd=spawnNextRecur(t);
       persistComplete(t,nd);
@@ -2822,6 +2835,7 @@ function ExtSheet({ctx,idx,close}){
     t.extReq={newDate:pickd.iso,label:pickd.label,reason:reason.trim(),from:ctx.r.name};
     saveTask(t).catch(console.error);
     notifyEvent(t.id,ctx.r.id,'requested an extension to '+fmtD(pickd.iso),concernedForM(t,ctx.r.self));
+    waNotify(approverOfM(t),'extension_requested',[ctx.r.name,t.t,fmtD(pickd.iso),reason.trim()||'—']);
     close();ctx.R();ctx.say('Extension request sent to '+(bossesFor(ctx.role,ctx.r.self).slice(-1)[0]?.label||'your manager')+' ⏳');};
   return <>
     <h3>Request time extension</h3>
