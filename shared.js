@@ -484,7 +484,7 @@ const pdfDate=d=>{if(!d)return '—';const x=String(d).includes('T')?new Date(d)
      columns    -> array of header strings
      rows       -> array of row arrays (cells; '\n' inside a cell makes a second line, e.g. the
                    overdue "N days late" note under a Due date) */
-async function downloadTablePdf(fileLabel,meta,columns,rows,columnStyles){
+async function downloadTablePdf(fileLabel,meta,columns,rows,columnStyles,cellHook){
   await ensurePdfLibs();
   const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'pt',format:'a4'});
   const M=40;let y=42;
@@ -504,8 +504,10 @@ async function downloadTablePdf(fileLabel,meta,columns,rows,columnStyles){
     headStyles:{fillColor:[14,122,111],textColor:[255,255,255]},
     columnStyles:columnStyles||{},
     head:[columns],body:rows,
-    /* overdue Due cell ("22 Jul\n2 days late") reddened whole — the only cell ending in "…late" */
-    didParseCell:d=>{if(d.section==='body'&&/\bdays? late$/.test(String(d.cell.raw||'')))d.cell.styles.textColor=[192,57,43];}});
+    /* overdue Due cell ("22 Jul\n2 days late") reddened whole — the only cell ending in "…late".
+       cellHook(d) lets a caller add its own per-cell styling (e.g. Performance Analysis reddens late
+       completion cells and fills whole overdue rows) — see downloadPerfPdf. */
+    didParseCell:d=>{if(d.section!=='body')return;if(/\bdays? late$/.test(String(d.cell.raw||'')))d.cell.styles.textColor=[192,57,43];if(cellHook)cellHook(d);}});
   doc.save(iso(new Date())+'-teamflow-'+String(fileLabel).toLowerCase().replace(/[^\w]+/g,'-').replace(/^-+|-+$/g,'')+'.pdf');
 }
 async function downloadDailyReportPdf(rows,label,viewerName){

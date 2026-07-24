@@ -11,8 +11,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" integrity="sha384-bm7MnzvK++ykSwVJ2tynSE5TRdN+xL418osEVF2DE/L/gfWHj91J2Sphe582B1Bh" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js" integrity="sha384-1qlE7MZPM2pHD/pBZCU/yB8UCP52RYL8bge/qNdfNBCWToySp8/M+JL2waXU4hjJ" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.8/dist/umd/supabase.js" integrity="sha384-M65KxMm/JqBppck6onbmAgPVMBHrmPCf1L17Q+71EcvI9/VVI8j5cqoxQf6lj6h2" crossorigin="anonymous"></script>
-<script src="./shared.js?v=158"></script>
-<link rel="stylesheet" href="./shared.css?v=158">
+<script src="./shared.js?v=164"></script>
+<link rel="stylesheet" href="./shared.css?v=164">
 <style>
   body{margin:0;font-family:'IBM Plex Sans',-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);
     background:var(--bg);-webkit-font-smoothing:antialiased}
@@ -583,6 +583,7 @@ const perfMonthsOfM=list=>[...new Set(list.map(perfIssMonthM).filter(Boolean))].
 const perfMonLblM=m=>{const p=(''+m).split('-');return MONTHS[+p[1]-1]+' '+p[0];};
 const perfDateM=d=>d?dmy((''+d).slice(0,10)):'';
 const perfOverM=t=>!t.done&&t.date&&t.date<iso(TODAY);
+const perfLateM=t=>t.done&&!!t.doneOn&&!!t.date&&(''+t.doneOn).slice(0,10)>(''+t.date).slice(0,10); // completed after due
 const perfStatsM=list=>{const done=list.filter(t=>t.done).length;return {total:list.length,done,over:list.filter(perfOverM).length,rate:list.length?Math.round(done/list.length*100):0};};
 const perfStatsLineM=list=>{const s=perfStatsM(list);return s.total+' tasks · '+s.done+' completed · '+s.over+' overdue · '+s.rate+'% done';};
 const perfRowsM=(list,byDept)=>byDept?list.slice().sort((a,b)=>{const an=perfNameM(a.who),bn=perfNameM(b.who);return an<bn?-1:an>bn?1:0;}):list;
@@ -590,13 +591,20 @@ const perfCellsM=(t,fmt)=>[assigneesM(t).filter(Boolean).map(perfNameM).join(' +
   fmt(t.date),(t.done&&t.doneOn)?fmt(t.doneOn):'',''];
 const perfSubtitleM=(fw,fb,mon)=>(fb==='all'?'All departments':'Department: '+(BUCKETS[fb]||fb))+' · '+(fw==='all'?'all staff':'Staff: '+perfNameM(fw))+((mon&&mon!=='all')?' · '+perfMonLblM(mon):'');
 function downloadPerfPdfM(list,byDept,fw,fb,mon){
+  const ordered=perfRowsM(list,byDept);
+  const flags=ordered.map(t=>({over:perfOverM(t),late:perfLateM(t)}));
+  const compCol=byDept?7:6; // Date-of-Completion column index
   downloadTablePdf('performance-analysis',{orgName:orgName(),title:'TeamFlow — Performance Analysis',
     subtitle:perfSubtitleM(fw,fb,mon)+' · '+new Date().toDateString()+' · '+perfStatsLineM(list)},
-    perfColsM(byDept),perfRowsM(list,byDept).map((t,i)=>{const c=perfCellsM(t,perfDateM);return [String(i+1)].concat(byDept?c:c.slice(1));})).catch(e=>console.error(e));
+    perfColsM(byDept),ordered.map((t,i)=>{const c=perfCellsM(t,perfDateM);return [String(i+1)].concat(byDept?c:c.slice(1));}),undefined,
+    d=>{const f=flags[d.row.index];if(!f)return;if(f.over)d.cell.styles.fillColor=[250,228,231];if(f.late&&d.column.index===compCol){d.cell.styles.textColor=[192,57,43];d.cell.styles.fontStyle='bold';}}).catch(e=>console.error(e));
 }
 function exportPerfM(list,byDept,fw,fb,mon){
   const rows=[perfColsM(byDept)];
-  perfRowsM(list,byDept).forEach((t,i)=>{const c=perfCellsM(t,perfDateM);rows.push([String(i+1)].concat(byDept?c:c.slice(1)));});
+  // CSV can't carry colour → reflect it in the Completion cell text ("<date> (late)" / "Overdue").
+  perfRowsM(list,byDept).forEach((t,i)=>{const c=perfCellsM(t,perfDateM);
+    if(perfLateM(t))c[6]=c[6]+' (late)';else if(perfOverM(t))c[6]='Overdue';
+    rows.push([String(i+1)].concat(byDept?c:c.slice(1)));});
   csvDownload(iso(new Date())+'-teamflow-performance-analysis.csv',rows);
 }
 const gist=t=>{const w=t.split(' ');return w.length<=3?t:w.slice(0,3).join(' ')+'…';};
@@ -1732,7 +1740,7 @@ function PerfSectionM({ctx}){
         <table className="perf-t"><thead><tr>{cols.map(c=><th key={c}>{c}</th>)}</tr></thead>
         <tbody>{rows.map((t,i)=>{
           const over=perfOverM(t); // not done & past due → whole row tinted red
-          const late=t.done&&t.doneOn&&t.date&&(''+t.doneOn).slice(0,10)>(''+t.date).slice(0,10); // completed after due → completion cell red
+          const late=perfLateM(t); // completed after due → completion cell red
           return <tr key={t.id||i} style={over?{background:'rgba(196,58,83,.09)'}:undefined}>
           <td>{i+1}</td>
           {byDept?<td style={{whiteSpace:'nowrap'}}>{assigneesM(t).filter(Boolean).map(perfNameM).join(' + ')}</td>:null}

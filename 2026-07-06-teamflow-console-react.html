@@ -11,8 +11,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" integrity="sha384-bm7MnzvK++ykSwVJ2tynSE5TRdN+xL418osEVF2DE/L/gfWHj91J2Sphe582B1Bh" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js" integrity="sha384-1qlE7MZPM2pHD/pBZCU/yB8UCP52RYL8bge/qNdfNBCWToySp8/M+JL2waXU4hjJ" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.8/dist/umd/supabase.js" integrity="sha384-M65KxMm/JqBppck6onbmAgPVMBHrmPCf1L17Q+71EcvI9/VVI8j5cqoxQf6lj6h2" crossorigin="anonymous"></script>
-<script src="./shared.js?v=158"></script>
-<link rel="stylesheet" href="./shared.css?v=158">
+<script src="./shared.js?v=164"></script>
+<link rel="stylesheet" href="./shared.css?v=164">
 <style>
   :root{
     --line2:#d9d6cb;
@@ -2324,6 +2324,9 @@ const perfMonthsOf=list=>[...new Set(list.map(perfIssMonth).filter(Boolean))].so
 const perfMonLbl=m=>{const p=(''+m).split('-');return MONTHS[+p[1]-1]+' '+p[0];};
 /* All Performance Analysis dates render DD-MM-YYYY (screen + PDF + CSV + Print), via shared dmy(). */
 const perfDate=d=>d?dmy((''+d).slice(0,10)):'';
+/* Completed AFTER the due date. Drives the red Date-of-Completion cell on screen + in every export
+   (isOverdue covers the other case: not done & past due → red row). Mutually exclusive. */
+const perfLate=t=>t.status==='done'&&!!t.doneOn&&!!t.date&&(''+t.doneOn).slice(0,10)>(''+t.date).slice(0,10);
 /* Overall summary stats for a perf list: {total,done,over,rate} — one row per task (the summary cards). */
 const perfStats=list=>{const done=list.filter(t=>t.status==='done').length,over=list.filter(isOverdue).length;
   return {total:list.length,done,over,rate:list.length?Math.round(done/list.length*100):0};};
@@ -2343,15 +2346,23 @@ const perfCells=(t,fmt)=>[assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')
   fmt((''+t.issued).slice(0,10)),t.instructedBy||'Self',PRIOS[t.prio||'med'].l,t.t,
   fmt(t.date),(t.status==='done'&&t.doneOn)?fmt(t.doneOn):'',''];
 function downloadPerfPdf(list,byDept,fw,fb,mon){
+  const ordered=perfRows(list,byDept);
+  const flags=ordered.map(t=>({over:isOverdue(t),late:perfLate(t)}));
+  const compCol=byDept?7:6; // Date-of-Completion column index (S.No.=0, Assignee only when byDept)
   downloadTablePdf('performance-analysis',{orgName:orgName(),title:'TeamFlow — Performance Analysis',
     subtitle:perfSubtitle(fw,fb,mon)+' · '+new Date().toDateString()+' · '+perfStatsLine(list)},
-    perfCols(byDept),perfRows(list,byDept).map((t,i)=>{const c=perfCells(t,perfDate);return [String(i+1)].concat(byDept?c:c.slice(1));}))
+    perfCols(byDept),ordered.map((t,i)=>{const c=perfCells(t,perfDate);return [String(i+1)].concat(byDept?c:c.slice(1));}),undefined,
+    d=>{const f=flags[d.row.index];if(!f)return;if(f.over)d.cell.styles.fillColor=[250,228,231];if(f.late&&d.column.index===compCol){d.cell.styles.textColor=[192,57,43];d.cell.styles.fontStyle='bold';}})
     .catch(e=>console.error(e));
 }
 function exportPerf(list,byDept,fw,fb,mon){
   const rows=[perfCols(byDept)];
-  /* CSV dates in DD-MM-YYYY (dmy) per request — sliced to date-only first so a full timestamp is safe. */
-  perfRows(list,byDept).forEach((t,i)=>{const c=perfCells(t,perfDate);rows.push([String(i+1)].concat(byDept?c:c.slice(1)));});
+  /* CSV dates in DD-MM-YYYY (dmy) per request — sliced to date-only first so a full timestamp is safe.
+     CSV can't carry colour, so the row highlighting is reflected in the Completion cell text:
+     "<date> (late)" for a late completion, "Overdue" for a still-open past-due task. */
+  perfRows(list,byDept).forEach((t,i)=>{const c=perfCells(t,perfDate);
+    if(perfLate(t))c[6]=c[6]+' (late)';else if(isOverdue(t))c[6]='Overdue';
+    rows.push([String(i+1)].concat(byDept?c:c.slice(1)));});
   csvDownload(iso(new Date())+'-teamflow-performance-analysis.csv',rows);
 }
 function printPerf(list,byDept,fw,fb,mon){
@@ -2360,7 +2371,8 @@ function printPerf(list,byDept,fw,fb,mon){
   b+='<div style="color:#555;margin-bottom:18px">'+esc(perfSubtitle(fw,fb,mon))+' · '+new Date().toDateString()+' · '+esc(perfStatsLine(list))+'</div>';
   b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:2px solid #333">'+cols.map(c=>'<th style="text-align:left;padding:6px">'+esc(c)+'</th>').join('')+'</tr></thead><tbody>';
   perfRows(list,byDept).forEach((t,i)=>{const c=perfCells(t,perfDate).map(x=>x||'');const cc=[String(i+1)].concat(byDept?c:c.slice(1));
-    b+='<tr style="border-bottom:1px solid #ccc">'+cc.map(x=>'<td style="padding:6px">'+esc(x)+'</td>').join('')+'</tr>';});
+    const over=isOverdue(t),late=perfLate(t),compIdx=cc.length-2; // completion is the cell before the blank Remarks
+    b+='<tr style="border-bottom:1px solid #ccc'+(over?';background:#fae4e7':'')+'">'+cc.map((x,ci)=>'<td style="padding:6px'+(late&&ci===compIdx?';color:#c0392b;font-weight:700':'')+'">'+esc(x)+'</td>').join('')+'</tr>';});
   b+='</tbody></table>';
   const pr=document.getElementById('print-report');pr.innerHTML=b;pr.style.display='block';
   const ot=document.title;document.title=iso(new Date())+'-teamflow-performance-analysis';
@@ -2395,7 +2407,7 @@ function PerfPanel({list,fw,fb,mon}){
         <thead><tr>{cols.map(c=><th key={c}>{c}</th>)}</tr></thead>
         <tbody>{rows.map((t,i)=>{
           const over=isOverdue(t); // not done & past due → whole row tinted red
-          const late=t.status==='done'&&t.doneOn&&t.date&&(''+t.doneOn).slice(0,10)>(''+t.date).slice(0,10); // completed after due → completion cell red
+          const late=perfLate(t); // completed after due → completion cell red
           return <tr key={t.id||i} style={over?{background:'rgba(196,58,83,.09)'}:undefined}>
           <td><span className="trk-sub" style={{fontWeight:700}}>{i+1}</span></td>
           {byDept?<td><div className="trk-item">{assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')}</div></td>:null}
