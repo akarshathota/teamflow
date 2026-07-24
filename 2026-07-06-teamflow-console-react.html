@@ -1367,7 +1367,7 @@ function App(){
     const r=requests[i];if(!r||r.kind!=='request')return;
     const rec=r.target_staff_id?byId(r.target_staff_id):null;
     const d=new Date(TODAY);d.setDate(d.getDate()+4);
-    const nt={t:r.t,who:rec?rec.s:r.from,type:'purchase',bucket:'accounts',prio:'med',date:iso(d),status:'open',ticket:r.ticket,requestedAt:r.date,
+    const nt={t:r.t,who:rec?rec.s:r.from,type:'purchase',bucket:'accounts',prio:'med',date:iso(d),status:'open',ticket:r.ticket,requestedAt:r.date,files:r.files,
       note:'Approved supply request from '+(byShort(r.from)||{}).n+(r.note?' — “'+r.note+'”':''),origin:'request'};
     tasks.unshift(nt);
     requests.splice(i,1);R();
@@ -4342,7 +4342,7 @@ function TrackerView({ctx}){
       placeholder='awaiting approval';
     }
     rows.push({
-      item:r.t,sub:'Reported '+fmtDate(r.date),date:r.date,ticket:r.ticket,requested:r.date,
+      item:r.t,sub:'Reported '+fmtDate(r.date),date:r.date,ticket:r.ticket,requested:r.date,files:r.files,
       typeKind:isIssue?'m':'s',
       typeIcon:isIssue?((cat&&cat.icon)||'🔧'):'📦',
       typeLabel:isIssue?((cat&&cat.label)||'Maintenance'):'Supply',
@@ -4366,7 +4366,7 @@ function TrackerView({ctx}){
       status={cls:'prog',dot:'var(--blue)',text:'Assigned · '+ST[t.status].l};
     }
     rows.push({
-      item:t.t,sub:isIssue?'Maintenance report':'Supply request',date:t.issued||t.date,ticket:t.ticket,requested:t.requestedAt||(t.issued?(''+t.issued).slice(0,10):t.date),
+      item:t.t,sub:isIssue?'Maintenance report':'Supply request',date:t.issued||t.date,ticket:t.ticket,requested:t.requestedAt||(t.issued?(''+t.issued).slice(0,10):t.date),files:t.files,
       typeKind:isIssue?'m':'s',
       typeIcon:isIssue?'🔧':'📦',
       typeLabel:isIssue?'Maintenance':'Supply',
@@ -4408,7 +4408,8 @@ function TrackerView({ctx}){
           <tbody>
             {shown.map((r,i)=><tr key={i}>
               <td><span className="trk-tkt" style={{fontWeight:800,color:'var(--accent-ink)',whiteSpace:'nowrap'}}>{r.ticket?'#'+r.ticket:'—'}</span></td>
-              <td><div className="trk-item">{r.item}</div><div className="trk-sub">{r.sub}</div></td>
+              <td><div className="trk-item">{r.item}</div><div className="trk-sub">{r.sub}</div>
+                {r.files&&r.files.length?<div className="filelist" style={{marginTop:6}}>{r.files.map((x,ix)=><FileChip key={ix} x={x}/>)}</div>:null}</td>
               <td><span className={'trk-type '+r.typeKind}>{r.typeIcon} {r.typeLabel}</span></td>
               <td><span className="trk-sub" style={{whiteSpace:'nowrap'}}>{r.requested?fmtDate(r.requested):'—'}</span></td>
               <td>{r.reporter?<span className="trk-who"><span className="trk-av" style={{background:r.reporter.c}}>{r.reporter.av}</span>{r.reporter.n.split(' ')[0]}</span>
@@ -4979,7 +4980,7 @@ function QuickCapture({ctx,close}){
         target_staff_id:kind==='issue'&&issueRec?issueRec.id:undefined,
         approver_staff_id:kind==='request'?(appId||undefined):undefined,
         stage:kind==='request'?'pending':undefined,
-        note:note.trim(),files:kind==='issue'&&files.length?files.slice():undefined};
+        note:note.trim(),files:files.length?files.slice():undefined};
       requests.unshift(nr);
       close();ctx.R();
       const dest=kind==='issue'?(issueRec?issueRec.n.split(' ')[0]+' ('+selCat.label+')':'the recipient'):((appId&&byId(appId))?byId(appId).n.split(' ')[0]:'your approver')+' for approval';
@@ -5048,7 +5049,7 @@ function QuickCapture({ctx,close}){
             </button>;})}
         </div>
       </div>:null}
-      {kind==='issue'?<div className="qc-attach">
+      {kind!=='task'?<div className="qc-attach">
         {[['camera','Camera',{accept:'image/*',capture:'environment'}],['image','Photos',{accept:'image/*',multiple:true}],['clip','Files',{multiple:true}]].map(([ic,l,at])=>
           <label key={l} className="btn soft"><I n={ic}/>{l}<input type="file" style={{display:'none'}} onChange={filePicked} {...at}/></label>)}
         {files.length?<div className="filelist">{files.map((x,ix)=><FileChip key={ix} x={x} onRemove={()=>{

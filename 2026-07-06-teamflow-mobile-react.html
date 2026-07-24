@@ -490,7 +490,7 @@ async function loadAll(){
   tasks.length=0;tasks.push(...(taskRows||[]).map(r=>rowToMobileTask(r,assignRows||[],byId,logRows||[]))
     .sort((a,b)=>(a.date||'')<(b.date||'')?-1:1));
   pendingReqs.length=0;pendingReqs.push(...(reqRows||[]).filter(r=>r.kind==='request').map(r=>
-    ({id:r.id,t:r.title,ticket:r.ticket_no||undefined,date:r.created_at?r.created_at.slice(0,10):undefined,note:r.note||'',from:r.from_short,av:r.from_init,stage:r.stage||null,target_staff_id:r.target_staff_id||null,approver_staff_id:r.approver_staff_id||null,declined_at:r.declined_at||null,declined_by:r.declined_by||null})));
+    ({id:r.id,t:r.title,ticket:r.ticket_no||undefined,date:r.created_at?r.created_at.slice(0,10):undefined,note:r.note||'',from:r.from_short,av:r.from_init,files:r.files&&r.files.length?r.files:undefined,stage:r.stage||null,target_staff_id:r.target_staff_id||null,approver_staff_id:r.approver_staff_id||null,declined_at:r.declined_at||null,declined_by:r.declined_by||null})));
   pendingIssues.length=0;pendingIssues.push(...(reqRows||[]).filter(r=>r.kind==='issue').map(r=>
     ({id:r.id,t:r.title,ticket:r.ticket_no||undefined,date:r.created_at?r.created_at.slice(0,10):undefined,from:r.from_short,av:r.from_init,routing_rule_id:r.routing_rule_id||null,target_staff_id:r.target_staff_id||null,files:r.files&&r.files.length?r.files:undefined})));
   notices.length=0;notices.push(...(noticeRows||[]).map(r=>({id:r.id,t:r.title,b:r.body||'',d:fmtD(r.created_at.slice(0,10))})));
@@ -928,7 +928,7 @@ function App(){
       const q=pendingReqs.splice(qi,1)[0];if(!q)return;
       const rec=q.target_staff_id?ALL_PEOPLE.find(p=>p.id===q.target_staff_id):null;
       const m=rec?findMember(rec.s):null;const s=m||suggestAssignee('purchase','accounts');
-      const nt={t:"Buy: "+q.t,who:s.n,init:s.i,due:"This week",date:whenToDate("this week"),ticket:q.ticket,requestedAt:q.date,
+      const nt={t:"Buy: "+q.t,who:s.n,init:s.i,due:"This week",date:whenToDate("this week"),ticket:q.ticket,requestedAt:q.date,files:q.files,
         bucket:"accounts",type:"purchase",done:false,origin:"request",
         note:'Approved supply request from '+q.from+(q.note?' — “'+q.note+'”':'')};
       tasks.unshift(nt);
@@ -1198,6 +1198,7 @@ function MyRequests({ctx}){
       <span className="pill today">{q.stage==='approved'?'📦 Approved — with '+(rec?rec.n.split(' ')[0]:'procurement'):'⏳ Awaiting approval'}</span>
       <div className="tt">{tkt(q.ticket)}📦 {q.t}</div>
       <div className="meta">{q.stage==='approved'?'Approved — '+(rec?rec.n.split(' ')[0]+' will procure':'being procured'):'Sent to your department’s Sr. Manager'}{q.note?' · “'+q.note+'”':''}</div>
+      {q.files&&q.files.length?<div className="attrow">{q.files.map((f,fx)=><FileChip key={fx} f={f}/>)}</div>:null}
     </div>;})}
     {myA.map((t,ix)=>{const isI=t.origin==='issue';const late=overdue(t);
       return <div className="task" key={'as'+ix}>
@@ -2451,13 +2452,17 @@ function DailyReportSheet({ctx,close}){
   </>;
 }
 function RequestSheet({ctx,close}){
-  const [txt,setTxt]=useState('');const [note,setNote]=useState('');
+  const [txt,setTxt]=useState('');const [note,setNote]=useState('');const [files,setFiles]=useState([]);
+  const pickF=async e=>{const picked=[...e.target.files];if(!picked.length)return;
+    ctx.say('Uploading '+picked.length+' file'+(picked.length>1?'s':'')+'…');
+    try{const nf=await Promise.all(picked.map(x=>uploadFile(x,'requests')));setFiles(files.concat(nf));}
+    catch(err){console.error(err);ctx.say('Upload failed — try again');}};
   const send=()=>{
     if(!txt.trim()){ctx.say('Say what you need first');return;}
     // resolve the stage-1 approver NOW (configured supply_approver rule for the requester's dept, else
     // the dept Sr.-Manager fallback) and store it on the request so routing stays stable.
     const appId=supplyApproverIdM({from:ctx.r.name});
-    const nq={t:txt.trim(),note:note.trim(),from:ctx.r.name,av:ctx.r.av,approver_staff_id:appId||null};
+    const nq={t:txt.trim(),note:note.trim(),from:ctx.r.name,av:ctx.r.av,approver_staff_id:appId||null,files:files.length?files.slice():undefined};
     pendingReqs.unshift(nq);
     close();ctx.R();
     const app=appId?ALL_PEOPLE.find(p=>p.id===appId):null;const dest=(app?app.n.split(' ')[0]:'your approver')+' for approval';
@@ -2465,9 +2470,18 @@ function RequestSheet({ctx,close}){
       .catch(e=>{console.error(e);ctx.say('Request sent to '+dest+' 📦');});};
   return <>
     <h3>Request supplies</h3>
-    <div className="sub">What do you need? Your manager approves it in one tap.</div>
+    <div className="sub">What do you need? Your manager approves it in one tap. Add a photo if it helps.</div>
     <textarea className="typein" rows={2} autoFocus value={txt} onChange={e=>setTxt(e.target.value)} placeholder="e.g. 2 boxes of whiteboard markers"/>
     <textarea className="typein" rows={2} style={{marginTop:9}} value={note} onChange={e=>setNote(e.target.value)} placeholder="Why / for which class? (optional)"/>
+    <div className="attachrow">
+      <label className="uploadbtn">📷 Camera<input type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={pickF}/></label>
+      <label className="uploadbtn">🖼 Photos<input type="file" accept="image/*" multiple style={{display:'none'}} onChange={pickF}/></label>
+      <label className="uploadbtn">📎 Files<input type="file" multiple style={{display:'none'}} onChange={pickF}/></label>
+    </div>
+    {files.length?<div className="filelist">{files.map((f,ix)=><FileChip key={ix} f={f} onRemove={()=>{
+      setFiles(files.filter((_,i)=>i!==ix));
+      removeAttachment(f.path).catch(console.error);
+    }}/>)}</div>:null}
     <button className="send" onClick={send}>Send request ✓</button>
   </>;
 }
