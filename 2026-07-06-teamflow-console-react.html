@@ -2301,6 +2301,69 @@ function ExportTrio({label,rows,viewerName}){
     <button className="exp-btn" onClick={()=>printRows(rows,label,viewerName)}><I n="print" s={13}/>Print</button>
   </div>;
 }
+/* ============ Performance Analysis (Reports tab) ============ */
+/* Flat per-task performance table driven by ReportsView's own fb/fw filters. "Department-wise"
+   (byDept = fw==='all', no specific staff picked) prepends an Assignee column and sorts rows by
+   assignee name; "staff-wise" (a specific person picked) drops that column entirely. Remarks is
+   always a blank trailing column, for handwritten notes on a printout — same idea as TASK_PDF_COLS.
+   t.issued is a full created_at timestamp so it's sliced to date-only before fmtDate. */
+const PERF_COLS_FULL=['Assignee','Date of issue','Assigned by','Priority','Task Description','Due Date','Date of Completion','Remarks'];
+const perfCols=byDept=>byDept?PERF_COLS_FULL:PERF_COLS_FULL.slice(1);
+const perfSubtitle=(fw,fb)=>(fb==='all'?'All departments':'Department: '+BUCKETS[fb])+' · '+(fw==='all'?'all staff':'Staff: '+(byShort(fw)||{n:fw}).n);
+const perfRows=(list,byDept)=>byDept?list.slice().sort((a,b)=>{const an=(byShort(a.who)||{n:a.who}).n,bn=(byShort(b.who)||{n:b.who}).n;return an<bn?-1:an>bn?1:0;}):list;
+/* full 8-cell row in PERF_COLS_FULL order; caller slices off cell 0 (Assignee) for staff-wise.
+   fmt formats a date-only 'YYYY-MM-DD' string — fmtDate for PDF/print ("21 Jul"), a slice(0,10)
+   identity for CSV (keeps the year, sorts cleanly). Completion cell blank when the task isn't done. */
+const perfCells=(t,fmt)=>[assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + '),
+  fmt((''+t.issued).slice(0,10)),t.instructedBy||'Self',PRIOS[t.prio||'med'].l,t.t,
+  fmt(t.date),(t.status==='done'&&t.doneOn)?fmt(t.doneOn):'',''];
+function downloadPerfPdf(list,byDept,fw,fb){
+  downloadTablePdf('performance-analysis',{orgName:orgName(),title:'TeamFlow — Performance Analysis',
+    subtitle:perfSubtitle(fw,fb)+' · '+new Date().toDateString()+' · '+list.length+' tasks'},
+    perfCols(byDept),perfRows(list,byDept).map(t=>{const c=perfCells(t,fmtDate);return byDept?c:c.slice(1);}))
+    .catch(e=>console.error(e));
+}
+function exportPerf(list,byDept,fw,fb){
+  const rows=[perfCols(byDept)];
+  perfRows(list,byDept).forEach(t=>{const c=perfCells(t,d=>d?(''+d).slice(0,10):'');rows.push(byDept?c:c.slice(1));});
+  csvDownload(iso(new Date())+'-teamflow-performance-analysis.csv',rows);
+}
+function printPerf(list,byDept,fw,fb){
+  const cols=perfCols(byDept);
+  let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — Performance Analysis</div>';
+  b+='<div style="color:#555;margin-bottom:18px">'+perfSubtitle(fw,fb)+' · '+new Date().toDateString()+' · '+list.length+' tasks</div>';
+  b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:2px solid #333">'+cols.map(c=>'<th style="text-align:left;padding:6px">'+c+'</th>').join('')+'</tr></thead><tbody>';
+  perfRows(list,byDept).forEach(t=>{const c=perfCells(t,fmtDate).map(x=>x||'');const cc=byDept?c:c.slice(1);
+    b+='<tr style="border-bottom:1px solid #ccc">'+cc.map(x=>'<td style="padding:6px">'+x+'</td>').join('')+'</tr>';});
+  b+='</tbody></table>';
+  const pr=document.getElementById('print-report');pr.innerHTML=b;pr.style.display='block';
+  const ot=document.title;document.title=iso(new Date())+'-teamflow-performance-analysis';
+  window.print();
+  setTimeout(()=>{pr.style.display='none';document.title=ot;},300);
+}
+/* On-screen Performance Analysis table — trk-t styling, same rows/columns as the exports. */
+function PerfPanel({list,fw,fb}){
+  const byDept=fw==='all';const cols=perfCols(byDept);const rows=perfRows(list,byDept);
+  if(!rows.length)return <Empty t="No tasks to analyse" s="No tasks match the current department or staff filter."/>;
+  return <div className="trk-panel">
+    <div className="trk-tw">
+      <table className="trk-t">
+        <thead><tr>{cols.map(c=><th key={c}>{c}</th>)}</tr></thead>
+        <tbody>{rows.map((t,i)=><tr key={t.id||i}>
+          {byDept?<td><div className="trk-item">{assignees(t).map(a=>(byShort(a)||{n:a}).n).join(' + ')}</div></td>:null}
+          <td><span className="trk-sub" style={{whiteSpace:'nowrap'}}>{fmtDate((''+t.issued).slice(0,10))}</span></td>
+          <td>{t.instructedBy||'Self'}</td>
+          <td><span className="priolabel" style={{color:PRIOS[t.prio||'med'].c}}><span className="prio" style={{background:PRIOS[t.prio||'med'].c}}/>{PRIOS[t.prio||'med'].l}</span></td>
+          <td><div className="trk-item" style={{fontWeight:600}}>{t.t}</div></td>
+          <td><span style={{whiteSpace:'nowrap'}}>{fmtDate(t.date)}</span></td>
+          <td><span style={{whiteSpace:'nowrap'}}>{(t.status==='done'&&t.doneOn)?fmtDate(t.doneOn):'—'}</span></td>
+          <td></td>
+        </tr>)}</tbody>
+      </table>
+    </div>
+    <div className="trk-foot"><b>{rows.length}</b> task{rows.length!==1?'s':''} · {perfSubtitle(fw,fb)}. The Remarks column is left blank for handwritten notes on a printout.</div>
+  </div>;
+}
 /* KPI drill-down: clicking a stat card opens this list of exactly the tasks behind the number.
    Each row explicitly closes the popup AND opens the task drawer — deliberately not left to the
    TaskRow's own click bubbling, which can be swallowed when the close-triggered re-render
@@ -4449,9 +4512,10 @@ function ReportsView({ctx}){
     ['Overdue',ov,'var(--red)','var(--red-soft)','alert',isOverdue],
     ['Completion rate',rate+'%','var(--blue)','var(--blue-soft)','chart',null]]; // derived stat — nothing to list
   return <div className="view">
-    <div className="selfseg" style={{margin:'0 0 14px',maxWidth:360}}>
-      <button className={mode==='reports'?'':'on'} onClick={()=>setMode('tasks')}>Task analytics</button>
+    <div className="selfseg" style={{margin:'0 0 14px',maxWidth:520}}>
+      <button className={mode==='tasks'?'on':''} onClick={()=>setMode('tasks')}>Task analytics</button>
       <button className={mode==='reports'?'on':''} onClick={()=>setMode('reports')}>Daily reports</button>
+      <button className={mode==='perf'?'on':''} onClick={()=>setMode('perf')}>Performance Analysis</button>
     </div>
     <div className="filters">
       <select className="fsel" value={fb} onChange={e=>{setFb(e.target.value);setFw('all');}}>
@@ -4471,6 +4535,11 @@ function ReportsView({ctx}){
         </div>
         <button className="linkbtn" onClick={()=>ctx.exportCSV('workload')}><I n="dl" s={13}/>Workload CSV</button>
       </>:null}
+      {mode==='perf'&&mine.length?<div className="exp-group">
+        <button className="exp-btn" onClick={()=>downloadPerfPdf(mine,fw==='all',fw,fb)}><I n="dl" s={13}/>Download PDF</button>
+        <button className="exp-btn" onClick={()=>exportPerf(mine,fw==='all',fw,fb)}><I n="dl" s={13}/>Download CSV</button>
+        <button className="exp-btn" onClick={()=>printPerf(mine,fw==='all',fw,fb)}><I n="print" s={13}/>Print</button>
+      </div>:null}
     </div>
     {showMismatch?<DeptMismatchModal ctx={ctx} close={()=>setShowMismatch(false)}/>:null}
     {mode==='tasks'?<>
@@ -4502,7 +4571,7 @@ function ReportsView({ctx}){
           <td>{tt.filter(t=>t.status==='done').length}</td></tr>;})}</tbody></table>
       </div>
     </div>
-    </>:<DailyReportsPanel ctx={ctx} fw={fw} fb={fb}/>}
+    </>:mode==='reports'?<DailyReportsPanel ctx={ctx} fw={fw} fb={fb}/>:<PerfPanel list={mine} fw={fw} fb={fb}/>}
   </div>;
 }
 
