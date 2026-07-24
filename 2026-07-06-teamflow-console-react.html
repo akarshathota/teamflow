@@ -2332,7 +2332,8 @@ function downloadPerfPdf(list,byDept,fw,fb,mon){
 }
 function exportPerf(list,byDept,fw,fb,mon){
   const rows=[perfCols(byDept)];
-  perfRows(list,byDept).forEach(t=>{const c=perfCells(t,d=>d?(''+d).slice(0,10):'');rows.push(byDept?c:c.slice(1));});
+  /* CSV dates in DD-MM-YYYY (dmy) per request — sliced to date-only first so a full timestamp is safe. */
+  perfRows(list,byDept).forEach(t=>{const c=perfCells(t,d=>d?dmy((''+d).slice(0,10)):'');rows.push(byDept?c:c.slice(1));});
   csvDownload(iso(new Date())+'-teamflow-performance-analysis.csv',rows);
 }
 function printPerf(list,byDept,fw,fb,mon){
