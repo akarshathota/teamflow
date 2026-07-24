@@ -440,7 +440,7 @@ function rowToMobileTask(row,assignRows,byId,logRows){
     files:row.files&&row.files.length?row.files:undefined,
     recur:row.recur||undefined,recurOn:row.recur_on!=null?row.recur_on:undefined,
     lastNudgedAt:row.last_nudged_at||undefined,
-    ticket:row.ticket_no||undefined,
+    ticket:row.ticket_no||undefined,requestedAt:row.requested_at?row.requested_at.slice(0,10):undefined,
     completionPending:row.completion_pending||undefined};
   if(row.ext_new_date)t.extReq={newDate:row.ext_new_date,label:extLabel(row.ext_new_date),reason:row.ext_reason||''};
   if(row.reopened_by)t.reopened={by:(byId[row.reopened_by]||{name:''}).name,comment:row.reopened_comment||''};
@@ -490,9 +490,9 @@ async function loadAll(){
   tasks.length=0;tasks.push(...(taskRows||[]).map(r=>rowToMobileTask(r,assignRows||[],byId,logRows||[]))
     .sort((a,b)=>(a.date||'')<(b.date||'')?-1:1));
   pendingReqs.length=0;pendingReqs.push(...(reqRows||[]).filter(r=>r.kind==='request').map(r=>
-    ({id:r.id,t:r.title,ticket:r.ticket_no||undefined,note:r.note||'',from:r.from_short,av:r.from_init,stage:r.stage||null,target_staff_id:r.target_staff_id||null,approver_staff_id:r.approver_staff_id||null,declined_at:r.declined_at||null,declined_by:r.declined_by||null})));
+    ({id:r.id,t:r.title,ticket:r.ticket_no||undefined,date:r.created_at?r.created_at.slice(0,10):undefined,note:r.note||'',from:r.from_short,av:r.from_init,stage:r.stage||null,target_staff_id:r.target_staff_id||null,approver_staff_id:r.approver_staff_id||null,declined_at:r.declined_at||null,declined_by:r.declined_by||null})));
   pendingIssues.length=0;pendingIssues.push(...(reqRows||[]).filter(r=>r.kind==='issue').map(r=>
-    ({id:r.id,t:r.title,ticket:r.ticket_no||undefined,from:r.from_short,av:r.from_init,routing_rule_id:r.routing_rule_id||null,target_staff_id:r.target_staff_id||null,files:r.files&&r.files.length?r.files:undefined})));
+    ({id:r.id,t:r.title,ticket:r.ticket_no||undefined,date:r.created_at?r.created_at.slice(0,10):undefined,from:r.from_short,av:r.from_init,routing_rule_id:r.routing_rule_id||null,target_staff_id:r.target_staff_id||null,files:r.files&&r.files.length?r.files:undefined})));
   notices.length=0;notices.push(...(noticeRows||[]).map(r=>({id:r.id,t:r.title,b:r.body||'',d:fmtD(r.created_at.slice(0,10))})));
   notifs.length=0;notifs.push(...(notifRows||[]));
 }
@@ -502,7 +502,7 @@ function mobileTaskRow(t){
     due_date:t.date||null,due_time:null,note:t.note||'',
     recur:t.recur||null,recur_on:t.recurOn!=null?t.recurOn:null,
     self_assigned:!!t.selfAssigned,instructed_by:t.instructedBy||null,origin:t.origin||null,
-    ticket_no:t.ticket||null,
+    ticket_no:t.ticket||null,requested_at:t.requestedAt||null,
     files:t.files||[],done_on:t.doneOn||null,completion_pending:!!t.completionPending,
     ext_new_date:(t.extReq&&t.extReq.newDate)||null,ext_reason:(t.extReq&&t.extReq.reason)||null,
     reopened_by:(t.reopened&&findPerson(t.reopened.by))?findPerson(t.reopened.by).id:null,
@@ -928,7 +928,7 @@ function App(){
       const q=pendingReqs.splice(qi,1)[0];if(!q)return;
       const rec=q.target_staff_id?ALL_PEOPLE.find(p=>p.id===q.target_staff_id):null;
       const m=rec?findMember(rec.s):null;const s=m||suggestAssignee('purchase','accounts');
-      const nt={t:"Buy: "+q.t,who:s.n,init:s.i,due:"This week",date:whenToDate("this week"),ticket:q.ticket,
+      const nt={t:"Buy: "+q.t,who:s.n,init:s.i,due:"This week",date:whenToDate("this week"),ticket:q.ticket,requestedAt:q.date,
         bucket:"accounts",type:"purchase",done:false,origin:"request",
         note:'Approved supply request from '+q.from+(q.note?' — “'+q.note+'”':'')};
       tasks.unshift(nt);
@@ -939,7 +939,7 @@ function App(){
       const q=pendingReqs[qi];if(q){q.declined_at=new Date().toISOString();q.declined_by=r.id;R();declineRequestRow(q).catch(console.error);say('Request declined — '+q.from.split(' ')[0]+' will be notified');}},
     assignIssue:(qi,who)=>{if(previewing){say("You're previewing — switch back to assign for real");return;}
       const q=pendingIssues.splice(qi,1)[0];if(!q)return;const m=findMember(who);
-      const nt={t:q.t,who:m.n,init:m.i,due:"Tomorrow · 9:00 AM",date:whenToDate("tomorrow"),ticket:q.ticket,
+      const nt={t:q.t,who:m.n,init:m.i,due:"Tomorrow · 9:00 AM",date:whenToDate("tomorrow"),ticket:q.ticket,requestedAt:q.date,
         bucket:"maintenance",type:"repair",done:false,origin:"issue",note:'Reported by '+q.from,files:q.files};
       tasks.unshift(nt);
       R();

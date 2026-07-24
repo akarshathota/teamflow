@@ -663,7 +663,7 @@ function rowToTask(row,assignRows,logRows){
     recur:row.recur||undefined,recurOn:row.recur_on!=null?row.recur_on:undefined,
     issued:row.created_at||undefined,
     lastNudgedAt:row.last_nudged_at||undefined,
-    ticket:row.ticket_no||undefined,
+    ticket:row.ticket_no||undefined,requestedAt:row.requested_at?row.requested_at.slice(0,10):undefined,
     completionPending:row.completion_pending||undefined};
   if(row.ext_new_date)t.extReq={newDate:row.ext_new_date,reason:row.ext_reason||""};
   if(row.reopened_by)t.reopened={by:byId2Name(row.reopened_by),comment:row.reopened_comment||""};
@@ -752,7 +752,7 @@ function taskRow(t){
     status:t.status,due_date:t.date||null,due_time:t.time||null,note:t.note||'',
     recur:t.recur||null,recur_on:t.recurOn!=null?t.recurOn:null,
     self_assigned:!!t.selfAssigned,instructed_by:t.instructedBy||null,origin:t.origin||null,
-    ticket_no:t.ticket||null,
+    ticket_no:t.ticket||null,requested_at:t.requestedAt||null,
     files:t.files||[],done_on:t.doneOn||null,completion_pending:!!t.completionPending,
     ext_new_date:(t.extReq&&t.extReq.newDate)||null,ext_reason:(t.extReq&&t.extReq.reason)||null,
     reopened_by:(t.reopened&&byName(t.reopened.by))?byName(t.reopened.by).id:null,
@@ -1367,7 +1367,7 @@ function App(){
     const r=requests[i];if(!r||r.kind!=='request')return;
     const rec=r.target_staff_id?byId(r.target_staff_id):null;
     const d=new Date(TODAY);d.setDate(d.getDate()+4);
-    const nt={t:r.t,who:rec?rec.s:r.from,type:'purchase',bucket:'accounts',prio:'med',date:iso(d),status:'open',ticket:r.ticket,
+    const nt={t:r.t,who:rec?rec.s:r.from,type:'purchase',bucket:'accounts',prio:'med',date:iso(d),status:'open',ticket:r.ticket,requestedAt:r.date,
       note:'Approved supply request from '+(byShort(r.from)||{}).n+(r.note?' — “'+r.note+'”':''),origin:'request'};
     tasks.unshift(nt);
     requests.splice(i,1);R();
@@ -1381,7 +1381,7 @@ function App(){
   const assignIssue=(i,who)=>{if(previewing){say("You're previewing — switch back to assign for real");return;}
     const r=requests[i];if(!r||!who)return;
     const d=new Date(TODAY);d.setDate(d.getDate()+1);
-    const nt={t:r.t,who,type:'repair',bucket:'maintenance',prio:'high',date:iso(d),status:'open',ticket:r.ticket,
+    const nt={t:r.t,who,type:'repair',bucket:'maintenance',prio:'high',date:iso(d),status:'open',ticket:r.ticket,requestedAt:r.date,
       note:'Reported by '+(byShort(r.from)||{}).n+(r.note?' — “'+r.note+'”':''),origin:'issue',files:r.files};
     tasks.unshift(nt);
     requests.splice(i,1);R();
@@ -2268,15 +2268,15 @@ function printRows(rows,label,viewerName){
 }
 /* Print/PDF for the Reports & requests tracker — reuses the same #print-report machinery, over the
    currently-filtered rows (respects the type tab + month filter). */
-const TRACKER_COLS=['Ticket','Item','Type','Reported by','Assigned to','Status'];
+const TRACKER_COLS=['Ticket','Item','Type','Requested','Reported by','Assigned to','Status'];
 const trackerScopeLabel=tab=>tab==='maint'?'Maintenance reports':tab==='supply'?'Supply requests':tab==='open'?'Open items':'All reports & requests';
 const trackerMonTxt=mon=>(mon&&mon!=='all')?' · '+MONTHS[+mon.split('-')[1]-1]+' '+mon.split('-')[0]:'';
-const trackerRow=r=>[(r.ticket?'#'+r.ticket:'—'),r.item,r.typeLabel,(r.reporter?r.reporter.n:(r.reporterFallback||'—')),(r.assignee?r.assignee.n:'—'),r.status.text];
+const trackerRow=r=>[(r.ticket?'#'+r.ticket:'—'),r.item,r.typeLabel,(r.requested?fmtDate(r.requested):'—'),(r.reporter?r.reporter.n:(r.reporterFallback||'—')),(r.assignee?r.assignee.n:'—'),r.status.text];
 function printTracker(rows,tab,mon){
   let b=orgHeadHtml()+'<div style="font-family:Bricolage Grotesque,sans-serif;font-weight:700;font-size:15px;margin:0 0 4px">TeamFlow — Reports &amp; requests</div>';
   b+='<div style="color:#555;margin-bottom:18px">'+trackerScopeLabel(tab)+trackerMonTxt(mon)+' · '+new Date().toDateString()+' · '+rows.length+' items</div>';
-  b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Ticket</th><th style="text-align:left;padding:6px">Item</th><th style="text-align:left;padding:6px">Type</th><th style="text-align:left;padding:6px">Reported by</th><th style="text-align:left;padding:6px">Assigned to</th><th style="text-align:left;padding:6px">Status</th></tr></thead><tbody>';
-  rows.forEach(r=>{b+='<tr style="border-bottom:1px solid #ccc"><td style="padding:6px;font-weight:700">'+(r.ticket?'#'+r.ticket:'—')+'</td><td style="padding:6px">'+r.item+'</td><td style="padding:6px">'+r.typeLabel+'</td><td style="padding:6px">'+(r.reporter?r.reporter.n:(r.reporterFallback||'—'))+'</td><td style="padding:6px">'+(r.assignee?r.assignee.n:'—')+'</td><td style="padding:6px">'+r.status.text+'</td></tr>';});
+  b+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:2px solid #333"><th style="text-align:left;padding:6px">Ticket</th><th style="text-align:left;padding:6px">Item</th><th style="text-align:left;padding:6px">Type</th><th style="text-align:left;padding:6px">Requested</th><th style="text-align:left;padding:6px">Reported by</th><th style="text-align:left;padding:6px">Assigned to</th><th style="text-align:left;padding:6px">Status</th></tr></thead><tbody>';
+  rows.forEach(r=>{b+='<tr style="border-bottom:1px solid #ccc"><td style="padding:6px;font-weight:700">'+(r.ticket?'#'+r.ticket:'—')+'</td><td style="padding:6px">'+r.item+'</td><td style="padding:6px">'+r.typeLabel+'</td><td style="padding:6px">'+(r.requested?fmtDate(r.requested):'—')+'</td><td style="padding:6px">'+(r.reporter?r.reporter.n:(r.reporterFallback||'—'))+'</td><td style="padding:6px">'+(r.assignee?r.assignee.n:'—')+'</td><td style="padding:6px">'+r.status.text+'</td></tr>';});
   b+='</tbody></table>';
   const pr=document.getElementById('print-report');pr.innerHTML=b;pr.style.display='block';
   const ot=document.title;document.title=iso(new Date())+'-teamflow-reports-requests';
@@ -4342,7 +4342,7 @@ function TrackerView({ctx}){
       placeholder='awaiting approval';
     }
     rows.push({
-      item:r.t,sub:'Reported '+fmtDate(r.date),date:r.date,ticket:r.ticket,
+      item:r.t,sub:'Reported '+fmtDate(r.date),date:r.date,ticket:r.ticket,requested:r.date,
       typeKind:isIssue?'m':'s',
       typeIcon:isIssue?((cat&&cat.icon)||'🔧'):'📦',
       typeLabel:isIssue?((cat&&cat.label)||'Maintenance'):'Supply',
@@ -4366,7 +4366,7 @@ function TrackerView({ctx}){
       status={cls:'prog',dot:'var(--blue)',text:'Assigned · '+ST[t.status].l};
     }
     rows.push({
-      item:t.t,sub:isIssue?'Maintenance report':'Supply request',date:t.issued||t.date,ticket:t.ticket,
+      item:t.t,sub:isIssue?'Maintenance report':'Supply request',date:t.issued||t.date,ticket:t.ticket,requested:t.requestedAt||(t.issued?(''+t.issued).slice(0,10):t.date),
       typeKind:isIssue?'m':'s',
       typeIcon:isIssue?'🔧':'📦',
       typeLabel:isIssue?'Maintenance':'Supply',
@@ -4404,19 +4404,20 @@ function TrackerView({ctx}){
       </div>
       <div className="trk-tw">
         <table className="trk-t">
-          <thead><tr><th>Ticket</th><th>Item</th><th>Type</th><th>Reported by</th><th>Assigned to</th><th>Status</th></tr></thead>
+          <thead><tr><th>Ticket</th><th>Item</th><th>Type</th><th>Requested</th><th>Reported by</th><th>Assigned to</th><th>Status</th></tr></thead>
           <tbody>
             {shown.map((r,i)=><tr key={i}>
               <td><span className="trk-tkt" style={{fontWeight:800,color:'var(--accent-ink)',whiteSpace:'nowrap'}}>{r.ticket?'#'+r.ticket:'—'}</span></td>
               <td><div className="trk-item">{r.item}</div><div className="trk-sub">{r.sub}</div></td>
               <td><span className={'trk-type '+r.typeKind}>{r.typeIcon} {r.typeLabel}</span></td>
+              <td><span className="trk-sub" style={{whiteSpace:'nowrap'}}>{r.requested?fmtDate(r.requested):'—'}</span></td>
               <td>{r.reporter?<span className="trk-who"><span className="trk-av" style={{background:r.reporter.c}}>{r.reporter.av}</span>{r.reporter.n.split(' ')[0]}</span>
                 :<span className="trk-none">{r.reporterFallback||'—'}</span>}</td>
               <td>{r.assignee?<span className="trk-who"><span className="trk-av" style={{background:r.assignee.c}}>{r.assignee.av}</span>{r.assignee.n.split(' ')[0]}</span>
                 :<span className="trk-none">— {r.placeholder}</span>}</td>
               <td><span className={'trk-st '+r.status.cls}><span className="trk-dot" style={{background:r.status.dot}}></span>{r.status.text}</span></td>
             </tr>)}
-            {!shown.length?<tr><td colSpan="6"><div className="trk-empty">Nothing to show in this filter.</div></td></tr>:null}
+            {!shown.length?<tr><td colSpan="7"><div className="trk-empty">Nothing to show in this filter.</div></td></tr>:null}
           </tbody>
         </table>
       </div>
